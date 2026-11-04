@@ -125,9 +125,8 @@ function escapeHTML(value) {
     }[ch]));
 }
 
-// Minúsculas e sem acentos, para pesquisas tolerantes
 function normalizeText(value) {
-    return String(value ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function eventDateTime(ev) {
@@ -146,7 +145,6 @@ function districtLabel(value) {
     return d ? d.label.replace(" (Região Autónoma)", "") : value;
 }
 
-// Distância em km (fórmula de Haversine)
 function distanceKm(lat1, lng1, lat2, lng2) {
     const rad = x => x * Math.PI / 180;
     const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 +
