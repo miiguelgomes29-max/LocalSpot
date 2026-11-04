@@ -1,10 +1,9 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Globo 3D em Satélite Real)
+// MAPA (MapLibre GL JS - Globo 3D com Relevo em Satélite)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
-// Estilo com imagem de satélite real (Esri World Imagery)
 const satelliteStyle = {
     version: 8,
     sources: {
@@ -14,7 +13,7 @@ const satelliteStyle = {
                 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256,
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            attribution: 'Tiles &copy; Esri'
         }
     },
     layers: [
@@ -32,10 +31,10 @@ const map = new maplibregl.Map({
     container: 'map',
     style: satelliteStyle,
     center: [-8.0, 39.6],
-    zoom: 3,                // Vista afastada para ver a curvatura do planeta
-    pitch: 50,               // Inclinação 3D
+    zoom: 3,
+    pitch: 50,
     bearing: 0,
-    projection: 'globe',     // Formato de globo 3D esférico
+    projection: 'globe',
     attributionControl: false
 });
 
@@ -45,8 +44,17 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 let markers = [];
 const markerById = new Map();
 
-// Garante que o mapa redimensiona e renderiza os pontos quando carrega totalmente
+// Adiciona o Relevo/Elevação 3D ao mapa assim que ele carrega
 map.on('load', () => {
+    map.addSource('terrarium-dem', {
+        type: 'raster-dem',
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        encoding: 'terrarium',
+        tileSize: 256,
+        maxzoom: 15
+    });
+    map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.5 });
+
     map.resize();
     if (typeof currentList !== 'undefined' && currentList.length > 0) {
         showEventsOnMap(currentList);
