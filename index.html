@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalSpot</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <!-- O nosso CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- CABEÇALHO -->
+    <header class="header">
+        <div class="logo">
+            <span>📍</span>
+            <h1>LocalSpot</h1>
+        </div>
+        <nav>
+            <a href="#">Mapa</a>
+            <a href="#">Eventos</a>
+            <a href="#">Sobre</a>
+            <button id="locationButton">📍 Minha localização</button>
+            <button id="logoutButton" class="hidden" style="border: none; background: #ff4757; color: white; padding: 10px 15px; border-radius: 8px; cursor: pointer;">Sair</button>
+        </nav>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main class="main">
+
+        <!-- BARRA LATERAL -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Descobre o que acontece perto de ti</h2>
+                <p>Encontra eventos, atividades e oportunidades na tua zona.</p>
+            </div>
+
+            <!-- PESQUISA -->
+            <div class="search">
+                <input type="text" id="searchInput" placeholder="🔎 Procurar eventos...">
+            </div>
+
+            <!-- FILTROS -->
+            <div class="filters">
+                <select id="districtFilter">
+                    <option value="all">Todos os distritos</option>
+                    <option value="aveiro">Aveiro</option>
+                    <option value="beja">Beja</option>
+                    <option value="braga">Braga</option>
+                    <option value="braganca">Bragança</option>
+                    <option value="castelo branco">Castelo Branco</option>
+                    <option value="coimbra">Coimbra</option>
+                    <option value="evora">Évora</option>
+                    <option value="faro">Faro</option>
+                    <option value="guarda">Guarda</option>
+                    <option value="leiria">Leiria</option>
+                    <option value="lisboa">Lisboa</option>
+                    <option value="portalegre">Portalegre</option>
+                    <option value="porto">Porto</option>
+                    <option value="santarem">Santarém</option>
+                    <option value="setubal">Setúbal</option>
+                    <option value="viana do castelo">Viana do Castelo</option>
+                    <option value="vila real">Vila Real</option>
+                    <option value="viseu">Viseu</option>
+                    <option value="acores">Açores (Região Autónoma)</option>
+                    <option value="madeira">Madeira (Região Autónoma)</option>
+                </select>
+
+                <select id="categoryFilter">
+                    <option value="all">Todas as categorias</option>
+                    <option value="desporto">⚽ Desporto</option>
+                    <option value="musica">🎵 Música</option>
+                    <option value="cultura">🎨 Cultura</option>
+                    <option value="gaming">🎮 Gaming</option>
+                    <option value="comunidade">🤝 Comunidade</option>
+                </select>
+            </div>
+
+            <!-- LISTA DE EVENTOS -->
+            <div class="events-container">
+                <div class="events-title">
+                    <h3>Eventos próximos</h3>
+                    <span id="eventCount">0</span>
+                </div>
+                <div id="eventsList"></div>
+            </div>
+
+            <!-- BOTÃO ADICIONAR -->
+            <button id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+        </aside>
+
+        <!-- MAPA -->
+        <section class="map-container">
+            <div id="map"></div>
+        </section>
+
+    </main>
+
+    <!-- MODAL PARA CRIAR EVENTO -->
+    <div id="eventModal" class="modal hidden">
+        <div class="modal-content">
+            <button id="closeModal" class="close-button">×</button>
+            <h2>Adicionar evento</h2>
+            <p>Escolhe primeiro a localização no mapa clicando no local pretendido.</p>
+            
+            <form id="eventForm">
+                <label for="eventName">Nome do evento</label>
+                <input type="text" id="eventName" placeholder="Ex: Torneio de Futebol" required>
+
+                <label for="eventDescription">Descrição</label>
+                <textarea id="eventDescription" placeholder="Descreve o evento..."></textarea>
+
+                <label for="eventCategory">Categoria</label>
+                <select id="eventCategory" required>
+                    <option value="">Selecionar categoria</option>
+                    <option value="desporto">⚽ Desporto</option>
+                    <option value="musica">🎵 Música</option>
+                    <option value="cultura">🎨 Cultura</option>
+                    <option value="gaming">🎮 Gaming</option>
+                    <option value="comunidade">🤝 Comunidade</option>
+                </select>
+
+                <div class="form-row">
+                    <div>
+                        <label for="eventDate">Data</label>
+                        <input type="date" id="eventDate" required>
+                    </div>
+                    <div>
+                        <label for="eventTime">Hora</label>
+                        <input type="time" id="eventTime" required>
+                    </div>
+                </div>
+
+                <label for="eventLocation">Local (Nome do Sítio)</label>
+                <input type="text" id="eventLocation" placeholder="Ex: Parque da Cidade" required>
+
+                <label for="eventFormDistrict">Distrito</label>
+                <select id="eventFormDistrict" required>
+                    <option value="">Selecionar distrito</option>
+                    <option value="aveiro">Aveiro</option>
+                    <option value="beja">Beja</option>
+                    <option value="braga">Braga</option>
+                    <option value="braganca">Bragança</option>
+                    <option value="castelo branco">Castelo Branco</option>
+                    <option value="coimbra">Coimbra</option>
+                    <option value="evora">Évora</option>
+                    <option value="faro">Faro</option>
+                    <option value="guarda">Guarda</option>
+                    <option value="leiria">Leiria</option>
+                    <option value="lisboa">Lisboa</option>
+                    <option value="portalegre">Portalegre</option>
+                    <option value="porto">Porto</option>
+                    <option value="santarem">Santarém</option>
+                    <option value="setubal">Setúbal</option>
+                    <option value="viana do castelo">Viana do Castelo</option>
+                    <option value="vila real">Vila Real</option>
+                    <option value="viseu">Viseu</option>
+                    <option value="acores">Açores (Região Autónoma)</option>
+                    <option value="madeira">Madeira (Região Autónoma)</option>
+                </select>
+
+                <label for="eventImage">Fotografia do evento</label>
+                <input type="file" id="eventImage" accept="image/png, image/jpeg" required>
+
+                <p id="selectedCoordinates">📍 Nenhuma localização selecionada no mapa</p>
+
+                <button type="submit" class="submit-button">Publicar evento</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ECRÃ DE AUTENTICAÇÃO -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-box">
+            <div class="auth-header">
+                <span>📍</span>
+                <h2>LocalSpot</h2>
+            </div>
+            
+            <form id="loginForm">
+                <h3>Iniciar Sessão</h3>
+                <input type="text" id="loginUser" placeholder="Nome de Utilizador" required>
+                <input type="password" id="loginPass" placeholder="Palavra-passe" required>
+                <button type="submit" class="submit-button">Entrar</button>
+                <p>Não tens conta? <a href="#" id="showRegister">Regista-te aqui</a></p>
+            </form>
+
+            <form id="registerForm" class="hidden">
+                <h3>Criar Conta</h3>
+                <input type="text" id="regUser" placeholder="Nome de Utilizador" required>
+                <input type="password" id="regPass" placeholder="Palavra-passe" required>
+                <button type="submit" class="submit-button">Registar</button>
+                <p>Já tens conta? <a href="#" id="showLogin">Entra aqui</a></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Ficheiros de script do projeto -->
+    <script src="js/events.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
