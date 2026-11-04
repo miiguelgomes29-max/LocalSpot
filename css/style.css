@@ -218,8 +218,8 @@ nav { display: flex; align-items: center; gap: 16px; }
 .add-event-button:hover { background: var(--primary-dark); }
 
 /* ---------- Mapa ---------- */
-.map-container { position: relative; min-height: 0; }
-#map { width: 100%; height: 100%; z-index: 0; }
+.map-container { position: relative; min-height: 0; width: 100%; height: 100%; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 #map.picking { cursor: crosshair; }
 
 .pick-banner {
@@ -235,7 +235,7 @@ nav { display: flex; align-items: center; gap: 16px; }
 .pick-banner button:hover { background: rgba(255, 255, 255, 0.3); }
 
 /* Pinos */
-.pin-wrapper { background: none; border: none; }
+.pin-wrapper { background: none; border: none; cursor: pointer; }
 .pin {
     width: 34px; height: 34px; background: var(--pin, var(--primary));
     border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
@@ -247,6 +247,7 @@ nav { display: flex; align-items: center; gap: 16px; }
 .pin-wrapper:hover .pin { transform: rotate(-45deg) scale(1.12); }
 
 /* Popup */
+.maplibregl-popup-content { padding: 12px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
 .popup { min-width: 190px; }
 .popup h3 { margin: 6px 0 6px; font-size: 16px; }
 .popup p { margin: 4px 0; font-size: 13px; }
