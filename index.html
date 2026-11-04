@@ -3,203 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalSpot</title>
-    <!-- Leaflet CSS -->
+    <meta name="description" content="LocalSpot – descobre eventos, atividades e oportunidades perto de ti em todo o país.">
+    <meta name="theme-color" content="#2563eb">
+    <title>LocalSpot · Eventos perto de ti</title>
+    <link rel="icon" href="assets/images/logo.png">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <!-- O nosso CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
     <!-- CABEÇALHO -->
     <header class="header">
-        <div class="logo">
-            <span>📍</span>
+        <a class="logo" href="./" aria-label="LocalSpot – início">
+            <img src="assets/images/logo.png" alt="" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍'}))">
             <h1>LocalSpot</h1>
-        </div>
-        <nav>
-            <a href="#">Mapa</a>
-            <a href="#">Eventos</a>
-            <a href="#">Sobre</a>
-            <button id="locationButton">📍 Minha localização</button>
-            <button id="logoutButton" class="hidden" style="border: none; background: #ff4757; color: white; padding: 10px 15px; border-radius: 8px; cursor: pointer;">Sair</button>
+        </a>
+        <nav aria-label="Navegação principal">
+            <button type="button" id="aboutButton" class="btn-link">Sobre</button>
+            <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
         </nav>
     </header>
 
+    <!-- SEPARADORES (só em telemóvel) -->
+    <div class="tabs" role="tablist" aria-label="Vista">
+        <button type="button" role="tab" id="tabList" class="tab active" aria-selected="true">📋 Eventos</button>
+        <button type="button" role="tab" id="tabMap" class="tab" aria-selected="false">🗺️ Mapa</button>
+    </div>
+
     <!-- CONTEÚDO PRINCIPAL -->
-    <main class="main">
+    <main class="main" id="main" data-view="list">
 
         <!-- BARRA LATERAL -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>Descobre o que acontece perto de ti</h2>
-                <p>Encontra eventos, atividades e oportunidades na tua zona.</p>
-            </div>
-
-            <!-- PESQUISA -->
-            <div class="search">
-                <input type="text" id="searchInput" placeholder="🔎 Procurar eventos...">
-            </div>
-
-            <!-- FILTROS -->
-            <div class="filters">
-                <select id="districtFilter">
-                    <option value="all">Todos os distritos</option>
-                    <option value="aveiro">Aveiro</option>
-                    <option value="beja">Beja</option>
-                    <option value="braga">Braga</option>
-                    <option value="braganca">Bragança</option>
-                    <option value="castelo branco">Castelo Branco</option>
-                    <option value="coimbra">Coimbra</option>
-                    <option value="evora">Évora</option>
-                    <option value="faro">Faro</option>
-                    <option value="guarda">Guarda</option>
-                    <option value="leiria">Leiria</option>
-                    <option value="lisboa">Lisboa</option>
-                    <option value="portalegre">Portalegre</option>
-                    <option value="porto">Porto</option>
-                    <option value="santarem">Santarém</option>
-                    <option value="setubal">Setúbal</option>
-                    <option value="viana do castelo">Viana do Castelo</option>
-                    <option value="vila real">Vila Real</option>
-                    <option value="viseu">Viseu</option>
-                    <option value="acores">Açores (Região Autónoma)</option>
-                    <option value="madeira">Madeira (Região Autónoma)</option>
-                </select>
-
-                <select id="categoryFilter">
-                    <option value="all">Todas as categorias</option>
-                    <option value="desporto">⚽ Desporto</option>
-                    <option value="musica">🎵 Música</option>
-                    <option value="cultura">🎨 Cultura</option>
-                    <option value="gaming">🎮 Gaming</option>
-                    <option value="comunidade">🤝 Comunidade</option>
-                </select>
-            </div>
-
-            <!-- LISTA DE EVENTOS -->
-            <div class="events-container">
-                <div class="events-title">
-                    <h3>Eventos próximos</h3>
-                    <span id="eventCount">0</span>
+        <aside class="sidebar" aria-label="Lista e filtros de eventos">
+            <div class="sidebar-body">
+                <div class="sidebar-header">
+                    <h2>Descobre o que acontece perto de ti</h2>
+                    <p>Encontra eventos, atividades e oportunidades na tua zona.</p>
                 </div>
-                <div id="eventsList"></div>
+
+                <div class="search">
+                    <label for="searchInput" class="sr-only">Procurar eventos</label>
+                    <input type="search" id="searchInput" placeholder="🔎 Procurar por nome, local ou descrição..." autocomplete="off">
+                </div>
+
+                <div class="chips" id="categoryChips" role="group" aria-label="Filtrar por categoria"></div>
+
+                <div class="filters">
+                    <div class="field">
+                        <label for="districtFilter">Distrito</label>
+                        <select id="districtFilter"></select>
+                    </div>
+                    <div class="field">
+                        <label for="periodFilter">Quando</label>
+                        <select id="periodFilter">
+                            <option value="all">Qualquer data</option>
+                            <option value="upcoming">A partir de hoje</option>
+                            <option value="week">Próximos 7 dias</option>
+                            <option value="month">Próximos 30 dias</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="sortFilter">Ordenar por</label>
+                        <select id="sortFilter">
+                            <option value="date">Data</option>
+                            <option value="distance">Proximidade</option>
+                            <option value="name">Nome (A–Z)</option>
+                        </select>
+                    </div>
+                    <div class="field field-toggle">
+                        <label class="sr-only" for="favoritesToggle">Mostrar só favoritos</label>
+                        <button type="button" id="favoritesToggle" class="btn-toggle" aria-pressed="false">☆ Só favoritos</button>
+                    </div>
+                </div>
+
+                <div class="events-container">
+                    <div class="events-title">
+                        <h3>Eventos</h3>
+                        <span id="eventCount" aria-live="polite">0</span>
+                        <button type="button" id="resetFilters" class="btn-link small hidden">Limpar filtros</button>
+                    </div>
+                    <div id="eventsList"></div>
+                    <div id="emptyState" class="empty hidden">
+                        <p class="empty-icon">🔍</p>
+                        <p><strong>Nenhum evento encontrado</strong></p>
+                        <p>Experimenta alterar os filtros ou adiciona tu um novo evento.</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- BOTÃO ADICIONAR -->
-            <button id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+            <div class="sidebar-footer">
+                <button type="button" id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+            </div>
         </aside>
 
         <!-- MAPA -->
-        <section class="map-container">
+        <section class="map-container" aria-label="Mapa de eventos">
+            <div id="pickBanner" class="pick-banner hidden" role="status">
+                <span>📍 Clica no mapa para escolher o local do evento</span>
+                <button type="button" id="cancelPick">Cancelar</button>
+            </div>
             <div id="map"></div>
         </section>
-
     </main>
 
-    <!-- MODAL PARA CRIAR EVENTO -->
-    <div id="eventModal" class="modal hidden">
+    <!-- MODAL: CRIAR EVENTO -->
+    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
         <div class="modal-content">
-            <button id="closeModal" class="close-button">×</button>
-            <h2>Adicionar evento</h2>
-            <p>Escolhe primeiro a localização no mapa clicando no local pretendido.</p>
-            
-            <form id="eventForm">
-                <label for="eventName">Nome do evento</label>
-                <input type="text" id="eventName" placeholder="Ex: Torneio de Futebol" required>
+            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
+            <h2 id="eventModalTitle">Adicionar evento</h2>
+
+            <form id="eventForm" novalidate>
+                <div class="location-box">
+                    <p id="selectedCoordinates">📍 Nenhuma localização selecionada no mapa</p>
+                    <button type="button" id="changeLocationButton" class="btn-soft">Alterar no mapa</button>
+                </div>
+
+                <label for="eventName">Nome do evento *</label>
+                <input type="text" id="eventName" maxlength="80" placeholder="Ex: Torneio de Futebol" required>
 
                 <label for="eventDescription">Descrição</label>
-                <textarea id="eventDescription" placeholder="Descreve o evento..."></textarea>
+                <textarea id="eventDescription" maxlength="300" rows="3" placeholder="Descreve o evento..."></textarea>
 
-                <label for="eventCategory">Categoria</label>
-                <select id="eventCategory" required>
-                    <option value="">Selecionar categoria</option>
-                    <option value="desporto">⚽ Desporto</option>
-                    <option value="musica">🎵 Música</option>
-                    <option value="cultura">🎨 Cultura</option>
-                    <option value="gaming">🎮 Gaming</option>
-                    <option value="comunidade">🤝 Comunidade</option>
-                </select>
+                <label for="eventCategory">Categoria *</label>
+                <select id="eventCategory" required></select>
 
                 <div class="form-row">
                     <div>
-                        <label for="eventDate">Data</label>
+                        <label for="eventDate">Data *</label>
                         <input type="date" id="eventDate" required>
                     </div>
                     <div>
-                        <label for="eventTime">Hora</label>
+                        <label for="eventTime">Hora *</label>
                         <input type="time" id="eventTime" required>
                     </div>
                 </div>
 
-                <label for="eventLocation">Local (Nome do Sítio)</label>
-                <input type="text" id="eventLocation" placeholder="Ex: Parque da Cidade" required>
+                <label for="eventLocation">Local (nome do sítio) *</label>
+                <input type="text" id="eventLocation" maxlength="80" placeholder="Ex: Parque da Cidade" required>
 
-                <label for="eventFormDistrict">Distrito</label>
-                <select id="eventFormDistrict" required>
-                    <option value="">Selecionar distrito</option>
-                    <option value="aveiro">Aveiro</option>
-                    <option value="beja">Beja</option>
-                    <option value="braga">Braga</option>
-                    <option value="braganca">Bragança</option>
-                    <option value="castelo branco">Castelo Branco</option>
-                    <option value="coimbra">Coimbra</option>
-                    <option value="evora">Évora</option>
-                    <option value="faro">Faro</option>
-                    <option value="guarda">Guarda</option>
-                    <option value="leiria">Leiria</option>
-                    <option value="lisboa">Lisboa</option>
-                    <option value="portalegre">Portalegre</option>
-                    <option value="porto">Porto</option>
-                    <option value="santarem">Santarém</option>
-                    <option value="setubal">Setúbal</option>
-                    <option value="viana do castelo">Viana do Castelo</option>
-                    <option value="vila real">Vila Real</option>
-                    <option value="viseu">Viseu</option>
-                    <option value="acores">Açores (Região Autónoma)</option>
-                    <option value="madeira">Madeira (Região Autónoma)</option>
-                </select>
+                <label for="eventFormDistrict">Distrito *</label>
+                <select id="eventFormDistrict" required></select>
 
-                <label for="eventImage">Fotografia do evento</label>
-                <input type="file" id="eventImage" accept="image/png, image/jpeg" required>
+                <label for="eventImage">Fotografia (opcional)</label>
+                <input type="file" id="eventImage" accept="image/png, image/jpeg, image/webp">
+                <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização da fotografia">
 
-                <p id="selectedCoordinates">📍 Nenhuma localização selecionada no mapa</p>
-
+                <p id="formError" class="form-error hidden" role="alert"></p>
                 <button type="submit" class="submit-button">Publicar evento</button>
             </form>
         </div>
     </div>
 
-    <!-- ECRÃ DE AUTENTICAÇÃO -->
-    <div id="authScreen" class="auth-screen">
-        <div class="auth-box">
-            <div class="auth-header">
-                <span>📍</span>
-                <h2>LocalSpot</h2>
-            </div>
-            
-            <form id="loginForm">
-                <h3>Iniciar Sessão</h3>
-                <input type="text" id="loginUser" placeholder="Nome de Utilizador" required>
-                <input type="password" id="loginPass" placeholder="Palavra-passe" required>
-                <button type="submit" class="submit-button">Entrar</button>
-                <p>Não tens conta? <a href="#" id="showRegister">Regista-te aqui</a></p>
-            </form>
-
-            <form id="registerForm" class="hidden">
-                <h3>Criar Conta</h3>
-                <input type="text" id="regUser" placeholder="Nome de Utilizador" required>
-                <input type="password" id="regPass" placeholder="Palavra-passe" required>
-                <button type="submit" class="submit-button">Registar</button>
-                <p>Já tens conta? <a href="#" id="showLogin">Entra aqui</a></p>
-            </form>
+    <!-- MODAL: SOBRE -->
+    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="modal-content">
+            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
+            <h2 id="aboutTitle">Sobre o LocalSpot</h2>
+            <p>O LocalSpot ajuda-te a descobrir eventos, torneios, workshops e atividades perto de ti, num mapa simples de usar.</p>
+            <ul class="about-list">
+                <li>🔎 Pesquisa e filtra por categoria, distrito e data.</li>
+                <li>📍 Usa a tua localização para ordenar por proximidade.</li>
+                <li>⭐ Guarda os teus eventos favoritos.</li>
+                <li>＋ Publica os teus próprios eventos escolhendo o local no mapa.</li>
+            </ul>
+            <p class="muted">Os eventos que adicionares ficam guardados neste dispositivo.</p>
         </div>
     </div>
 
-    <!-- Leaflet JavaScript -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <!-- Ficheiros de script do projeto -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
