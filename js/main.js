@@ -117,7 +117,6 @@ function sortEvents(list) {
     } else if (state.sort === "distance" && userPosition) {
         sorted.sort((a, b) => distanceOf(a) - distanceOf(b));
     } else {
-        // próximos primeiro (do mais cedo para o mais tarde), depois os já terminados
         const upcoming = sorted.filter(e => !isPast(e)).sort((a, b) => eventDateTime(a) - eventDateTime(b));
         const past = sorted.filter(isPast).sort((a, b) => eventDateTime(b) - eventDateTime(a));
         return [...upcoming, ...past];
@@ -238,7 +237,7 @@ eventsList.addEventListener("keydown", e => {
 });
 
 // Clicar num marcador destaca o cartão
-onEventMarkerClick = id => setActive(id, true);
+window.onEventMarkerClick = id => setActive(id, true);
 
 // ---------- Favoritos e apagar ----------
 function toggleFavorite(id) {
@@ -346,7 +345,9 @@ function setView(view) {
     $("tabMap").classList.toggle("active", view === "map");
     $("tabList").setAttribute("aria-selected", view === "list");
     $("tabMap").setAttribute("aria-selected", view === "map");
-    setTimeout(() => map.invalidateSize(), 50);
+    setTimeout(() => {
+        if (typeof map !== "undefined" && map) map.resize();
+    }, 50);
 }
 
 $("tabList").addEventListener("click", () => setView("list"));
@@ -355,12 +356,14 @@ $("tabMap").addEventListener("click", () => setView("map"));
 // ---------- Modais ----------
 function openModal(el) {
     el.classList.remove("hidden");
+    el.setAttribute("aria-hidden", "false");
     const focusable = el.querySelector("input, select, textarea, button");
     if (focusable) setTimeout(() => focusable.focus(), 50);
 }
 
 function closeEventModal() {
     modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
 }
 
 function resetEventForm() {
@@ -378,13 +381,24 @@ closeModal.addEventListener("click", () => { closeEventModal(); resetEventForm()
 modal.addEventListener("mousedown", e => { if (e.target === modal) { closeEventModal(); resetEventForm(); } });
 
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
-$("closeAbout").addEventListener("click", () => aboutModal.classList.add("hidden"));
-aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) aboutModal.classList.add("hidden"); });
+$("closeAbout").addEventListener("click", () => {
+    aboutModal.classList.add("hidden");
+    aboutModal.setAttribute("aria-hidden", "true");
+});
+aboutModal.addEventListener("mousedown", e => {
+    if (e.target === aboutModal) {
+        aboutModal.classList.add("hidden");
+        aboutModal.setAttribute("aria-hidden", "true");
+    }
+});
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
-    else if (!aboutModal.classList.contains("hidden")) aboutModal.classList.add("hidden");
+    else if (!aboutModal.classList.contains("hidden")) {
+        aboutModal.classList.add("hidden");
+        aboutModal.setAttribute("aria-hidden", "true");
+    }
     else if (!pickBanner.classList.contains("hidden")) stopPicking();
 });
 
@@ -499,7 +513,6 @@ eventForm.addEventListener("submit", async e => {
     closeEventModal();
     resetEventForm();
 
-    // Garante que o novo evento fica visível
     if (!getFilteredEvents().some(ev => ev.id === newEvent.id)) resetFiltersBtn.click();
     else filterEvents();
 
