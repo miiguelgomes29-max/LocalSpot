@@ -1,115 +1,136 @@
-// Corrigir o problema das imagens dos pinos invisíveis do Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
-});
+// ==========================================
+// MAPA (Leaflet)
+// ==========================================
 
-// Inicializar o mapa centrado em Portugal
-const map = L.map("map").setView([39.3999, -8.2245], 6);
-
-// Adicionar a camada do OpenStreetMap
-L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-    }
-).addTo(map);
-
-// Grupo para gerir os marcadores dos eventos
-const markers = L.layerGroup().addTo(map);
-
-// Função para desenhar os marcadores no mapa
-function showEventsOnMap(eventList) {
-    markers.clearLayers();
-
-    eventList.forEach(event => {
-        if (event.latitude && event.longitude) {
-            const marker = L.marker([event.latitude, event.longitude]);
-            marker.addTo(markers);
-
-            marker.bindPopup(`
-                <h3>${event.name}</h3>
-                <p>${event.description}</p>
-                <p>📅 ${event.date} - 🕐 ${event.time}</p>
-                <p>📍 ${event.location}</p>
-            `);
-        }
+// Pinos personalizados por categoria (não dependem das imagens do Leaflet)
+function categoryIcon(category) {
+    const c = CATEGORIES[category] || CATEGORIES.comunidade;
+    return L.divIcon({
+        className: "pin-wrapper",
+        html: `<div class="pin" style="--pin:${c.color}"><span>${c.emoji}</span></div>`,
+        iconSize: [36, 44],
+        iconAnchor: [18, 42],
+        popupAnchor: [0, -38]
     });
 }
 
-// Obter localização do utilizador e detetar o distrito via API Nominatim
-function showUserLocation() {
-    if (!navigator.geolocation) {
-        alert("O teu navegador não suporta localização.");
-        return;
-    }
+const map = L.map("map").setView([39.6, -8.0], 6);
 
-    navigator.geolocation.getCurrentPosition(
-        async function(position) {
-            const latitude = position.coords.latitude;
-            const longitude = position.coords.longitude;
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; contribuidores do OpenStreetMap"
+}).addTo(map);
 
-            map.setView([latitude, longitude], 12);
-            L.marker([latitude, longitude])
-                .addTo(map)
-                .bindPopup("📍 Estás aqui")
-                .openPopup();
+const markers = L.layerGroup().addTo(map);
+const markerById = new Map();
+let onEventMarkerClick = null;
 
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-                const data = await response.json();
-                
-                const cityOrDistrict = data.address.state || data.address.city || data.address.county;
-                
-                if (cityOrDistrict) {
-                    const userDistrict = cityOrDistrict.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    const districtSelect = document.getElementById("districtFilter");
-                    
-                    let optionExists = Array.from(districtSelect.options).some(opt => opt.value === userDistrict);
-                    
-                    if (optionExists) {
-                        districtSelect.value = userDistrict;
-                        if (typeof filterEvents === 'function') filterEvents(); 
-                    }
-                }
-            } catch (error) {
-                console.log("Não foi possível detetar o distrito automaticamente.", error);
-            }
-        },
-        function() {
-            alert("Não foi possível obter a tua localização.");
-        }
-    );
+function popupHTML(ev) {
+    const cat = CATEGORIES[ev.category];
+    const directions = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
+    return `
+        <div class="popup">
+            <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
+            <h3>${escapeHTML(ev.name)}</h3>
+            ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
+            <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
+            <p>📍 ${escapeHTML(ev.location)}</p>
+            <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
+        </div>`;
 }
 
-// Lógica de seleção de coordenadas no mapa para criação de novos eventos
-let selectedLat = null;
-let selectedLng = null;
+function showEventsOnMap(list) {
+    markers.clearLayers();
+    markerById.clear();
+
+    list.forEach(ev => {
+        if (typeof ev.latitude !== "number" || typeof ev.longitude !== "number") return;
+        const marker = L.marker([ev.latitude, ev.longitude], {
+            icon: categoryIcon(ev.category),
+            title: ev.name,
+            keyboard: true
+        });
+        marker.bindPopup(popupHTML(ev));
+        marker.on("click", () => { if (onEventMarkerClick) onEventMarkerClick(ev.id); });
+        marker.addTo(markers);
+        markerById.set(ev.id, marker);
+    });
+}
+
+function fitToEvents(list) {
+    const points = list.filter(e => typeof e.latitude === "number").map(e => [e.latitude, e.longitude]);
+    if (!points.length) return;
+    if (points.length === 1) {
+        map.flyTo(points[0], 13);
+    } else {
+        map.flyToBounds(points, { padding: [50, 50], maxZoom: 13 });
+    }
+}
+
+function focusEvent(id) {
+    const marker = markerById.get(id);
+    if (!marker) return;
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 14), { duration: 0.8 });
+    map.once("moveend", () => marker.openPopup());
+}
+
+// ---------- Localização do utilizador ----------
+let userPosition = null;
+let userMarker = null;
+
+function locateUser() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error("O teu navegador não suporta localização."));
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.circleMarker([userPosition.lat, userPosition.lng], {
+                    radius: 9, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1
+                }).addTo(map).bindPopup("📍 Estás aqui");
+                map.flyTo([userPosition.lat, userPosition.lng], 11);
+                resolve(userPosition);
+            },
+            () => reject(new Error("Não foi possível obter a tua localização. Verifica as permissões do navegador.")),
+            { enableHighAccuracy: false, timeout: 10000 }
+        );
+    });
+}
+
+// ---------- Escolha de local para novo evento ----------
+let pickHandler = null;
 let tempMarker = null;
 
-map.on('click', function(e) {
-    selectedLat = e.latlng.lat;
-    selectedLng = e.latlng.lng;
+function pickLocation(callback) {
+    pickHandler = callback;
+    map.getContainer().classList.add("picking");
+}
 
+function cancelPick() {
+    pickHandler = null;
+    map.getContainer().classList.remove("picking");
+}
+
+function setTempMarker(latlng) {
+    clearTempMarker();
+    tempMarker = L.marker(latlng, { icon: categoryIcon("comunidade"), zIndexOffset: 1000 })
+        .addTo(map)
+        .bindPopup("📍 Local do novo evento");
+}
+
+function clearTempMarker() {
     if (tempMarker) {
         map.removeLayer(tempMarker);
+        tempMarker = null;
     }
-
-    tempMarker = L.marker([selectedLat, selectedLng]).addTo(map)
-        .bindPopup("📍 Localização para o novo evento")
-        .openPopup();
-
-    const coordsText = document.getElementById("selectedCoordinates");
-    if (coordsText) {
-        coordsText.textContent = `📍 Localização guardada!`;
-        coordsText.style.color = "#2563eb";
-        coordsText.style.fontWeight = "bold";
-    }
-});
-
-if (typeof events !== 'undefined') {
-    showEventsOnMap(events);
 }
+
+map.on("click", e => {
+    if (!pickHandler) return;
+    const handler = pickHandler;
+    cancelPick();
+    handler(e.latlng);
+});
