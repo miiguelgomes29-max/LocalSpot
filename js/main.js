@@ -7,8 +7,11 @@ const searchInput = $("searchInput");
 const categoryChips = $("categoryChips");
 const districtFilter = $("districtFilter");
 const periodFilter = $("periodFilter");
+const radiusFilter = $("radiusFilter");
+const radiusValue = $("radiusValue");
 const sortFilter = $("sortFilter");
 const favoritesToggle = $("favoritesToggle");
+const themeToggle = $("themeToggle");
 const resetFiltersBtn = $("resetFilters");
 const eventsList = $("eventsList");
 const eventCount = $("eventCount");
@@ -30,6 +33,27 @@ const mainEl = $("main");
 
 const STORAGE_EVENTS = "localspot_events";
 const STORAGE_FAVS = "localspot_favorites";
+const STORAGE_THEME = "localspot_theme";
+
+// ---------- Tema Escuro / Claro ----------
+function initTheme() {
+    const savedTheme = localStorage.getItem(STORAGE_THEME) || 
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setTheme(savedTheme);
+}
+
+function setTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
+    localStorage.setItem(STORAGE_THEME, theme);
+}
+
+themeToggle.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    setTheme(current === "dark" ? "light" : "dark");
+});
+
+initTheme();
 
 // ---------- Armazenamento seguro ----------
 function loadJSON(key, fallback) {
@@ -51,13 +75,13 @@ function saveJSON(key, value) {
 }
 
 // ---------- Estado ----------
-const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
+const state = { search: "", category: "all", district: "all", period: "all", radius: 200, sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
 
-// Eventos criados pelo utilizador (guardados no dispositivo)
+// Eventos criados pelo utilizador
 loadJSON(STORAGE_EVENTS, []).forEach(ev => events.push(ev));
 
 // ---------- Mensagens (toast) ----------
@@ -105,6 +129,13 @@ function matchesPeriod(ev) {
     return d <= new Date(now.getTime() + days * 86400000);
 }
 
+function matchesRadius(ev) {
+    if (state.radius >= 200) return true;
+    const km = distanceOf(ev);
+    if (km === null) return true; // Se ainda não obteve localização, não oculta por raio
+    return km <= state.radius;
+}
+
 function distanceOf(ev) {
     if (!userPosition) return null;
     return distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude);
@@ -132,6 +163,7 @@ function getFilteredEvents() {
             (state.category === "all" || ev.category === state.category) &&
             (state.district === "all" || ev.distrito === state.district) &&
             matchesPeriod(ev) &&
+            matchesRadius(ev) &&
             (!state.onlyFavorites || favorites.has(ev.id));
     });
     return sortEvents(filtered);
@@ -139,7 +171,7 @@ function getFilteredEvents() {
 
 function hasActiveFilters() {
     return state.search || state.category !== "all" || state.district !== "all" ||
-        state.period !== "all" || state.onlyFavorites;
+        state.period !== "all" || state.radius < 200 || state.onlyFavorites;
 }
 
 function filterEvents({ fit = false } = {}) {
@@ -283,6 +315,21 @@ categoryChips.addEventListener("click", e => {
 districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents({ fit: true }); });
 periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents({ fit: true }); });
 
+radiusFilter.addEventListener("input", async () => {
+    const val = Number(radiusFilter.value);
+    state.radius = val;
+    radiusValue.textContent = val >= 200 ? "Sem limite" : `${val} km`;
+
+    if (val < 200 && !userPosition) {
+        try {
+            await locateUser();
+        } catch (err) {
+            showToast("Ativa a localização para usar o filtro por raio.", "error");
+        }
+    }
+    filterEvents({ fit: true });
+});
+
 sortFilter.addEventListener("change", async () => {
     state.sort = sortFilter.value;
     if (state.sort === "distance" && !userPosition) {
@@ -306,10 +353,12 @@ favoritesToggle.addEventListener("click", () => {
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    Object.assign(state, { search: "", category: "all", district: "all", period: "all", onlyFavorites: false });
+    Object.assign(state, { search: "", category: "all", district: "all", period: "all", radius: 200, onlyFavorites: false });
     searchInput.value = "";
     districtFilter.value = "all";
     periodFilter.value = "all";
+    radiusFilter.value = 200;
+    radiusValue.textContent = "Sem limite";
     favoritesToggle.setAttribute("aria-pressed", "false");
     favoritesToggle.classList.remove("on");
     favoritesToggle.textContent = "☆ Só favoritos";
@@ -402,7 +451,7 @@ document.addEventListener("keydown", e => {
     else if (!pickBanner.classList.contains("hidden")) stopPicking();
 });
 
-// ---------- Adicionar evento: 1) escolher local no mapa, 2) preencher formulário ----------
+// ---------- Adicionar evento ----------
 function startPicking() {
     closeEventModal();
     setView("map");
@@ -441,7 +490,6 @@ eventImageInput.addEventListener("change", () => {
     imagePreview.classList.remove("hidden");
 });
 
-// Reduz a imagem para poupar espaço no armazenamento local
 function resizeImage(file, maxSize = 800) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
