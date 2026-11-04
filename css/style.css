@@ -1,0 +1,392 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f4f6f8;
+    color: #18212b;
+}
+
+.header {
+    height: 70px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 25px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo span {
+    font-size: 25px;
+}
+
+.logo h1 {
+    margin: 0;
+    font-size: 22px;
+    color: #2563eb;
+}
+
+nav {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+nav a {
+    text-decoration: none;
+    color: #333;
+    font-size: 14px;
+}
+
+nav a:hover {
+    color: #2563eb;
+}
+
+#locationButton {
+    border: none;
+    background: #eef3ff;
+    color: #2563eb;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.main {
+    height: calc(100vh - 70px);
+    display: grid;
+    grid-template-columns: 380px 1fr;
+}
+
+.sidebar {
+    background: white;
+    border-right: 1px solid #ddd;
+    padding: 25px;
+    overflow-y: auto;
+}
+
+.sidebar-header h2 {
+    margin-top: 0;
+    font-size: 25px;
+    line-height: 1.1;
+}
+
+.sidebar-header p {
+    color: #707780;
+    line-height: 1.5;
+}
+
+.search {
+    margin-top: 25px;
+}
+
+.search input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.filters {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.filters select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: white;
+}
+
+.events-container {
+    margin-top: 25px;
+}
+
+.events-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.events-title h3 {
+    font-size: 16px;
+}
+
+#eventCount {
+    background: #eef3ff;
+    color: #2563eb;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.event-card {
+    border: 1px solid #e1e5ea;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 15px;
+    cursor: pointer;
+    transition: 0.2s;
+    background: white;
+}
+
+.event-card:hover {
+    border-color: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.event-image {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.event-card h4 {
+    margin: 8px 0;
+    font-size: 16px;
+}
+
+.event-card p {
+    margin: 5px 0;
+    font-size: 12px;
+    color: #707780;
+}
+
+.category {
+    display: inline-block;
+    background: #f1f4f8;
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: bold;
+    color: #2563eb;
+}
+
+.add-event-button {
+    width: 100%;
+    margin-top: 15px;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    background: #2563eb;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.add-event-button:hover {
+    background: #1d4ed8;
+}
+
+.map-container {
+    position: relative;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    width: 500px;
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    position: relative;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+}
+
+.close-button {
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    border: none;
+    background: none;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.modal-content form {
+    margin-top: 20px;
+}
+
+.modal-content label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.modal-content input,
+.modal-content textarea,
+.modal-content select {
+    width: 100%;
+    padding: 11px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+}
+
+.modal-content textarea {
+    resize: vertical;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+#selectedCoordinates {
+    background: #f4f6f8;
+    padding: 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: #666;
+}
+
+.submit-button {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    background: #2563eb;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* =========================
+   AUTENTICAÇÃO
+========================= */
+.auth-screen {
+    position: fixed;
+    inset: 0;
+    background: #f4f6f8;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999; 
+}
+
+.auth-screen.hidden {
+    display: none;
+}
+
+.auth-box {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    width: 400px;
+    max-width: 90%;
+    text-align: center;
+}
+
+.auth-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.auth-header h2 {
+    margin: 0;
+    color: #2563eb;
+    font-size: 24px;
+}
+
+.auth-header span {
+    font-size: 30px;
+}
+
+.auth-box h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+.auth-box form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.auth-box form.hidden {
+    display: none;
+}
+
+.auth-box input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+}
+
+.auth-box p {
+    font-size: 13px;
+    margin-top: 15px;
+}
+
+.auth-box a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+@media (max-width: 800px) {
+    .main {
+        display: flex;
+        flex-direction: column;
+        height: auto;
+    }
+    .map-container {
+        height: 500px;
+        order: -1;
+    }
+    .sidebar {
+        border-right: none;
+    }
+    nav a {
+        display: none;
+    }
+}
