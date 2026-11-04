@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#2563eb">
     <title>LocalSpot · Eventos perto de ti</title>
     <link rel="icon" href="assets/images/logo.png">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -107,7 +107,7 @@
     </main>
 
     <!-- MODAL: CRIAR EVENTO -->
-    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
             <h2 id="eventModalTitle">Adicionar evento</h2>
@@ -155,7 +155,7 @@
     </div>
 
     <!-- MODAL: SOBRE -->
-    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
             <h2 id="aboutTitle">Sobre o LocalSpot</h2>
@@ -172,7 +172,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
