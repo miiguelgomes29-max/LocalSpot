@@ -1,17 +1,41 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Globo 3D)
+// MAPA (MapLibre GL JS - Globo 3D em Satélite Real)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
+// Estilo com imagem de satélite real (Esri World Imagery)
+const satelliteStyle = {
+    version: 8,
+    sources: {
+        'esri-satellite': {
+            type: 'raster',
+            tiles: [
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256,
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }
+    },
+    layers: [
+        {
+            id: 'esri-satellite-layer',
+            type: 'raster',
+            source: 'esri-satellite',
+            minzoom: 0,
+            maxzoom: 19
+        }
+    ]
+};
+
 const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    style: satelliteStyle,
     center: [-8.0, 39.6],
-    zoom: 3,                 // Zoom inicial mais afastado para ver a curvatura
-    pitch: 45,                // Inclinação inicial
+    zoom: 3,                // Vista afastada para ver a curvatura do planeta
+    pitch: 50,               // Inclinação 3D
     bearing: 0,
-    projection: 'globe',      // Ativa a projeção em Globo 3D
+    projection: 'globe',     // Formato de globo 3D esférico
     attributionControl: false
 });
 
@@ -130,7 +154,7 @@ function locateUser() {
                 userEl.style.background = '#2563eb';
                 userEl.style.border = '3px solid #fff';
                 userEl.style.borderRadius = '50%';
-                userEl.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
+                userEl.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
 
                 userMarker = new maplibregl.Marker({ element: userEl })
                     .setLngLat([userPosition.lng, userPosition.lat])
