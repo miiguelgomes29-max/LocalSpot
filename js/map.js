@@ -1,5 +1,6 @@
 window.onEventMarkerClick = null;
 
+// Inicialização do mapa
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -19,10 +20,14 @@ const map = new maplibregl.Map({
     pitch: 50,
     bearing: -15,
     dragPan: true, 
-    scrollZoom: true
+    scrollZoom: true,
+    touchZoomRotate: true
 });
 
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+
+// Garantir que o mapa redimensiona corretamente ao carregar a página
+setTimeout(() => map.resize(), 500);
 
 let markers = [];
 const markerById = new Map();
