@@ -217,8 +217,15 @@ nav { display: flex; align-items: center; gap: 16px; }
 .add-event-button:hover { background: var(--primary-dark); }
 
 /* Mapa */
-.map-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
-#map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: auto; }
+.map-container { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+#map { 
+    position: absolute; 
+    inset: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: 10; 
+    pointer-events: auto !important; 
+}
 #map.picking { cursor: crosshair; }
 
 .pick-banner {
@@ -369,7 +376,7 @@ nav { display: flex; align-items: center; gap: 16px; }
 }
 
 /* ==========================================
-   NOVOS ESTILOS: INSCRIÇÕES
+   ESTILOS DAS INSCRIÇÕES
    ========================================== */
 .registration-info {
     font-size: 13px;
