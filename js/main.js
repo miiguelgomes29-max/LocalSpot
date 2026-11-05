@@ -30,7 +30,7 @@ const mainEl = $("main");
 
 const STORAGE_EVENTS = "localspot_events";
 const STORAGE_FAVS = "localspot_favorites";
-const STORAGE_REGS = "localspot_registrations"; // NOVO
+const STORAGE_REGS = "localspot_registrations";
 
 // ---------- Armazenamento seguro ----------
 function loadJSON(key, fallback) {
@@ -54,8 +54,7 @@ function saveJSON(key, value) {
 // ---------- Estado ----------
 const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
-// NOVO: Carrega as inscrições. (O { "1": ["Ana", "Rui"] } é apenas para teste inicial)
-let registrations = loadJSON(STORAGE_REGS, { "1": ["Ana", "Rui"] }); 
+let registrations = loadJSON(STORAGE_REGS, { "1": ["Ana", "Rui"] }); // Exemplo inicial
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
@@ -171,7 +170,6 @@ function displayEvents(list) {
         const fav = favorites.has(ev.id);
         const past = isPast(ev);
 
-        // NOVO: Lógica de inscrições
         const evRegs = registrations[ev.id] || [];
         const limitText = ev.limit ? `${evRegs.length} / ${ev.limit}` : `${evRegs.length} inscritos`;
         const isFull = ev.limit && evRegs.length >= ev.limit;
@@ -241,7 +239,7 @@ eventsList.addEventListener("click", e => {
         toggleFavorite(id);
     } else if (action === "delete") {
         deleteEvent(id);
-    } else if (action === "register") { // NOVO
+    } else if (action === "register") {
         toggleRegistration(id);
     } else {
         openEventOnMap(id);
@@ -263,30 +261,25 @@ function toggleFavorite(id) {
     filterEvents();
 }
 
-// NOVO: Função para gerir inscrições
 function toggleRegistration(id) {
     const ev = events.find(x => x.id === id);
     if (!ev) return;
 
-    // Pede o nome do utilizador se ainda não existir no localStorage
     let myName = localStorage.getItem("localspot_username");
     if (!myName) {
         myName = prompt("Insere o teu nome para a inscrição:");
-        if (!myName || !myName.trim()) return; // Cancelou ou deixou vazio
+        if (!myName || !myName.trim()) return;
         myName = myName.trim();
         localStorage.setItem("localspot_username", myName);
     }
 
     if (!registrations[id]) registrations[id] = [];
-
     const index = registrations[id].indexOf(myName);
 
     if (index > -1) {
-        // O utilizador já estava inscrito, logo cancela a inscrição
         registrations[id].splice(index, 1);
         showToast("Inscrição cancelada.", "info");
     } else {
-        // Nova inscrição
         if (ev.limit && registrations[id].length >= ev.limit) {
             showToast("Este evento já atingiu o limite de inscrições.", "error");
             return;
@@ -296,7 +289,7 @@ function toggleRegistration(id) {
     }
 
     saveJSON(STORAGE_REGS, registrations);
-    filterEvents(); // Re-renderiza a lista para atualizar o botão
+    filterEvents();
 }
 
 function deleteEvent(id) {
@@ -306,7 +299,6 @@ function deleteEvent(id) {
     events.splice(events.indexOf(ev), 1);
     favorites.delete(id);
     
-    // NOVO: Limpar inscrições do evento apagado
     if (registrations[id]) {
         delete registrations[id];
         saveJSON(STORAGE_REGS, registrations);
@@ -552,7 +544,7 @@ eventForm.addEventListener("submit", async e => {
         }
     }
 
-    const limitValue = $("eventLimit").value; // NOVO
+    const limitValue = $("eventLimit").value;
 
     const newEvent = {
         id: Date.now(),
@@ -567,7 +559,7 @@ eventForm.addEventListener("submit", async e => {
         longitude: pendingLocation.lng,
         image,
         custom: true,
-        limit: limitValue ? parseInt(limitValue) : null // NOVO
+        limit: limitValue ? parseInt(limitValue) : null
     };
 
     events.push(newEvent);
