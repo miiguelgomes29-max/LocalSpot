@@ -12,7 +12,7 @@ const CATEGORIES = {
     comunidade: { label: "Comunidade", emoji: "🤝", color: "#db2777" }
 };
 
-// Capitais de distrito (usadas para detetar o distrito mais próximo)
+// Capitais de distrito
 const DISTRICTS = [
     { value: "aveiro", label: "Aveiro", lat: 40.6405, lng: -8.6538 },
     { value: "beja", label: "Beja", lat: 38.0151, lng: -7.8632 },
@@ -48,7 +48,9 @@ const events = [
         distrito: "porto",
         latitude: 41.1699,
         longitude: -8.6790,
-        image: "assets/eventos/basketball.jpg"
+        image: "assets/eventos/basketball.jpg",
+        maxParticipants: 12,
+        enrolled: 8
     },
     {
         id: 2,
@@ -61,7 +63,9 @@ const events = [
         distrito: "lisboa",
         latitude: 38.7526,
         longitude: -9.1847,
-        image: "assets/eventos/concerto.jpg"
+        image: "assets/eventos/concerto.jpg",
+        maxParticipants: null, // Sem limite
+        enrolled: 142
     },
     {
         id: 3,
@@ -74,7 +78,9 @@ const events = [
         distrito: "coimbra",
         latitude: 40.2081,
         longitude: -8.4265,
-        image: "assets/eventos/fotografia.jpg"
+        image: "assets/eventos/fotografia.jpg",
+        maxParticipants: 15,
+        enrolled: 15 // Esgotado para demonstrar o botão
     },
     {
         id: 4,
@@ -87,7 +93,9 @@ const events = [
         distrito: "aveiro",
         latitude: 40.6405,
         longitude: -8.6538,
-        image: "assets/eventos/gaming.jpg"
+        image: "assets/eventos/gaming.jpg",
+        maxParticipants: 32,
+        enrolled: 24
     },
     {
         id: 5,
@@ -100,7 +108,9 @@ const events = [
         distrito: "braga",
         latitude: 41.5503,
         longitude: -8.4200,
-        image: DEFAULT_IMAGE
+        image: DEFAULT_IMAGE,
+        maxParticipants: null,
+        enrolled: 58
     },
     {
         id: 6,
@@ -113,7 +123,9 @@ const events = [
         distrito: "faro",
         latitude: 37.0160,
         longitude: -7.9350,
-        image: DEFAULT_IMAGE
+        image: DEFAULT_IMAGE,
+        maxParticipants: 50,
+        enrolled: 12
     }
 ];
 
