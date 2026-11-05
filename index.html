@@ -149,6 +149,9 @@
                 <label for="eventFormDistrict">Distrito *</label>
                 <select id="eventFormDistrict" required></select>
 
+                <label for="eventMaxParticipants">Limite de vagas (opcional)</label>
+                <input type="number" id="eventMaxParticipants" min="1" max="9999" placeholder="Ex: 20 (deixa em branco para sem limite)">
+
                 <label for="eventImage">Fotografia (opcional)</label>
                 <input type="file" id="eventImage" accept="image/png, image/jpeg, image/webp">
                 <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização da fotografia">
@@ -169,9 +172,10 @@
                 <li>🔎 Pesquisa e filtra por categoria, distrito, data e raio de distância.</li>
                 <li>📍 Usa a tua localização para ordenar por proximidade.</li>
                 <li>⭐ Guarda os teus eventos favoritos.</li>
-                <li>＋ Publica os teus próprios eventos escolhendo o local no mapa.</li>
+                <li>✋ Inscreve-te nas tuas atividades preferidas.</li>
+                <li>＋ Publica os teus próprios eventos escolhendo o local no mapa e definindo o limite de vagas.</li>
             </ul>
-            <p class="muted">Os eventos que adicionares ficam guardados neste dispositivo.</p>
+            <p class="muted">Os eventos e inscrições ficam guardados neste dispositivo.</p>
         </div>
     </div>
 
