@@ -7,11 +7,8 @@ const searchInput = $("searchInput");
 const categoryChips = $("categoryChips");
 const districtFilter = $("districtFilter");
 const periodFilter = $("periodFilter");
-const radiusFilter = $("radiusFilter");
-const radiusValue = $("radiusValue");
 const sortFilter = $("sortFilter");
 const favoritesToggle = $("favoritesToggle");
-const themeToggle = $("themeToggle");
 const resetFiltersBtn = $("resetFilters");
 const eventsList = $("eventsList");
 const eventCount = $("eventCount");
@@ -33,28 +30,6 @@ const mainEl = $("main");
 
 const STORAGE_EVENTS = "localspot_events";
 const STORAGE_FAVS = "localspot_favorites";
-const STORAGE_THEME = "localspot_theme";
-const STORAGE_ENROLLED = "localspot_my_enrollments";
-
-// ---------- Tema Escuro / Claro ----------
-function initTheme() {
-    const savedTheme = localStorage.getItem(STORAGE_THEME) || 
-        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setTheme(savedTheme);
-}
-
-function setTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
-    localStorage.setItem(STORAGE_THEME, theme);
-}
-
-themeToggle.addEventListener("click", () => {
-    const current = document.documentElement.getAttribute("data-theme");
-    setTheme(current === "dark" ? "light" : "dark");
-});
-
-initTheme();
 
 // ---------- Armazenamento seguro ----------
 function loadJSON(key, fallback) {
@@ -76,9 +51,8 @@ function saveJSON(key, value) {
 }
 
 // ---------- Estado ----------
-const state = { search: "", category: "all", district: "all", period: "all", radius: 200, sort: "date", onlyFavorites: false };
+const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
-let myEnrollments = new Set(loadJSON(STORAGE_ENROLLED, []));
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
@@ -107,42 +81,13 @@ function setupControls() {
     $("eventCategory").innerHTML = `<option value="">Selecionar categoria</option>` +
         Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`).join("");
 
-    const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([key, label]) => [key, label])];
-    categoryChips.innerHTML = chips.map(([key, label]) => {
-        const catObj = CATEGORIES[key];
-        const displayLabel = catObj ? `${catObj.emoji} ${catObj.label}` : label;
-        return `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${displayLabel}</button>`;
-    }).join("");
+    const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([k, c]) => [k, `${c.emoji} ${c.label}`])];
+    categoryChips.innerHTML = chips.map(([key, label]) =>
+        `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${label}</button>`
+    ).join("");
 
     const today = new Date().toISOString().slice(0, 10);
     $("eventDate").min = today;
-}
-
-// ---------- Inscrição em Atividades ----------
-function toggleEnrollment(id) {
-    const ev = events.find(x => x.id === id);
-    if (!ev) return;
-
-    const isEnrolled = myEnrollments.has(id);
-
-    if (isEnrolled) {
-        myEnrollments.delete(id);
-        if (typeof ev.enrolled === "number" && ev.enrolled > 0) ev.enrolled--;
-        showToast(`Cancelaste a tua inscrição em "${ev.name}".`);
-    } else {
-        const isFull = ev.maxParticipants && (ev.enrolled || 0) >= ev.maxParticipants;
-        if (isFull) {
-            showToast("Vagas esgotadas para este evento!", "error");
-            return;
-        }
-        myEnrollments.add(id);
-        ev.enrolled = (ev.enrolled || 0) + 1;
-        showToast(`Inscrição confirmada em "${ev.name}"!`, "success");
-    }
-
-    saveJSON(STORAGE_ENROLLED, [...myEnrollments]);
-    persistCustomEvents();
-    filterEvents();
 }
 
 // ---------- Filtros ----------
@@ -158,13 +103,6 @@ function matchesPeriod(ev) {
     if (state.period === "upcoming") return true;
     const days = state.period === "week" ? 7 : 30;
     return d <= new Date(now.getTime() + days * 86400000);
-}
-
-function matchesRadius(ev) {
-    if (state.radius >= 200) return true;
-    const km = distanceOf(ev);
-    if (km === null) return true;
-    return km <= state.radius;
 }
 
 function distanceOf(ev) {
@@ -194,7 +132,6 @@ function getFilteredEvents() {
             (state.category === "all" || ev.category === state.category) &&
             (state.district === "all" || ev.distrito === state.district) &&
             matchesPeriod(ev) &&
-            matchesRadius(ev) &&
             (!state.onlyFavorites || favorites.has(ev.id));
     });
     return sortEvents(filtered);
@@ -202,7 +139,7 @@ function getFilteredEvents() {
 
 function hasActiveFilters() {
     return state.search || state.category !== "all" || state.district !== "all" ||
-        state.period !== "all" || state.radius < 200 || state.onlyFavorites;
+        state.period !== "all" || state.onlyFavorites;
 }
 
 function filterEvents({ fit = false } = {}) {
@@ -229,26 +166,7 @@ function displayEvents(list) {
         const cat = CATEGORIES[ev.category];
         const km = distanceOf(ev);
         const fav = favorites.has(ev.id);
-        const enrolled = myEnrollments.has(ev.id);
         const past = isPast(ev);
-
-        const currentEnrolled = ev.enrolled || 0;
-        const max = ev.maxParticipants;
-        const isFull = max && currentEnrolled >= max;
-
-        let vagasLabel = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
-        if (isFull) vagasLabel += " (Esgotado)";
-
-        let enrollBtnHtml = "";
-        if (!past) {
-            if (enrolled) {
-                enrollBtnHtml = `<button type="button" class="btn-enroll enrolled" data-action="enroll">✓ Inscrito</button>`;
-            } else if (isFull) {
-                enrollBtnHtml = `<button type="button" class="btn-enroll disabled" disabled>Esgotado</button>`;
-            } else {
-                enrollBtnHtml = `<button type="button" class="btn-enroll" data-action="enroll">✋ Inscrever-me</button>`;
-            }
-        }
 
         const card = document.createElement("article");
         card.className = "event-card" + (past ? " past" : "") + (ev.id === activeId ? " active" : "");
@@ -272,12 +190,6 @@ function displayEvents(list) {
             <h4>${escapeHTML(ev.name)}</h4>
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
-            
-            <div class="event-spots-row">
-                <span class="vagas-text ${isFull ? 'esgotado' : ''}">👥 ${vagasLabel}</span>
-                ${enrollBtnHtml}
-            </div>
-
             ${ev.custom ? `<button type="button" class="delete-btn" data-action="delete">🗑 Apagar evento</button>` : ""}
         `;
         frag.appendChild(card);
@@ -301,7 +213,6 @@ function openEventOnMap(id) {
     focusEvent(id);
 }
 
-// Delegação de eventos na lista
 eventsList.addEventListener("click", e => {
     const card = e.target.closest(".event-card");
     if (!card) return;
@@ -310,8 +221,6 @@ eventsList.addEventListener("click", e => {
 
     if (action === "fav") {
         toggleFavorite(id);
-    } else if (action === "enroll") {
-        toggleEnrollment(id);
     } else if (action === "delete") {
         deleteEvent(id);
     } else {
@@ -328,7 +237,6 @@ eventsList.addEventListener("keydown", e => {
 
 window.onEventMarkerClick = id => setActive(id, true);
 
-// ---------- Favoritos e apagar ----------
 function toggleFavorite(id) {
     if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
     saveJSON(STORAGE_FAVS, [...favorites]);
@@ -340,9 +248,7 @@ function deleteEvent(id) {
     if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
     events.splice(events.indexOf(ev), 1);
     favorites.delete(id);
-    myEnrollments.delete(id);
     saveJSON(STORAGE_FAVS, [...favorites]);
-    saveJSON(STORAGE_ENROLLED, [...myEnrollments]);
     persistCustomEvents();
     filterEvents();
     showToast("Evento apagado.");
@@ -374,21 +280,6 @@ categoryChips.addEventListener("click", e => {
 districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents({ fit: true }); });
 periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents({ fit: true }); });
 
-radiusFilter.addEventListener("input", async () => {
-    const val = Number(radiusFilter.value);
-    state.radius = val;
-    radiusValue.textContent = val >= 200 ? "Sem limite" : `${val} km`;
-
-    if (val < 200 && !userPosition) {
-        try {
-            await locateUser();
-        } catch (err) {
-            showToast("Ativa a localização para usar o filtro por raio.", "error");
-        }
-    }
-    filterEvents({ fit: true });
-});
-
 sortFilter.addEventListener("change", async () => {
     state.sort = sortFilter.value;
     if (state.sort === "distance" && !userPosition) {
@@ -412,12 +303,10 @@ favoritesToggle.addEventListener("click", () => {
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    Object.assign(state, { search: "", category: "all", district: "all", period: "all", radius: 200, onlyFavorites: false });
+    Object.assign(state, { search: "", category: "all", district: "all", period: "all", onlyFavorites: false });
     searchInput.value = "";
     districtFilter.value = "all";
     periodFilter.value = "all";
-    radiusFilter.value = 200;
-    radiusValue.textContent = "Sem limite";
     favoritesToggle.setAttribute("aria-pressed", "false");
     favoritesToggle.classList.remove("on");
     favoritesToggle.textContent = "☆ Só favoritos";
@@ -599,9 +488,6 @@ eventForm.addEventListener("submit", async e => {
         }
     }
 
-    const maxPInput = $("eventMaxParticipants").value;
-    const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
-
     const newEvent = {
         id: Date.now(),
         name: $("eventName").value.trim(),
@@ -614,8 +500,6 @@ eventForm.addEventListener("submit", async e => {
         latitude: pendingLocation.lat,
         longitude: pendingLocation.lng,
         image,
-        maxParticipants,
-        enrolled: 0,
         custom: true
     };
 
