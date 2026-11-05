@@ -1,40 +1,21 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Globo 3D com Relevo em Satélite)
+// MAPA (MapLibre GL JS - 3D Vetorial Fluído)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
-const satelliteStyle = {
-    version: 8,
-    sources: {
-        'esri-satellite': {
-            type: 'raster',
-            tiles: [
-                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-            ],
-            tileSize: 256,
-            attribution: 'Tiles &copy; Esri'
-        }
-    },
-    layers: [
-        {
-            id: 'esri-satellite-layer',
-            type: 'raster',
-            source: 'esri-satellite',
-            minzoom: 0,
-            maxzoom: 19
-        }
-    ]
-};
-
+// Inicializa o mapa com estilo vetorial 3D (rápido, fluído e com interação perfeita)
 const map = new maplibregl.Map({
     container: 'map',
-    style: satelliteStyle,
+    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [-8.0, 39.6],
-    zoom: 3,
+    zoom: 6,
     pitch: 50,
-    bearing: 0,
-    projection: 'globe',
+    bearing: -15,
+    interactive: true,
+    dragPan: true,
+    scrollZoom: true,
+    touchZoomRotate: true,
     attributionControl: false
 });
 
@@ -45,15 +26,6 @@ let markers = [];
 const markerById = new Map();
 
 map.on('load', () => {
-    map.addSource('terrarium-dem', {
-        type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-        encoding: 'terrarium',
-        tileSize: 256,
-        maxzoom: 15
-    });
-    map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.5 });
-
     map.resize();
     if (typeof currentList !== 'undefined' && currentList.length > 0) {
         showEventsOnMap(currentList);
