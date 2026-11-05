@@ -107,10 +107,12 @@ function setupControls() {
     $("eventCategory").innerHTML = `<option value="">Selecionar categoria</option>` +
         Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`).join("");
 
-    const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([k, c]) => [k, `${c.emoji} ${c.label}`])];
-    categoryChips.innerHTML = chips.map(([key, label]) =>
-        `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${label}</button>`
-    ).join("");
+    const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([key, label]) => [key, label])];
+    categoryChips.innerHTML = chips.map(([key, label]) => {
+        const catObj = CATEGORIES[key];
+        const displayLabel = catObj ? `${catObj.emoji} ${catObj.label}` : label;
+        return `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${displayLabel}</button>`;
+    }).join("");
 
     const today = new Date().toISOString().slice(0, 10);
     $("eventDate").min = today;
@@ -324,7 +326,6 @@ eventsList.addEventListener("keydown", e => {
     }
 });
 
-// Clicar num marcador destaca o cartão
 window.onEventMarkerClick = id => setActive(id, true);
 
 // ---------- Favoritos e apagar ----------
