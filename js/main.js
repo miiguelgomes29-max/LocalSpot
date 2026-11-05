@@ -129,7 +129,6 @@ function displayEvents(list) {
         card.className = "event-card" + (past ? " past" : "") + (ev.id === activeId ? " active" : "");
         card.dataset.id = ev.id;
         card.tabIndex = 0;
-        card.setAttribute("role", "button");
 
         card.innerHTML = `
             <div class="event-image-wrap">
