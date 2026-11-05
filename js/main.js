@@ -1,6 +1,3 @@
-// ==========================================
-// LÓGICA DA APLICAÇÃO
-// ==========================================
 const $ = id => document.getElementById(id);
 
 const searchInput = $("searchInput");
@@ -15,6 +12,8 @@ const eventCount = $("eventCount");
 const emptyState = $("emptyState");
 const locationButton = $("locationButton");
 const addEventButton = $("addEventButton");
+const radiusSlider = $("radiusSlider");
+const radiusValue = $("radiusValue");
 
 const modal = $("eventModal");
 const closeModal = $("closeModal");
@@ -32,37 +31,18 @@ const STORAGE_EVENTS = "localspot_events";
 const STORAGE_FAVS = "localspot_favorites";
 const STORAGE_REGS = "localspot_registrations";
 
-// ---------- Armazenamento seguro ----------
-function loadJSON(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-    } catch (e) {
-        return fallback;
-    }
-}
+function loadJSON(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
+function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; } }
 
-function saveJSON(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
-// ---------- Estado ----------
 const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
-let registrations = loadJSON(STORAGE_REGS, { "1": ["Ana", "Rui"] }); // Exemplo inicial
+let registrations = loadJSON(STORAGE_REGS, {}); // Guarda as inscrições
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
 
-// Eventos criados pelo utilizador
 loadJSON(STORAGE_EVENTS, []).forEach(ev => events.push(ev));
 
-// ---------- Mensagens (toast) ----------
 let toastTimer;
 function showToast(message, type = "info") {
     const toast = $("toast");
@@ -72,53 +52,33 @@ function showToast(message, type = "info") {
     toastTimer = setTimeout(() => toast.classList.remove("show"), 3500);
 }
 
-// ---------- Preencher selects e categorias ----------
 function setupControls() {
-    districtFilter.innerHTML = `<option value="all">Todos os distritos</option>` +
-        DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
-
-    $("eventFormDistrict").innerHTML = `<option value="">Selecionar distrito</option>` +
-        DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
-
-    $("eventCategory").innerHTML = `<option value="">Selecionar categoria</option>` +
-        Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`).join("");
+    districtFilter.innerHTML = `<option value="all">Todos os distritos</option>` + DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
+    $("eventFormDistrict").innerHTML = `<option value="">Selecionar distrito</option>` + DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
+    $("eventCategory").innerHTML = `<option value="">Selecionar categoria</option>` + Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`).join("");
 
     const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([k, c]) => [k, `${c.emoji} ${c.label}`])];
-    categoryChips.innerHTML = chips.map(([key, label]) =>
-        `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${label}</button>`
-    ).join("");
+    categoryChips.innerHTML = chips.map(([key, label]) => `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}" aria-pressed="${key === "all"}">${label}</button>`).join("");
 
     const today = new Date().toISOString().slice(0, 10);
     $("eventDate").min = today;
 }
 
-// ---------- Filtros ----------
-function isPast(ev) {
-    return eventDateTime(ev) < new Date();
-}
-
+function isPast(ev) { return eventDateTime(ev) < new Date(); }
 function matchesPeriod(ev) {
     if (state.period === "all") return true;
-    const d = eventDateTime(ev);
-    const now = new Date();
+    const d = eventDateTime(ev); const now = new Date();
     if (d < now) return false;
     if (state.period === "upcoming") return true;
-    const days = state.period === "week" ? 7 : 30;
-    return d <= new Date(now.getTime() + days * 86400000);
+    return d <= new Date(now.getTime() + (state.period === "week" ? 7 : 30) * 86400000);
 }
-
-function distanceOf(ev) {
-    if (!userPosition) return null;
-    return distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude);
-}
+function distanceOf(ev) { if (!userPosition) return null; return distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude); }
 
 function sortEvents(list) {
     const sorted = [...list];
-    if (state.sort === "name") {
-        sorted.sort((a, b) => a.name.localeCompare(b.name, "pt"));
-    } else if (state.sort === "distance" && userPosition) {
-        sorted.sort((a, b) => distanceOf(a) - distanceOf(b));
-    } else {
+    if (state.sort === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "pt"));
+    else if (state.sort === "distance" && userPosition) sorted.sort((a, b) => distanceOf(a) - distanceOf(b));
+    else {
         const upcoming = sorted.filter(e => !isPast(e)).sort((a, b) => eventDateTime(a) - eventDateTime(b));
         const past = sorted.filter(isPast).sort((a, b) => eventDateTime(b) - eventDateTime(a));
         return [...upcoming, ...past];
@@ -130,19 +90,13 @@ function getFilteredEvents() {
     const q = normalizeText(state.search.trim());
     const filtered = events.filter(ev => {
         const haystack = normalizeText(`${ev.name} ${ev.location} ${ev.description || ""}`);
-        return (!q || haystack.includes(q)) &&
-            (state.category === "all" || ev.category === state.category) &&
-            (state.district === "all" || ev.distrito === state.district) &&
-            matchesPeriod(ev) &&
-            (!state.onlyFavorites || favorites.has(ev.id));
+        return (!q || haystack.includes(q)) && (state.category === "all" || ev.category === state.category) &&
+            (state.district === "all" || ev.distrito === state.district) && matchesPeriod(ev) && (!state.onlyFavorites || favorites.has(ev.id));
     });
     return sortEvents(filtered);
 }
 
-function hasActiveFilters() {
-    return state.search || state.category !== "all" || state.district !== "all" ||
-        state.period !== "all" || state.onlyFavorites;
-}
+function hasActiveFilters() { return state.search || state.category !== "all" || state.district !== "all" || state.period !== "all" || state.onlyFavorites; }
 
 function filterEvents({ fit = false } = {}) {
     currentList = getFilteredEvents();
@@ -150,11 +104,6 @@ function filterEvents({ fit = false } = {}) {
     showEventsOnMap(currentList);
     if (fit) fitToEvents(currentList);
     resetFiltersBtn.classList.toggle("hidden", !hasActiveFilters());
-}
-
-// ---------- Lista lateral ----------
-function formatKm(km) {
-    return km < 10 ? `${km.toFixed(1).replace(".", ",")} km` : `${Math.round(km)} km`;
 }
 
 function displayEvents(list) {
@@ -170,6 +119,7 @@ function displayEvents(list) {
         const fav = favorites.has(ev.id);
         const past = isPast(ev);
 
+        // Lógica de Inscrições
         const evRegs = registrations[ev.id] || [];
         const limitText = ev.limit ? `${evRegs.length} / ${ev.limit}` : `${evRegs.length} inscritos`;
         const isFull = ev.limit && evRegs.length >= ev.limit;
@@ -181,28 +131,23 @@ function displayEvents(list) {
         card.dataset.id = ev.id;
         card.tabIndex = 0;
         card.setAttribute("role", "button");
-        card.setAttribute("aria-label", `${ev.name}, ver no mapa`);
 
         card.innerHTML = `
             <div class="event-image-wrap">
-                <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="" class="event-image" loading="lazy"
-                     onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
-                ${past ? '<span class="badge-past">Terminado</span>' : ""}
-                <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav"
-                        aria-label="${fav ? "Remover dos favoritos" : "Adicionar aos favoritos"}" aria-pressed="${fav}">${fav ? "★" : "☆"}</button>
+                <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="" class="event-image" loading="lazy" onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
+                ${past ? '<span class="badge-past" style="position:absolute;left:8px;top:8px;background:rgba(0,0,0,0.8);color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;">Terminado</span>' : ""}
+                <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav" aria-pressed="${fav}">${fav ? "★" : "☆"}</button>
             </div>
             <div class="event-meta">
-                <span class="category" style="--pin:${cat ? cat.color : "#2563eb"}">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
-                ${km !== null ? `<span class="distance">${formatKm(km)}</span>` : ""}
+                <span class="category" style="--pin:${cat ? cat.color : "#3b82f6"}">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
+                ${km !== null ? `<span class="distance" style="color:var(--muted);font-weight:bold;">${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km</span>` : ""}
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
             
             <p class="registration-info">📝 Inscrições: ${limitText}</p>
-            <button type="button" class="register-btn ${amIRegistered ? 'registered' : ''}" 
-                    data-action="register" 
-                    ${(!amIRegistered && isFull) ? 'disabled' : ''}>
+            <button type="button" class="register-btn ${amIRegistered ? 'registered' : ''}" data-action="register" ${(!amIRegistered && isFull) ? 'disabled' : ''}>
                 ${amIRegistered ? '✓ Inscrito (Cancelar)' : isFull ? 'Esgotado' : 'Inscrever-me'}
             </button>
 
@@ -210,7 +155,6 @@ function displayEvents(list) {
         `;
         frag.appendChild(card);
     });
-
     eventsList.appendChild(frag);
 }
 
@@ -223,11 +167,7 @@ function setActive(id, scroll = true) {
     });
 }
 
-function openEventOnMap(id) {
-    setActive(id, false);
-    setView("map");
-    focusEvent(id);
-}
+function openEventOnMap(id) { setActive(id, false); setView("map"); focusEvent(id); }
 
 eventsList.addEventListener("click", e => {
     const card = e.target.closest(".event-card");
@@ -235,21 +175,15 @@ eventsList.addEventListener("click", e => {
     const id = Number(card.dataset.id);
     const action = e.target.closest("[data-action]")?.dataset.action;
 
-    if (action === "fav") {
-        toggleFavorite(id);
-    } else if (action === "delete") {
-        deleteEvent(id);
-    } else if (action === "register") {
-        toggleRegistration(id);
-    } else {
-        openEventOnMap(id);
-    }
+    if (action === "fav") toggleFavorite(id);
+    else if (action === "delete") deleteEvent(id);
+    else if (action === "register") toggleRegistration(id);
+    else openEventOnMap(id);
 });
 
 eventsList.addEventListener("keydown", e => {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("event-card")) {
-        e.preventDefault();
-        openEventOnMap(Number(e.target.dataset.id));
+        e.preventDefault(); openEventOnMap(Number(e.target.dataset.id));
     }
 });
 
@@ -261,6 +195,7 @@ function toggleFavorite(id) {
     filterEvents();
 }
 
+// FUNÇÃO DE INSCRIÇÃO
 function toggleRegistration(id) {
     const ev = events.find(x => x.id === id);
     if (!ev) return;
@@ -268,7 +203,7 @@ function toggleRegistration(id) {
     let myName = localStorage.getItem("localspot_username");
     if (!myName) {
         myName = prompt("Insere o teu nome para a inscrição:");
-        if (!myName || !myName.trim()) return;
+        if (!myName || !myName.trim()) return; 
         myName = myName.trim();
         localStorage.setItem("localspot_username", myName);
     }
@@ -299,22 +234,21 @@ function deleteEvent(id) {
     events.splice(events.indexOf(ev), 1);
     favorites.delete(id);
     
-    if (registrations[id]) {
-        delete registrations[id];
-        saveJSON(STORAGE_REGS, registrations);
-    }
-
+    if (registrations[id]) { delete registrations[id]; saveJSON(STORAGE_REGS, registrations); }
     saveJSON(STORAGE_FAVS, [...favorites]);
     persistCustomEvents();
     filterEvents();
     showToast("Evento apagado.");
 }
 
-function persistCustomEvents() {
-    return saveJSON(STORAGE_EVENTS, events.filter(e => e.custom));
-}
+function persistCustomEvents() { return saveJSON(STORAGE_EVENTS, events.filter(e => e.custom)); }
 
-// ---------- Listeners de filtros ----------
+// SLIDER DO RAIO (Apenas visual por agora)
+radiusSlider.addEventListener("input", (e) => {
+    const val = e.target.value;
+    radiusValue.textContent = val == 100 ? "Sem limite" : `${val} km`;
+});
+
 let searchTimer;
 searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
@@ -327,8 +261,7 @@ categoryChips.addEventListener("click", e => {
     state.category = chip.dataset.category;
     categoryChips.querySelectorAll(".chip").forEach(c => {
         const on = c === chip;
-        c.classList.toggle("active", on);
-        c.setAttribute("aria-pressed", on);
+        c.classList.toggle("active", on); c.setAttribute("aria-pressed", on);
     });
     filterEvents({ fit: true });
 });
@@ -339,13 +272,7 @@ periodFilter.addEventListener("change", () => { state.period = periodFilter.valu
 sortFilter.addEventListener("change", async () => {
     state.sort = sortFilter.value;
     if (state.sort === "distance" && !userPosition) {
-        try {
-            await locateUser();
-        } catch (err) {
-            showToast(err.message, "error");
-            state.sort = "date";
-            sortFilter.value = "date";
-        }
+        try { await locateUser(); } catch (err) { showToast(err.message, "error"); state.sort = "date"; sortFilter.value = "date"; }
     }
     filterEvents();
 });
@@ -360,106 +287,59 @@ favoritesToggle.addEventListener("click", () => {
 
 resetFiltersBtn.addEventListener("click", () => {
     Object.assign(state, { search: "", category: "all", district: "all", period: "all", onlyFavorites: false });
-    searchInput.value = "";
-    districtFilter.value = "all";
-    periodFilter.value = "all";
+    searchInput.value = ""; districtFilter.value = "all"; periodFilter.value = "all";
     favoritesToggle.setAttribute("aria-pressed", "false");
-    favoritesToggle.classList.remove("on");
-    favoritesToggle.textContent = "☆ Só favoritos";
+    favoritesToggle.classList.remove("on"); favoritesToggle.textContent = "☆ Só favoritos";
     categoryChips.querySelectorAll(".chip").forEach(c => {
         const on = c.dataset.category === "all";
-        c.classList.toggle("active", on);
-        c.setAttribute("aria-pressed", on);
+        c.classList.toggle("active", on); c.setAttribute("aria-pressed", on);
     });
     filterEvents({ fit: true });
 });
 
-// ---------- Localização ----------
 locationButton.addEventListener("click", async () => {
     locationButton.disabled = true;
     try {
         await locateUser();
-        state.sort = "distance";
-        sortFilter.value = "distance";
-        filterEvents();
-        setView("map");
+        state.sort = "distance"; sortFilter.value = "distance";
+        filterEvents(); setView("map");
         showToast("Eventos ordenados pela distância a ti.");
-    } catch (err) {
-        showToast(err.message, "error");
-    } finally {
-        locationButton.disabled = false;
-    }
+    } catch (err) { showToast(err.message, "error"); } finally { locationButton.disabled = false; }
 });
 
-// ---------- Vista (telemóvel) ----------
 function setView(view) {
     mainEl.dataset.view = view;
-    $("tabList").classList.toggle("active", view === "list");
-    $("tabMap").classList.toggle("active", view === "map");
-    $("tabList").setAttribute("aria-selected", view === "list");
-    $("tabMap").setAttribute("aria-selected", view === "map");
-    setTimeout(() => {
-        if (typeof map !== "undefined" && map) map.resize();
-    }, 50);
+    setTimeout(() => { if (typeof map !== "undefined" && map) map.resize(); }, 50);
 }
 
-$("tabList").addEventListener("click", () => setView("list"));
-$("tabMap").addEventListener("click", () => setView("map"));
-
-// ---------- Modais ----------
 function openModal(el) {
-    el.classList.remove("hidden");
-    el.setAttribute("aria-hidden", "false");
+    el.classList.remove("hidden"); el.setAttribute("aria-hidden", "false");
     const focusable = el.querySelector("input, select, textarea, button");
     if (focusable) setTimeout(() => focusable.focus(), 50);
 }
-
-function closeEventModal() {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-}
+function closeEventModal() { modal.classList.add("hidden"); modal.setAttribute("aria-hidden", "true"); }
 
 function resetEventForm() {
-    eventForm.reset();
-    imagePreview.classList.add("hidden");
-    imagePreview.removeAttribute("src");
-    formError.classList.add("hidden");
-    pendingLocation = null;
-    clearTempMarker();
-    coordsText.textContent = "📍 Nenhuma localização selecionada no mapa";
-    coordsText.classList.remove("ok");
+    eventForm.reset(); imagePreview.classList.add("hidden"); imagePreview.removeAttribute("src");
+    formError.classList.add("hidden"); pendingLocation = null; clearTempMarker();
+    coordsText.textContent = "📍 Nenhuma localização selecionada no mapa"; coordsText.classList.remove("ok");
 }
 
 closeModal.addEventListener("click", () => { closeEventModal(); resetEventForm(); });
 modal.addEventListener("mousedown", e => { if (e.target === modal) { closeEventModal(); resetEventForm(); } });
-
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
-$("closeAbout").addEventListener("click", () => {
-    aboutModal.classList.add("hidden");
-    aboutModal.setAttribute("aria-hidden", "true");
-});
-aboutModal.addEventListener("mousedown", e => {
-    if (e.target === aboutModal) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
-});
+$("closeAbout").addEventListener("click", () => { aboutModal.classList.add("hidden"); });
+aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) aboutModal.classList.add("hidden"); });
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
-    else if (!aboutModal.classList.contains("hidden")) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
+    else if (!aboutModal.classList.contains("hidden")) aboutModal.classList.add("hidden");
     else if (!pickBanner.classList.contains("hidden")) stopPicking();
 });
 
-// ---------- Adicionar evento ----------
 function startPicking() {
-    closeEventModal();
-    setView("map");
-    pickBanner.classList.remove("hidden");
+    closeEventModal(); setView("map"); pickBanner.classList.remove("hidden");
     pickLocation(latlng => {
         pickBanner.classList.add("hidden");
         pendingLocation = { lat: latlng.lat, lng: latlng.lng };
@@ -471,27 +351,16 @@ function startPicking() {
         openModal(modal);
     });
 }
+function stopPicking() { cancelPick(); pickBanner.classList.add("hidden"); }
 
-function stopPicking() {
-    cancelPick();
-    pickBanner.classList.add("hidden");
-}
-
-addEventButton.addEventListener("click", () => {
-    if (pendingLocation) openModal(modal); else startPicking();
-});
+addEventButton.addEventListener("click", () => { if (pendingLocation) openModal(modal); else startPicking(); });
 changeLocationButton.addEventListener("click", startPicking);
-$("cancelPick").addEventListener("click", () => {
-    stopPicking();
-    if (pendingLocation) openModal(modal);
-});
+$("cancelPick").addEventListener("click", () => { stopPicking(); if (pendingLocation) openModal(modal); });
 
-// Pré-visualização da imagem
 eventImageInput.addEventListener("change", () => {
     const file = eventImageInput.files[0];
     if (!file) { imagePreview.classList.add("hidden"); return; }
-    imagePreview.src = URL.createObjectURL(file);
-    imagePreview.classList.remove("hidden");
+    imagePreview.src = URL.createObjectURL(file); imagePreview.classList.remove("hidden");
 });
 
 function resizeImage(file, maxSize = 800) {
@@ -500,12 +369,11 @@ function resizeImage(file, maxSize = 800) {
         reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
         reader.onload = () => {
             const img = new Image();
-            img.onerror = () => reject(new Error("Ficheiro de imagem inválido."));
+            img.onerror = () => reject(new Error("Ficheiro inválido."));
             img.onload = () => {
                 const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
                 const canvas = document.createElement("canvas");
-                canvas.width = Math.round(img.width * scale);
-                canvas.height = Math.round(img.height * scale);
+                canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
                 canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
                 resolve(canvas.toDataURL("image/jpeg", 0.78));
             };
@@ -515,67 +383,37 @@ function resizeImage(file, maxSize = 800) {
     });
 }
 
-function showFormError(message) {
-    formError.textContent = message;
-    formError.classList.remove("hidden");
-}
-
 eventForm.addEventListener("submit", async e => {
     e.preventDefault();
     formError.classList.add("hidden");
 
-    if (!pendingLocation) {
-        showFormError("Escolhe primeiro a localização no mapa (botão «Alterar no mapa»).");
-        return;
-    }
-    if (!eventForm.checkValidity()) {
-        eventForm.reportValidity();
-        return;
-    }
+    if (!pendingLocation) { formError.textContent = "Escolhe a localização no mapa."; formError.classList.remove("hidden"); return; }
+    if (!eventForm.checkValidity()) { eventForm.reportValidity(); return; }
 
     let image = DEFAULT_IMAGE;
     const file = eventImageInput.files[0];
-    if (file) {
-        try {
-            image = await resizeImage(file);
-        } catch (err) {
-            showFormError(err.message);
-            return;
-        }
-    }
+    if (file) { try { image = await resizeImage(file); } catch (err) { formError.textContent = err.message; formError.classList.remove("hidden"); return; } }
 
     const limitValue = $("eventLimit").value;
 
     const newEvent = {
-        id: Date.now(),
-        name: $("eventName").value.trim(),
-        description: $("eventDescription").value.trim(),
-        category: $("eventCategory").value,
-        date: $("eventDate").value,
-        time: $("eventTime").value,
-        location: $("eventLocation").value.trim(),
-        distrito: $("eventFormDistrict").value,
-        latitude: pendingLocation.lat,
-        longitude: pendingLocation.lng,
-        image,
-        custom: true,
-        limit: limitValue ? parseInt(limitValue) : null
+        id: Date.now(), name: $("eventName").value.trim(), description: $("eventDescription").value.trim(),
+        category: $("eventCategory").value, date: $("eventDate").value, time: $("eventTime").value,
+        location: $("eventLocation").value.trim(), distrito: $("eventFormDistrict").value,
+        latitude: pendingLocation.lat, longitude: pendingLocation.lng, image, custom: true,
+        limit: limitValue ? parseInt(limitValue) : null // Guarda o limite
     };
 
     events.push(newEvent);
     const saved = persistCustomEvents();
 
-    closeEventModal();
-    resetEventForm();
-
+    closeEventModal(); resetEventForm();
     if (!getFilteredEvents().some(ev => ev.id === newEvent.id)) resetFiltersBtn.click();
     else filterEvents();
 
-    setActive(newEvent.id);
-    focusEvent(newEvent.id);
-    showToast(saved ? "Evento adicionado com sucesso!" : "Evento adicionado, mas não foi possível guardá-lo neste dispositivo.", saved ? "success" : "error");
+    setActive(newEvent.id); focusEvent(newEvent.id);
+    showToast(saved ? "Evento adicionado!" : "Erro ao guardar.", saved ? "success" : "error");
 });
 
-// ---------- Arranque ----------
 setupControls();
 filterEvents({ fit: true });
