@@ -122,44 +122,10 @@ const events = [
 
 // ---------- Utilitários ----------
 
-function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, ch => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    }[ch]));
-}
-
-function normalizeText(value) {
-    return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-function eventDateTime(ev) {
-    return new Date(`${ev.date}T${ev.time || "00:00"}`);
-}
-
-function formatEventDate(ev) {
-    const d = eventDateTime(ev);
-    if (isNaN(d)) return ev.date;
-    const text = d.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-    return `${text} · ${ev.time}`;
-}
-
-function districtLabel(value) {
-    const d = DISTRICTS.find(x => x.value === value);
-    return d ? d.label.replace(" (Região Autónoma)", "") : value;
-}
-
-function distanceKm(lat1, lng1, lat2, lng2) {
-    const rad = x => x * Math.PI / 180;
-    const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 +
-        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
-    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function nearestDistrict(lat, lng) {
-    let best = DISTRICTS[0], bestDist = Infinity;
-    DISTRICTS.forEach(d => {
-        const dist = distanceKm(lat, lng, d.lat, d.lng);
-        if (dist < bestDist) { best = d; bestDist = dist; }
-    });
-    return best.value;
-}
+function escapeHTML(value) { return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
+function normalizeText(value) { return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+function eventDateTime(ev) { return new Date(`${ev.date}T${ev.time || "00:00"}`); }
+function formatEventDate(ev) { const d = eventDateTime(ev); if (isNaN(d)) return ev.date; return `${d.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · ${ev.time}`; }
+function districtLabel(value) { const d = DISTRICTS.find(x => x.value === value); return d ? d.label.replace(" (Região Autónoma)", "") : value; }
+function distanceKm(lat1, lng1, lat2, lng2) { const rad = x => x * Math.PI / 180; const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); }
+function nearestDistrict(lat, lng) { let best = DISTRICTS[0], bestDist = Infinity; DISTRICTS.forEach(d => { const dist = distanceKm(lat, lng, d.lat, d.lng); if (dist < bestDist) { best = d; bestDist = dist; } }); return best.value; }
