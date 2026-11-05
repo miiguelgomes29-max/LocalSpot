@@ -13,16 +13,6 @@
     --header-h: 64px;
 }
 
-/* Modo Escuro */
-[data-theme="dark"] {
-    --bg: #0f172a;
-    --surface: #1e293b;
-    --border: #334155;
-    --text: #f8fafc;
-    --muted: #94a3b8;
-    --primary-soft: rgba(37, 99, 235, 0.25);
-}
-
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -32,7 +22,6 @@ body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
-    transition: background 0.25s, color 0.25s;
 }
 
 .hidden { display: none !important; }
@@ -115,18 +104,12 @@ nav { display: flex; align-items: center; gap: 16px; }
 
 .search { margin-top: 20px; }
 
-.search input, .filters select, .filters input[type="range"] {
+.search input, .filters select {
     width: 100%; padding: 11px 12px;
     border: 1px solid var(--border); border-radius: 8px;
     background: var(--surface); font-size: 14px; color: var(--text);
 }
 .search input:focus, .filters select:focus { border-color: var(--primary); }
-
-.filters input[type="range"] {
-    padding: 4px 0;
-    accent-color: var(--primary);
-    cursor: pointer;
-}
 
 /* Chips de categoria */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -147,7 +130,6 @@ nav { display: flex; align-items: center; gap: 16px; }
     gap: 10px;
 }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field:first-child { grid-column: 1 / -1; }
 .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
 .field-toggle { justify-content: flex-end; }
 
@@ -156,7 +138,6 @@ nav { display: flex; align-items: center; gap: 16px; }
     background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px;
 }
 .btn-toggle.on { background: #fff7e0; border-color: #f5b800; color: #8a6400; font-weight: 600; }
-[data-theme="dark"] .btn-toggle.on { background: #3b2d00; color: #fbbf24; border-color: #f5b800; }
 
 /* Lista */
 .events-container { margin-top: 22px; }
@@ -218,33 +199,6 @@ nav { display: flex; align-items: center; gap: 16px; }
 .event-card h4 { margin: 8px 0 4px; font-size: 16px; }
 .event-card p { margin: 4px 0; font-size: 13px; color: var(--muted); }
 
-/* Inscrições e Vagas */
-.event-spots-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--border);
-}
-.vagas-text { font-size: 12px; font-weight: 600; color: var(--muted); }
-.vagas-text.esgotado { color: var(--danger); }
-
-.btn-enroll {
-    border: none;
-    background: var(--primary-soft);
-    color: var(--primary);
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-}
-.btn-enroll:hover { background: var(--primary); color: #fff; }
-.btn-enroll.enrolled { background: var(--success); color: #fff; }
-.btn-enroll.disabled { opacity: 0.5; cursor: not-allowed; background: var(--border); color: var(--muted); }
-
 .delete-btn {
     margin-top: 8px; border: none; background: none; color: var(--danger);
     font-size: 12px; cursor: pointer; padding: 4px 0;
@@ -262,8 +216,8 @@ nav { display: flex; align-items: center; gap: 16px; }
 }
 .add-event-button:hover { background: var(--primary-dark); }
 
-/* Mapa (Navegação Interativa Garantida) */
-.map-container { position: relative; min-height: 0; width: 100%; height: 100%; flex: 1; }
+/* Mapa */
+.map-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
 #map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: auto; }
 #map.picking { cursor: crosshair; }
 
@@ -355,7 +309,6 @@ nav { display: flex; align-items: center; gap: 16px; }
     background: #fdecec; color: var(--danger); padding: 10px 12px;
     border-radius: 8px; font-size: 13px; margin: 0 0 14px;
 }
-[data-theme="dark"] .form-error { background: #450a0a; }
 
 .submit-button {
     width: 100%; padding: 13px; border: none; border-radius: 8px;
