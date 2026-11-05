@@ -44,7 +44,6 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 let markers = [];
 const markerById = new Map();
 
-// Adiciona o Relevo/Elevação 3D ao mapa assim que ele carrega
 map.on('load', () => {
     map.addSource('terrarium-dem', {
         type: 'raster-dem',
@@ -72,6 +71,12 @@ function createCustomMarkerElement(category) {
 function popupHTML(ev) {
     const cat = CATEGORIES[ev.category];
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
+    
+    // Info de vagas no Popup
+    const enrolled = ev.enrolled || 0;
+    const max = ev.maxParticipants;
+    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
+
     return `
         <div class="popup">
             <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
@@ -79,6 +84,7 @@ function popupHTML(ev) {
             ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)}</p>
+            <p>👥 <strong>${vagasText}</strong></p>
             <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
         </div>`;
 }
