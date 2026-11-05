@@ -49,7 +49,7 @@ const events = [
         latitude: 41.1699,
         longitude: -8.6790,
         image: "assets/eventos/basketball.jpg",
-        limit: 20 // NOVO
+        limit: 20 // LIMITE DEFINIDO AQUI
     },
     {
         id: 2,
@@ -63,7 +63,7 @@ const events = [
         latitude: 38.7526,
         longitude: -9.1847,
         image: "assets/eventos/concerto.jpg",
-        limit: 2 // NOVO (Para testares rapidamente o "Esgotado")
+        limit: 2 // LIMITE BAIXO PARA TESTES
     },
     {
         id: 3,
@@ -90,7 +90,7 @@ const events = [
         latitude: 40.6405,
         longitude: -8.6538,
         image: "assets/eventos/gaming.jpg",
-        limit: 50 // NOVO
+        limit: 50
     },
     {
         id: 5,
