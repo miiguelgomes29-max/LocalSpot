@@ -3,8 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="LocalSpot – descobre eventos, atividades e oportunidades perto de ti em todo o país.">
-    <meta name="theme-color" content="#2563eb">
     <title>LocalSpot · Eventos perto de ti</title>
     <link rel="icon" href="assets/images/logo.png">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
@@ -23,12 +21,6 @@
             <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
         </nav>
     </header>
-
-    <!-- SEPARADORES (só em telemóvel) -->
-    <div class="tabs" role="tablist" aria-label="Vista">
-        <button type="button" role="tab" id="tabList" class="tab active" aria-selected="true">📋 Eventos</button>
-        <button type="button" role="tab" id="tabMap" class="tab" aria-selected="false">🗺️ Mapa</button>
-    </div>
 
     <!-- CONTEÚDO PRINCIPAL -->
     <main class="main" id="main" data-view="list">
@@ -49,7 +41,7 @@
                 <div class="chips" id="categoryChips" role="group" aria-label="Filtrar por categoria"></div>
 
                 <div class="filters">
-                    <div class="field">
+                    <div class="field" style="grid-column: span 2;">
                         <label for="districtFilter">Distrito</label>
                         <select id="districtFilter"></select>
                     </div>
@@ -61,6 +53,10 @@
                             <option value="week">Próximos 7 dias</option>
                             <option value="month">Próximos 30 dias</option>
                         </select>
+                    </div>
+                    <div class="field">
+                        <label for="radiusSlider">Raio máx.: <span id="radiusValue">Sem limite</span></label>
+                        <input type="range" id="radiusSlider" min="5" max="100" value="100" class="slider">
                     </div>
                     <div class="field">
                         <label for="sortFilter">Ordenar por</label>
@@ -86,7 +82,7 @@
                     <div id="emptyState" class="empty hidden">
                         <p class="empty-icon">🔍</p>
                         <p><strong>Nenhum evento encontrado</strong></p>
-                        <p>Experimenta alterar os filtros ou adiciona tu um novo evento.</p>
+                        <p>Experimenta alterar os filtros.</p>
                     </div>
                 </div>
             </div>
@@ -107,7 +103,7 @@
     </main>
 
     <!-- MODAL: CRIAR EVENTO -->
-    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle" aria-hidden="true">
+    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
             <h2 id="eventModalTitle">Adicionar evento</h2>
@@ -144,7 +140,7 @@
                 <label for="eventFormDistrict">Distrito *</label>
                 <select id="eventFormDistrict" required></select>
 
-                <!-- CAMPO DE LIMITE DE INSCRIÇÕES AQUI -->
+                <!-- CAMPO DO LIMITE ADICIONADO AQUI -->
                 <label for="eventLimit">Limite de inscrições (opcional)</label>
                 <input type="number" id="eventLimit" min="1" placeholder="Deixa vazio para ilimitado">
 
@@ -159,19 +155,12 @@
     </div>
 
     <!-- MODAL: SOBRE -->
-    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-hidden="true">
+    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
             <h2 id="aboutTitle">Sobre o LocalSpot</h2>
-            <p>O LocalSpot ajuda-te a descobrir eventos, torneios, workshops e atividades perto de ti, num mapa simples de usar.</p>
-            <ul class="about-list">
-                <li>🔎 Pesquisa e filtra por categoria, distrito e data.</li>
-                <li>📍 Usa a tua localização para ordenar por proximidade.</li>
-                <li>⭐ Guarda os teus eventos favoritos.</li>
-                <li>📝 Inscreve-te em eventos e vê os lugares disponíveis.</li>
-                <li>＋ Publica os teus próprios eventos escolhendo o local no mapa.</li>
-            </ul>
-            <p class="muted">Os eventos que adicionares ficam guardados neste dispositivo.</p>
+            <p>O LocalSpot ajuda-te a descobrir eventos perto de ti num mapa simples de usar.</p>
+            <p class="muted">Os eventos ficam guardados neste dispositivo.</p>
         </div>
     </div>
 
