@@ -1,10 +1,10 @@
 // ==========================================
-// MAPA (MapLibre GL JS - 3D Vetorial Fluído)
+// MAPA (MapLibre GL JS - Estilo Vetorial 3D Fluído)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
-// Inicializa o mapa com estilo vetorial 3D (rápido, fluído e com interação perfeita)
+// Inicializa o mapa com estilo vetorial rápido e 100% interativo
 const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -43,11 +43,6 @@ function createCustomMarkerElement(category) {
 function popupHTML(ev) {
     const cat = CATEGORIES[ev.category];
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
-    
-    const enrolled = ev.enrolled || 0;
-    const max = ev.maxParticipants;
-    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
-
     return `
         <div class="popup">
             <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
@@ -55,7 +50,6 @@ function popupHTML(ev) {
             ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)}</p>
-            <p>👥 <strong>${vagasText}</strong></p>
             <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
         </div>`;
 }
