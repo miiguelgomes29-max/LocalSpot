@@ -1,6 +1,5 @@
 window.onEventMarkerClick = null;
 
-// Configuração do Mapa de Satélite Esri
 const map = new maplibregl.Map({
     container: 'map',
     style: {
