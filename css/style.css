@@ -367,3 +367,50 @@ nav { display: flex; align-items: center; gap: 16px; }
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
 }
+
+/* ==========================================
+   NOVOS ESTILOS: INSCRIÇÕES
+   ========================================== */
+.registration-info {
+    font-size: 13px;
+    color: var(--primary);
+    font-weight: 600;
+    margin: 8px 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.register-btn {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px;
+    border: 1px solid var(--primary);
+    border-radius: 6px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    text-align: center;
+}
+
+.register-btn:hover:not(:disabled) {
+    background: var(--primary);
+    color: #fff;
+}
+
+.register-btn.registered {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+
+.register-btn:disabled {
+    background: var(--border);
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+}
