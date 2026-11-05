@@ -64,7 +64,7 @@ const events = [
         latitude: 38.7526,
         longitude: -9.1847,
         image: "assets/eventos/concerto.jpg",
-        maxParticipants: null, // Sem limite
+        maxParticipants: null,
         enrolled: 142
     },
     {
@@ -80,7 +80,7 @@ const events = [
         longitude: -8.4265,
         image: "assets/eventos/fotografia.jpg",
         maxParticipants: 15,
-        enrolled: 15 // Esgotado para demonstrar o botão
+        enrolled: 15
     },
     {
         id: 4,
