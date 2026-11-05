@@ -72,7 +72,6 @@ function popupHTML(ev) {
     const cat = CATEGORIES[ev.category];
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
     
-    // Info de vagas no Popup
     const enrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
     const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
