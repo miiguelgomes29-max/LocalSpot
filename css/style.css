@@ -218,6 +218,33 @@ nav { display: flex; align-items: center; gap: 16px; }
 .event-card h4 { margin: 8px 0 4px; font-size: 16px; }
 .event-card p { margin: 4px 0; font-size: 13px; color: var(--muted); }
 
+/* Inscrições e Vagas */
+.event-spots-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+}
+.vagas-text { font-size: 12px; font-weight: 600; color: var(--muted); }
+.vagas-text.esgotado { color: var(--danger); }
+
+.btn-enroll {
+    border: none;
+    background: var(--primary-soft);
+    color: var(--primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.btn-enroll:hover { background: var(--primary); color: #fff; }
+.btn-enroll.enrolled { background: var(--success); color: #fff; }
+.btn-enroll.disabled { opacity: 0.5; cursor: not-allowed; background: var(--border); color: var(--muted); }
+
 .delete-btn {
     margin-top: 8px; border: none; background: none; color: var(--danger);
     font-size: 12px; cursor: pointer; padding: 4px 0;
