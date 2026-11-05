@@ -48,9 +48,7 @@ const events = [
         distrito: "porto",
         latitude: 41.1699,
         longitude: -8.6790,
-        image: "assets/eventos/basketball.jpg",
-        maxParticipants: 12,
-        enrolled: 8
+        image: "assets/eventos/basketball.jpg"
     },
     {
         id: 2,
@@ -63,9 +61,7 @@ const events = [
         distrito: "lisboa",
         latitude: 38.7526,
         longitude: -9.1847,
-        image: "assets/eventos/concerto.jpg",
-        maxParticipants: null,
-        enrolled: 142
+        image: "assets/eventos/concerto.jpg"
     },
     {
         id: 3,
@@ -78,9 +74,7 @@ const events = [
         distrito: "coimbra",
         latitude: 40.2081,
         longitude: -8.4265,
-        image: "assets/eventos/fotografia.jpg",
-        maxParticipants: 15,
-        enrolled: 15
+        image: "assets/eventos/fotografia.jpg"
     },
     {
         id: 4,
@@ -93,14 +87,12 @@ const events = [
         distrito: "aveiro",
         latitude: 40.6405,
         longitude: -8.6538,
-        image: "assets/eventos/gaming.jpg",
-        maxParticipants: 32,
-        enrolled: 24
+        image: "assets/eventos/gaming.jpg"
     },
     {
         id: 5,
         name: "Corrida Solidária",
-        description: "Corrida e caminhada solidária aberta a todas as idades. Inscrição gratuita.",
+        description: "Corrida e caminhada solidária aberta a todas as idades.",
         category: "comunidade",
         date: "2026-11-29",
         time: "09:30",
@@ -108,9 +100,7 @@ const events = [
         distrito: "braga",
         latitude: 41.5503,
         longitude: -8.4200,
-        image: DEFAULT_IMAGE,
-        maxParticipants: null,
-        enrolled: 58
+        image: DEFAULT_IMAGE
     },
     {
         id: 6,
@@ -123,9 +113,7 @@ const events = [
         distrito: "faro",
         latitude: 37.0160,
         longitude: -7.9350,
-        image: DEFAULT_IMAGE,
-        maxParticipants: 50,
-        enrolled: 12
+        image: DEFAULT_IMAGE
     }
 ];
 
