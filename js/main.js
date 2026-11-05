@@ -36,7 +36,7 @@ function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(v
 
 const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
-let registrations = loadJSON(STORAGE_REGS, {}); // Guarda as inscrições
+let registrations = loadJSON(STORAGE_REGS, {}); 
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
@@ -119,7 +119,6 @@ function displayEvents(list) {
         const fav = favorites.has(ev.id);
         const past = isPast(ev);
 
-        // Lógica de Inscrições
         const evRegs = registrations[ev.id] || [];
         const limitText = ev.limit ? `${evRegs.length} / ${ev.limit}` : `${evRegs.length} inscritos`;
         const isFull = ev.limit && evRegs.length >= ev.limit;
@@ -195,7 +194,6 @@ function toggleFavorite(id) {
     filterEvents();
 }
 
-// FUNÇÃO DE INSCRIÇÃO
 function toggleRegistration(id) {
     const ev = events.find(x => x.id === id);
     if (!ev) return;
@@ -243,7 +241,6 @@ function deleteEvent(id) {
 
 function persistCustomEvents() { return saveJSON(STORAGE_EVENTS, events.filter(e => e.custom)); }
 
-// SLIDER DO RAIO (Apenas visual por agora)
 radiusSlider.addEventListener("input", (e) => {
     const val = e.target.value;
     radiusValue.textContent = val == 100 ? "Sem limite" : `${val} km`;
@@ -401,7 +398,7 @@ eventForm.addEventListener("submit", async e => {
         category: $("eventCategory").value, date: $("eventDate").value, time: $("eventTime").value,
         location: $("eventLocation").value.trim(), distrito: $("eventFormDistrict").value,
         latitude: pendingLocation.lat, longitude: pendingLocation.lng, image, custom: true,
-        limit: limitValue ? parseInt(limitValue) : null // Guarda o limite
+        limit: limitValue ? parseInt(limitValue) : null
     };
 
     events.push(newEvent);
