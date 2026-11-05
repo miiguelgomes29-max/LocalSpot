@@ -10,7 +10,6 @@
 </head>
 <body>
 
-    <!-- CABEÇALHO -->
     <header class="header">
         <a class="logo" href="./" aria-label="LocalSpot – início">
             <img src="assets/images/logo.png" alt="" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍'}))">
@@ -22,10 +21,7 @@
         </nav>
     </header>
 
-    <!-- CONTEÚDO PRINCIPAL -->
     <main class="main" id="main" data-view="list">
-
-        <!-- BARRA LATERAL -->
         <aside class="sidebar" aria-label="Lista e filtros de eventos">
             <div class="sidebar-body">
                 <div class="sidebar-header">
@@ -92,7 +88,6 @@
             </div>
         </aside>
 
-        <!-- MAPA -->
         <section class="map-container" aria-label="Mapa de eventos">
             <div id="pickBanner" class="pick-banner hidden" role="status">
                 <span>📍 Clica no mapa para escolher o local do evento</span>
@@ -140,7 +135,7 @@
                 <label for="eventFormDistrict">Distrito *</label>
                 <select id="eventFormDistrict" required></select>
 
-                <!-- CAMPO DO LIMITE ADICIONADO AQUI -->
+                <!-- ESTE É O CAMPO QUE FALTAVA NO TEU ECRÃ -->
                 <label for="eventLimit">Limite de inscrições (opcional)</label>
                 <input type="number" id="eventLimit" min="1" placeholder="Deixa vazio para ilimitado">
 
