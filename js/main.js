@@ -34,6 +34,7 @@ const mainEl = $("main");
 const STORAGE_EVENTS = "localspot_events";
 const STORAGE_FAVS = "localspot_favorites";
 const STORAGE_THEME = "localspot_theme";
+const STORAGE_ENROLLED = "localspot_my_enrollments";
 
 // ---------- Tema Escuro / Claro ----------
 function initTheme() {
@@ -77,6 +78,7 @@ function saveJSON(key, value) {
 // ---------- Estado ----------
 const state = { search: "", category: "all", district: "all", period: "all", radius: 200, sort: "date", onlyFavorites: false };
 let favorites = new Set(loadJSON(STORAGE_FAVS, []));
+let myEnrollments = new Set(loadJSON(STORAGE_ENROLLED, []));
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
@@ -114,6 +116,33 @@ function setupControls() {
     $("eventDate").min = today;
 }
 
+// ---------- Inscrição em Atividades ----------
+function toggleEnrollment(id) {
+    const ev = events.find(x => x.id === id);
+    if (!ev) return;
+
+    const isEnrolled = myEnrollments.has(id);
+
+    if (isEnrolled) {
+        myEnrollments.delete(id);
+        if (typeof ev.enrolled === "number" && ev.enrolled > 0) ev.enrolled--;
+        showToast(`Cancelaste a tua inscrição em "${ev.name}".`);
+    } else {
+        const isFull = ev.maxParticipants && (ev.enrolled || 0) >= ev.maxParticipants;
+        if (isFull) {
+            showToast("Vagas esgotadas para este evento!", "error");
+            return;
+        }
+        myEnrollments.add(id);
+        ev.enrolled = (ev.enrolled || 0) + 1;
+        showToast(`Inscrição confirmada em "${ev.name}"!`, "success");
+    }
+
+    saveJSON(STORAGE_ENROLLED, [...myEnrollments]);
+    persistCustomEvents();
+    filterEvents();
+}
+
 // ---------- Filtros ----------
 function isPast(ev) {
     return eventDateTime(ev) < new Date();
@@ -132,7 +161,7 @@ function matchesPeriod(ev) {
 function matchesRadius(ev) {
     if (state.radius >= 200) return true;
     const km = distanceOf(ev);
-    if (km === null) return true; // Se ainda não obteve localização, não oculta por raio
+    if (km === null) return true;
     return km <= state.radius;
 }
 
@@ -198,7 +227,26 @@ function displayEvents(list) {
         const cat = CATEGORIES[ev.category];
         const km = distanceOf(ev);
         const fav = favorites.has(ev.id);
+        const enrolled = myEnrollments.has(ev.id);
         const past = isPast(ev);
+
+        const currentEnrolled = ev.enrolled || 0;
+        const max = ev.maxParticipants;
+        const isFull = max && currentEnrolled >= max;
+
+        let vagasLabel = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
+        if (isFull) vagasLabel += " (Esgotado)";
+
+        let enrollBtnHtml = "";
+        if (!past) {
+            if (enrolled) {
+                enrollBtnHtml = `<button type="button" class="btn-enroll enrolled" data-action="enroll">✓ Inscrito</button>`;
+            } else if (isFull) {
+                enrollBtnHtml = `<button type="button" class="btn-enroll disabled" disabled>Esgotado</button>`;
+            } else {
+                enrollBtnHtml = `<button type="button" class="btn-enroll" data-action="enroll">✋ Inscrever-me</button>`;
+            }
+        }
 
         const card = document.createElement("article");
         card.className = "event-card" + (past ? " past" : "") + (ev.id === activeId ? " active" : "");
@@ -222,6 +270,12 @@ function displayEvents(list) {
             <h4>${escapeHTML(ev.name)}</h4>
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
+            
+            <div class="event-spots-row">
+                <span class="vagas-text ${isFull ? 'esgotado' : ''}">👥 ${vagasLabel}</span>
+                ${enrollBtnHtml}
+            </div>
+
             ${ev.custom ? `<button type="button" class="delete-btn" data-action="delete">🗑 Apagar evento</button>` : ""}
         `;
         frag.appendChild(card);
@@ -254,6 +308,8 @@ eventsList.addEventListener("click", e => {
 
     if (action === "fav") {
         toggleFavorite(id);
+    } else if (action === "enroll") {
+        toggleEnrollment(id);
     } else if (action === "delete") {
         deleteEvent(id);
     } else {
@@ -283,7 +339,9 @@ function deleteEvent(id) {
     if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
     events.splice(events.indexOf(ev), 1);
     favorites.delete(id);
+    myEnrollments.delete(id);
     saveJSON(STORAGE_FAVS, [...favorites]);
+    saveJSON(STORAGE_ENROLLED, [...myEnrollments]);
     persistCustomEvents();
     filterEvents();
     showToast("Evento apagado.");
@@ -540,6 +598,9 @@ eventForm.addEventListener("submit", async e => {
         }
     }
 
+    const maxPInput = $("eventMaxParticipants").value;
+    const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
+
     const newEvent = {
         id: Date.now(),
         name: $("eventName").value.trim(),
@@ -552,6 +613,8 @@ eventForm.addEventListener("submit", async e => {
         latitude: pendingLocation.lat,
         longitude: pendingLocation.lng,
         image,
+        maxParticipants,
+        enrolled: 0,
         custom: true
     };
 
