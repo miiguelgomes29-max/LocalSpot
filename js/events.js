@@ -12,7 +12,6 @@ const CATEGORIES = {
     comunidade: { label: "Comunidade", emoji: "🤝", color: "#db2777" }
 };
 
-// Capitais de distrito
 const DISTRICTS = [
     { value: "aveiro", label: "Aveiro", lat: 40.6405, lng: -8.6538 },
     { value: "beja", label: "Beja", lat: 38.0151, lng: -7.8632 },
@@ -37,87 +36,12 @@ const DISTRICTS = [
 ];
 
 const events = [
-    {
-        id: 1,
-        name: "Basketball 3v3",
-        description: "Torneio de basketball 3x3 aberto a equipas da zona.",
-        category: "desporto",
-        date: "2026-11-14",
-        time: "15:00",
-        location: "Parque da Cidade",
-        distrito: "porto",
-        latitude: 41.1699,
-        longitude: -8.6790,
-        image: "assets/eventos/basketball.jpg",
-        limit: 20 // LIMITE DEFINIDO AQUI
-    },
-    {
-        id: 2,
-        name: "Concerto ao Vivo",
-        description: "Música ao vivo no Estádio da Luz.",
-        category: "musica",
-        date: "2026-11-20",
-        time: "21:00",
-        location: "Estádio da Luz",
-        distrito: "lisboa",
-        latitude: 38.7526,
-        longitude: -9.1847,
-        image: "assets/eventos/concerto.jpg",
-        limit: 2 // LIMITE BAIXO PARA TESTES
-    },
-    {
-        id: 3,
-        name: "Workshop de Fotografia",
-        description: "Workshop de fotografia urbana na Baixa.",
-        category: "cultura",
-        date: "2026-11-22",
-        time: "14:30",
-        location: "Baixa de Coimbra",
-        distrito: "coimbra",
-        latitude: 40.2081,
-        longitude: -8.4265,
-        image: "assets/eventos/fotografia.jpg"
-    },
-    {
-        id: 4,
-        name: "Torneio de Gaming",
-        description: "Competição de jogos com prémios.",
-        category: "gaming",
-        date: "2026-12-05",
-        time: "16:00",
-        location: "Espaço Gaming Aveiro",
-        distrito: "aveiro",
-        latitude: 40.6405,
-        longitude: -8.6538,
-        image: "assets/eventos/gaming.jpg",
-        limit: 50
-    },
-    {
-        id: 5,
-        name: "Corrida Solidária",
-        description: "Corrida e caminhada solidária aberta a todas as idades.",
-        category: "comunidade",
-        date: "2026-11-29",
-        time: "09:30",
-        location: "Parque da Ponte",
-        distrito: "braga",
-        latitude: 41.5503,
-        longitude: -8.4200,
-        image: DEFAULT_IMAGE
-    },
-    {
-        id: 6,
-        name: "Feira de Artesanato",
-        description: "Artesãos locais, gastronomia e música ao ar livre.",
-        category: "cultura",
-        date: "2026-12-06",
-        time: "10:00",
-        location: "Jardim Manuel Bivar",
-        distrito: "faro",
-        latitude: 37.0160,
-        longitude: -7.9350,
-        image: DEFAULT_IMAGE
-    }
+    { id: 1, name: "Basketball 3v3", description: "Torneio de basketball 3x3.", category: "desporto", date: "2026-11-14", time: "15:00", location: "Parque da Cidade", distrito: "porto", latitude: 41.1699, longitude: -8.6790, image: "assets/eventos/basketball.jpg", limit: 20 },
+    { id: 2, name: "Concerto ao Vivo", description: "Música ao vivo.", category: "musica", date: "2026-11-20", time: "21:00", location: "Estádio da Luz", distrito: "lisboa", latitude: 38.7526, longitude: -9.1847, image: "assets/eventos/concerto.jpg", limit: 2 },
+    { id: 3, name: "Workshop de Fotografia", description: "Workshop urbano.", category: "cultura", date: "2026-11-22", time: "14:30", location: "Baixa de Coimbra", distrito: "coimbra", latitude: 40.2081, longitude: -8.4265, image: "assets/eventos/fotografia.jpg" },
+    { id: 4, name: "Torneio de Gaming", description: "Competição de jogos.", category: "gaming", date: "2026-12-05", time: "16:00", location: "Espaço Gaming Aveiro", distrito: "aveiro", latitude: 40.6405, longitude: -8.6538, image: "assets/eventos/gaming.jpg" },
+    { id: 5, name: "Corrida Solidária", description: "Corrida para todas as idades.", category: "comunidade", date: "2026-11-29", time: "09:30", location: "Parque da Ponte", distrito: "braga", latitude: 41.5503, longitude: -8.4200, image: DEFAULT_IMAGE },
+    { id: 6, name: "Feira de Artesanato", description: "Artesãos e gastronomia.", category: "cultura", date: "2026-12-06", time: "10:00", location: "Jardim Manuel Bivar", distrito: "faro", latitude: 37.0160, longitude: -7.9350, image: DEFAULT_IMAGE }
 ];
 
 // ---------- Utilitários ----------
