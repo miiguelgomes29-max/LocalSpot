@@ -24,6 +24,7 @@ button, input, select, textarea { font: inherit; }
 /* Header */
 .header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: relative; z-index: 100; }
 .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--primary); }
+.logo-img { width: 34px; height: 34px; object-fit: contain; }
 .logo h1 { margin: 0; font-size: 22px; }
 nav { display: flex; gap: 16px; align-items: center; }
 .btn-link { border: none; background: none; color: var(--text); cursor: pointer; font-size: 14px; }
@@ -73,7 +74,7 @@ nav { display: flex; gap: 16px; align-items: center; }
 .event-card h4 { margin: 0 0 6px 0; font-size: 16px; }
 .event-card p { margin: 4px 0; font-size: 13px; color: var(--muted); }
 
-/* BOTÕES DE INSCRIÇÃO */
+/* Botões de Inscrição */
 .registration-info { font-size: 13px; color: var(--primary); font-weight: 600; margin: 10px 0 6px; }
 .register-btn { display: block; width: 100%; padding: 8px; margin-bottom: 6px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-weight: 600; cursor: pointer; transition: 0.2s; text-align: center; }
 .register-btn:hover:not(:disabled) { background: var(--primary); color: #fff; }
@@ -83,22 +84,9 @@ nav { display: flex; gap: 16px; align-items: center; }
 .add-event-button { width: 100%; padding: 13px; border: none; border-radius: 8px; background: var(--primary); color: #fff; font-weight: bold; font-size: 15px; cursor: pointer; }
 .add-event-button:hover { background: var(--primary-hover); }
 
-/* MAPA - CORREÇÃO DO BLOQUEIO AQUI */
-.map-container { 
-    position: relative; 
-    width: 100%; 
-    height: 100%; 
-    overflow: hidden; 
-    z-index: 1; 
-}
-#map { 
-    position: absolute; 
-    top: 0; left: 0; right: 0; bottom: 0;
-    width: 100%; 
-    height: 100%; 
-    z-index: 1; 
-    pointer-events: auto !important; 
-}
+/* Mapa */
+.map-container { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+#map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 1; pointer-events: auto !important; }
 #map.picking { cursor: crosshair; }
 .pick-banner { position: absolute; z-index: 1000; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 999px; font-size: 14px; font-weight: bold; }
 .pick-banner button { border: none; background: rgba(0,0,0,0.1); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
