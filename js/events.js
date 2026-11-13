@@ -35,21 +35,46 @@ const DISTRICTS = [
     { value: "madeira", label: "Madeira (Região Autónoma)", lat: 32.6669, lng: -16.9241 }
 ];
 
-const events = [
-    { id: 1, name: "Basketball 3v3", description: "Torneio de basketball 3x3.", category: "desporto", date: "2026-11-14", time: "15:00", location: "Parque da Cidade", distrito: "porto", latitude: 41.1699, longitude: -8.6790, image: "assets/eventos/basketball.jpg", limit: 20 },
-    { id: 2, name: "Concerto ao Vivo", description: "Música ao vivo.", category: "musica", date: "2026-11-20", time: "21:00", location: "Estádio da Luz", distrito: "lisboa", latitude: 38.7526, longitude: -9.1847, image: "assets/eventos/concerto.jpg", limit: 2 },
-    { id: 3, name: "Workshop de Fotografia", description: "Workshop urbano.", category: "cultura", date: "2026-11-22", time: "14:30", location: "Baixa de Coimbra", distrito: "coimbra", latitude: 40.2081, longitude: -8.4265, image: "assets/eventos/fotografia.jpg" },
-    { id: 4, name: "Torneio de Gaming", description: "Competição de jogos.", category: "gaming", date: "2026-12-05", time: "16:00", location: "Espaço Gaming Aveiro", distrito: "aveiro", latitude: 40.6405, longitude: -8.6538, image: "assets/eventos/gaming.jpg" },
-    { id: 5, name: "Corrida Solidária", description: "Corrida para todas as idades.", category: "comunidade", date: "2026-11-29", time: "09:30", location: "Parque da Ponte", distrito: "braga", latitude: 41.5503, longitude: -8.4200, image: DEFAULT_IMAGE },
-    { id: 6, name: "Feira de Artesanato", description: "Artesãos e gastronomia.", category: "cultura", date: "2026-12-06", time: "10:00", location: "Jardim Manuel Bivar", distrito: "faro", latitude: 37.0160, longitude: -7.9350, image: DEFAULT_IMAGE }
-];
+const events = [];
 
-// ---------- Utilitários ----------
+function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[ch]));
+}
 
-function escapeHTML(value) { return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
-function normalizeText(value) { return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
-function eventDateTime(ev) { return new Date(`${ev.date}T${ev.time || "00:00"}`); }
-function formatEventDate(ev) { const d = eventDateTime(ev); if (isNaN(d)) return ev.date; return `${d.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · ${ev.time}`; }
-function districtLabel(value) { const d = DISTRICTS.find(x => x.value === value); return d ? d.label.replace(" (Região Autónoma)", "") : value; }
-function distanceKm(lat1, lng1, lat2, lng2) { const rad = x => x * Math.PI / 180; const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); }
-function nearestDistrict(lat, lng) { let best = DISTRICTS[0], bestDist = Infinity; DISTRICTS.forEach(d => { const dist = distanceKm(lat, lng, d.lat, d.lng); if (dist < bestDist) { best = d; bestDist = dist; } }); return best.value; }
+function normalizeText(value) {
+    return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function eventDateTime(ev) {
+    return new Date(`${ev.date}T${ev.time || "00:00"}`);
+}
+
+function formatEventDate(ev) {
+    const d = eventDateTime(ev);
+    if (isNaN(d)) return ev.date;
+    const text = d.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    return `${text} · ${ev.time}`;
+}
+
+function districtLabel(value) {
+    const d = DISTRICTS.find(x => x.value === value);
+    return d ? d.label.replace(" (Região Autónoma)", "") : value;
+}
+
+function distanceKm(lat1, lng1, lat2, lng2) {
+    const rad = x => x * Math.PI / 180;
+    const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 +
+        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function nearestDistrict(lat, lng) {
+    let best = DISTRICTS[0], bestDist = Infinity;
+    DISTRICTS.forEach(d => {
+        const dist = distanceKm(lat, lng, d.lat, d.lng);
+        if (dist < bestDist) { best = d; bestDist = dist; }
+    });
+    return best.value;
+}
