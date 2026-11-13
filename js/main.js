@@ -1,8 +1,8 @@
 // ==========================================
 // CONFIGURAÇÃO SUPABASE E LÓGICA DA APLICAÇÃO
 // ==========================================
-const SUPABASE_URL = "https://TEU-PROJETO.supabase.co";
-const SUPABASE_ANON_KEY = "A-TUA-CHAVE-ANON-AQUI";
+const SUPABASE_URL = "https://ufzjexbihnwflqktpomm.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmempleGJpaG53Zmxxa3Rwb21tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMjU5NDUsImV4cCI6MjEwOTkwMTk0NX0.hy3x0RuyuKYwTOGvdAA2hYKH_02SEy49YRaZHoD2ufA";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -182,7 +182,6 @@ registerForm.addEventListener("submit", async e => {
     }
 
     if (data.user) {
-        // Garante que o perfil existe na tabela profiles
         await supabaseClient.from("profiles").upsert({
             id: data.user.id,
             email: email,
