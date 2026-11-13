@@ -10,17 +10,81 @@
 </head>
 <body>
 
+    <!-- ECRÃ DE AUTENTICAÇÃO OBRIGATÓRIA -->
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <img src="assets/images/logo.png" alt="LocalSpot" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍',style:'font-size:32px'}))">
+                <h2>LocalSpot</h2>
+            </div>
+            <p class="auth-subtitle">Inicia sessão ou cria um perfil para explorar e participar em eventos perto de ti.</p>
+
+            <div class="auth-tabs">
+                <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
+                <button type="button" id="tabRegister" class="auth-tab">Criar Conta</button>
+            </div>
+
+            <!-- FORMULÁRIO LOGIN -->
+            <form id="loginForm">
+                <label for="loginEmail">E-mail</label>
+                <input type="email" id="loginEmail" placeholder="exemplo@email.com" required>
+
+                <label for="loginPassword">Palavra-passe</label>
+                <input type="password" id="loginPassword" placeholder="••••••••" required>
+
+                <p id="loginError" class="form-error hidden"></p>
+                <button type="submit" id="loginSubmitBtn" class="submit-button">Entrar no LocalSpot</button>
+            </form>
+
+            <!-- FORMULÁRIO REGISTO -->
+            <form id="registerForm" class="hidden">
+                <label for="regAccountType">Tipo de Perfil *</label>
+                <select id="regAccountType" required>
+                    <option value="user">👤 Utilizador Normal (Explorar e inscrever-me)</option>
+                    <option value="business">🏢 Domínio Público (Empresa, Loja, Restaurante)</option>
+                </select>
+
+                <div id="businessTypeGroup" class="hidden">
+                    <label for="regBusinessType">Categoria do Estabelecimento *</label>
+                    <select id="regBusinessType">
+                        <option value="Empresa">🏢 Empresa</option>
+                        <option value="Loja">🏪 Loja / Comércio Local</option>
+                        <option value="Restaurante">🍽️ Restaurante / Café</option>
+                        <option value="Associação">🤝 Associação / Clube</option>
+                    </select>
+                </div>
+
+                <label for="regName" id="regNameLabel">Nome completo *</label>
+                <input type="text" id="regName" maxlength="80" placeholder="Ex: João Silva" required>
+
+                <label for="regEmail">E-mail *</label>
+                <input type="email" id="regEmail" placeholder="exemplo@email.com" required>
+
+                <label for="regPassword">Palavra-passe (mín. 6 caracteres) *</label>
+                <input type="password" id="regPassword" minlength="6" placeholder="••••••••" required>
+
+                <p id="registerError" class="form-error hidden"></p>
+                <button type="submit" id="registerSubmitBtn" class="submit-button">Criar Perfil</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- CABEÇALHO -->
     <header class="header">
         <a class="logo" href="./" aria-label="LocalSpot – início">
             <img src="assets/images/logo.png" alt="LocalSpot Logo" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍'}))">
             <h1>LocalSpot</h1>
         </a>
         <nav aria-label="Navegação principal">
+            <span id="userBadge" class="user-badge hidden"></span>
+            <button type="button" id="adminPanelBtn" class="btn-admin hidden">🛡️ Painel Admin</button>
             <button type="button" id="aboutButton" class="btn-link">Sobre</button>
             <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
+            <button type="button" id="logoutButton" class="btn-logout hidden" title="Terminar sessão">Sair</button>
         </nav>
     </header>
 
+    <!-- CONTEÚDO PRINCIPAL -->
     <main class="main" id="main" data-view="list">
         <aside class="sidebar" aria-label="Lista e filtros de eventos">
             <div class="sidebar-body">
@@ -84,7 +148,8 @@
             </div>
 
             <div class="sidebar-footer">
-                <button type="button" id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+                <button type="button" id="addEventButton" class="add-event-button hidden">＋ Adicionar evento</button>
+                <p id="normalUserNotice" class="role-notice hidden">👤 Perfil de Utilizador · Explora e inscreve-te nas atividades.</p>
             </div>
         </aside>
 
@@ -97,6 +162,7 @@
         </section>
     </main>
 
+    <!-- MODAL: CRIAR EVENTO -->
     <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
@@ -147,17 +213,51 @@
         </div>
     </div>
 
+    <!-- MODAL: PAINEL ADMIN -->
+    <div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="width: 620px;">
+            <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">×</button>
+            <h2>🛡️ Painel de Administração</h2>
+            <p class="muted" style="margin-top: -8px;">Gere os utilizadores registados e define permissões de Domínio Público ou Administrador.</p>
+
+            <div class="admin-stats">
+                <div class="stat-box">
+                    <span id="statTotalUsers">0</span>
+                    <small>Utilizadores</small>
+                </div>
+                <div class="stat-box">
+                    <span id="statBusinessUsers">0</span>
+                    <small>Domínios Públicos</small>
+                </div>
+                <div class="stat-box">
+                    <span id="statTotalEvents">0</span>
+                    <small>Eventos Ativos</small>
+                </div>
+            </div>
+
+            <h3 style="font-size: 15px; margin: 18px 0 10px;">Utilizadores Registados</h3>
+            <div id="adminUsersList" class="admin-users-list"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: SOBRE -->
     <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content">
             <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
             <h2 id="aboutTitle">Sobre o LocalSpot</h2>
-            <p>O LocalSpot ajuda-te a descobrir eventos perto de ti num mapa simples de usar.</p>
-            <p class="muted">Os eventos ficam guardados neste dispositivo.</p>
+            <p>O LocalSpot liga utilizadores locais a empresas, lojas, restaurantes e associações num mapa 3D interativo.</p>
+            <ul style="line-height: 1.8; color: var(--muted); font-size: 14px; padding-left: 18px;">
+                <li><strong>Utilizadores Normais:</strong> Descobrem atividades perto de si e inscrevem-se num clique.</li>
+                <li><strong>Domínios Públicos:</strong> Empresas, lojas e restaurantes divulgam eventos e gerem vagas.</li>
+                <li><strong>Administradores:</strong> Gerenciam utilizadores e moderam conteúdos na plataforma.</li>
+            </ul>
         </div>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <!-- SDK do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
