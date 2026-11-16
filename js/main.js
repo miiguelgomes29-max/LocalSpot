@@ -94,6 +94,31 @@ function showToast(message, type = "info") {
     toastTimer = setTimeout(() => toast.classList.remove("show"), 3500);
 }
 
+function translateAuthError(error) {
+    if (!error) return "Ocorreu um erro inesperado.";
+    const msg = (error.message || "").toLowerCase();
+
+    if (msg.includes("invalid login credentials")) {
+        return "E-mail ou palavra-passe incorretos (ou a conta ainda não foi criada).";
+    }
+    if (msg.includes("email not confirmed")) {
+        return "Conta criada, mas o e-mail ainda não foi confirmado. Desativa «Confirm email» no Supabase ou verifica a tua caixa de entrada.";
+    }
+    if (msg.includes("user already registered") || msg.includes("already been registered")) {
+        return "Este e-mail já está registado. Muda para o separador «Entrar».";
+    }
+    if (msg.includes("password should be at least")) {
+        return "A palavra-passe tem de ter pelo menos 6 caracteres.";
+    }
+    if (msg.includes("rate limit") || msg.includes("too many requests")) {
+        return "Muitas tentativas seguidas. Aguarda alguns minutos ou desativa «Confirm email» no Supabase.";
+    }
+    if (msg.includes("database error saving new user")) {
+        return "Erro na tabela profiles do Supabase. Executa o script SQL de correção no SQL Editor.";
+    }
+    return error.message;
+}
+
 // ==========================================
 // SISTEMA DE AUTENTICAÇÃO E PERFIS
 // ==========================================
@@ -103,6 +128,7 @@ tabLogin.addEventListener("click", () => {
     tabRegister.classList.remove("active");
     loginForm.classList.remove("hidden");
     registerForm.classList.add("hidden");
+    $("loginError").classList.add("hidden");
 });
 
 tabRegister.addEventListener("click", () => {
@@ -110,6 +136,7 @@ tabRegister.addEventListener("click", () => {
     tabLogin.classList.remove("active");
     registerForm.classList.remove("hidden");
     loginForm.classList.add("hidden");
+    $("registerError").classList.add("hidden");
 });
 
 regAccountType.addEventListener("change", () => {
@@ -131,18 +158,26 @@ loginForm.addEventListener("submit", async e => {
     const email = $("loginEmail").value.trim();
     const password = $("loginPassword").value;
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
-    btn.disabled = false;
-    btn.textContent = "Entrar no LocalSpot";
+        if (error) {
+            errEl.textContent = translateAuthError(error);
+            errEl.classList.remove("hidden");
+            return;
+        }
 
-    if (error) {
-        errEl.textContent = "E-mail ou palavra-passe incorretos.";
+        if (data?.user) {
+            await handleAuthenticatedSession(data.user);
+            showToast("Sessão iniciada com sucesso!", "success");
+        }
+    } catch (err) {
+        errEl.textContent = "Falha de ligação ao servidor. Verifica a internet ou o servidor local.";
         errEl.classList.remove("hidden");
-        return;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Entrar no LocalSpot";
     }
-
-    await handleAuthenticatedSession(data.user);
 });
 
 // Registo
@@ -160,43 +195,50 @@ registerForm.addEventListener("submit", async e => {
     const email = $("regEmail").value.trim();
     const password = $("regPassword").value;
 
-    const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password,
-        options: {
-            data: {
+    try {
+        const { data, error } = await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    full_name: fullName,
+                    role: role,
+                    business_type: businessType
+                }
+            }
+        });
+
+        if (error) {
+            errEl.textContent = translateAuthError(error);
+            errEl.classList.remove("hidden");
+            return;
+        }
+
+        if (data?.user) {
+            // Caso o Supabase ainda tenha "Confirm email" ativo, data.session vem a null
+            if (!data.session) {
+                errEl.textContent = "Conta criada! No entanto, o Supabase está a exigir confirmação por e-mail. Vai a Authentication > Providers > Email no Supabase e desativa «Confirm email».";
+                errEl.classList.remove("hidden");
+                return;
+            }
+
+            await supabaseClient.from("profiles").upsert({
+                id: data.user.id,
+                email: email,
                 full_name: fullName,
                 role: role,
                 business_type: businessType
-            }
-        }
-    });
+            });
 
-    btn.disabled = false;
-    btn.textContent = "Criar Perfil";
-
-    if (error) {
-        errEl.textContent = error.message || "Erro ao criar conta.";
-        errEl.classList.remove("hidden");
-        return;
-    }
-
-    if (data.user) {
-        await supabaseClient.from("profiles").upsert({
-            id: data.user.id,
-            email: email,
-            full_name: fullName,
-            role: role,
-            business_type: businessType
-        });
-
-        if (data.session) {
             await handleAuthenticatedSession(data.user);
             showToast(`Bem-vindo ao LocalSpot, ${fullName}!`, "success");
-        } else {
-            showToast("Conta criada! Verifica o teu e-mail ou inicia sessão.", "success");
-            tabLogin.click();
         }
+    } catch (err) {
+        errEl.textContent = "Falha de ligação ao criar conta.";
+        errEl.classList.remove("hidden");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Criar Perfil";
     }
 });
 
@@ -217,28 +259,48 @@ async function handleAuthenticatedSession(user) {
     currentUser = user;
     myEnrollments = new Set(loadJSON(`localspot_enrolled_${user.id}`, []));
 
-    let { data: profile } = await supabaseClient
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+    const meta = user.user_metadata || {};
+    let profile = null;
 
-    if (!profile) {
-        const meta = user.user_metadata || {};
-        const fallbackProfile = {
+    try {
+        const { data } = await supabaseClient
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+
+        profile = data;
+
+        if (!profile) {
+            const newProfile = {
+                id: user.id,
+                email: user.email,
+                full_name: meta.full_name || user.email.split("@")[0],
+                role: meta.role || "user",
+                business_type: meta.business_type || null
+            };
+            const { data: inserted } = await supabaseClient
+                .from("profiles")
+                .upsert(newProfile)
+                .select()
+                .maybeSingle();
+
+            profile = inserted || newProfile;
+        }
+    } catch (e) {
+        profile = {
             id: user.id,
             email: user.email,
             full_name: meta.full_name || user.email.split("@")[0],
             role: meta.role || "user",
             business_type: meta.business_type || null
         };
-        await supabaseClient.from("profiles").upsert(fallbackProfile);
-        profile = fallbackProfile;
     }
 
     currentProfile = profile;
     applyRoleUI();
     authOverlay.classList.add("hidden");
+    if (typeof map !== "undefined") map.resize();
     await loadEventsFromSupabase();
 }
 
@@ -269,10 +331,14 @@ function applyRoleUI() {
 }
 
 async function initAuth() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session && session.user) {
-        await handleAuthenticatedSession(session.user);
-    } else {
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session && session.user) {
+            await handleAuthenticatedSession(session.user);
+        } else {
+            authOverlay.classList.remove("hidden");
+        }
+    } catch (e) {
         authOverlay.classList.remove("hidden");
     }
 }
