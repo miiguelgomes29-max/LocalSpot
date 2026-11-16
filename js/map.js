@@ -1,16 +1,103 @@
 // ==========================================
-// MAPA (MapLibre GL JS - 3D Vetorial com Edifícios 3D)
+// MAPA (MapLibre GL JS - Satélite Real 3D + Terreno + Edifícios)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
+const REAL_3D_STYLE = {
+    version: 8,
+    sources: {
+        satellite: {
+            type: 'raster',
+            tiles: [
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256,
+            attribution: '© Esri, Maxar, Earthstar Geographics'
+        },
+        roads: {
+            type: 'raster',
+            tiles: [
+                'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256
+        },
+        labels: {
+            type: 'raster',
+            tiles: [
+                'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256
+        },
+        terrainSource: {
+            type: 'raster-dem',
+            tiles: [
+                'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            encoding: 'terrarium',
+            maxzoom: 15
+        },
+        openmaptiles: {
+            type: 'vector',
+            url: 'https://tiles.openfreemap.org/planet'
+        }
+    },
+    layers: [
+        {
+            id: 'satellite-layer',
+            type: 'raster',
+            source: 'satellite',
+            minzoom: 0,
+            maxzoom: 22
+        },
+        {
+            id: 'roads-layer',
+            type: 'raster',
+            source: 'roads',
+            paint: { 'raster-opacity': 0.7 }
+        },
+        {
+            id: 'labels-layer',
+            type: 'raster',
+            source: 'labels'
+        },
+        {
+            id: '3d-buildings',
+            source: 'openmaptiles',
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 14,
+            paint: {
+                'fill-extrusion-color': '#e2e8f0',
+                'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
+                'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+                'fill-extrusion-opacity': 0.72
+            }
+        }
+    ],
+    terrain: {
+        source: 'terrainSource',
+        exaggeration: 1.5
+    },
+    sky: {
+        'sky-color': '#1d4ed8',
+        'sky-horizon-blend': 0.5,
+        'horizon-color': '#93c5fd',
+        'horizon-fog-blend': 0.5,
+        'fog-color': '#0f172a',
+        'fog-ground-blend': 0.4
+    }
+};
+
 const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://tiles.openfreemap.org/styles/liberty',
+    style: REAL_3D_STYLE,
     center: [-8.0, 39.6],
-    zoom: 6,
-    pitch: 55,
+    zoom: 6.3,
+    pitch: 60,
     bearing: -15,
+    maxPitch: 85,
     antialias: true,
     interactive: true,
     dragPan: true,
@@ -96,11 +183,11 @@ function fitToEvents(list) {
     if (!points.length) return;
     
     if (points.length === 1) {
-        map.flyTo({ center: points[0], zoom: 15, pitch: 60 });
+        map.flyTo({ center: points[0], zoom: 14.5, pitch: 65, bearing: -15 });
     } else {
         const bounds = new maplibregl.LngLatBounds(points[0], points[0]);
         points.forEach(p => bounds.extend(p));
-        map.fitBounds(bounds, { padding: 50, maxZoom: 15, pitch: 60 });
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14.5, pitch: 65 });
     }
 }
 
@@ -111,7 +198,7 @@ function focusEvent(id) {
     map.flyTo({
         center: marker.getLngLat(),
         zoom: Math.max(map.getZoom(), 16),
-        pitch: 65,
+        pitch: 70,
         bearing: 20,
         speed: 1.2
     });
@@ -150,7 +237,7 @@ function locateUser() {
                     .setPopup(new maplibregl.Popup({ offset: 10 }).setText("📍 Estás aqui"))
                     .addTo(map);
 
-                map.flyTo({ center: [userPosition.lng, userPosition.lat], zoom: 15, pitch: 60 });
+                map.flyTo({ center: [userPosition.lng, userPosition.lat], zoom: 15, pitch: 65 });
                 resolve(userPosition);
             },
             () => reject(new Error("Não foi possível obter a tua localização. Verifica as permissões.")),
