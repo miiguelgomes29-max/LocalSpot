@@ -17,7 +17,7 @@
                 <img src="assets/images/logo.png" alt="LocalSpot" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍',style:'font-size:32px'}))">
                 <h2>LocalSpot</h2>
             </div>
-            <p class="auth-subtitle">Inicia sessão ou cria um perfil para explorar e participar em eventos perto de ti.</p>
+            <p class="auth-subtitle">Inicia sessão ou cria um perfil para explorar, criar e participar em eventos perto de ti.</p>
 
             <div class="auth-tabs">
                 <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
@@ -40,7 +40,7 @@
             <form id="registerForm" class="hidden">
                 <label for="regAccountType">Tipo de Perfil *</label>
                 <select id="regAccountType" required>
-                    <option value="user">👤 Utilizador Normal (Explorar e inscrever-me)</option>
+                    <option value="user">👤 Utilizador Normal (Explorar, participar e criar)</option>
                     <option value="business">🏢 Domínio Público (Empresa, Loja, Restaurante)</option>
                 </select>
 
@@ -77,9 +77,9 @@
         </a>
         <nav aria-label="Navegação principal">
             <span id="userBadge" class="user-badge hidden"></span>
-            <button type="button" id="adminPanelBtn" class="btn-admin hidden">🛡️ Painel Admin</button>
+            <button type="button" id="adminPanelBtn" class="btn-admin hidden">🛡️ Admin</button>
             <button type="button" id="aboutButton" class="btn-link">Sobre</button>
-            <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
+            <button type="button" id="locationButton" class="btn-soft">📍 <span>Localização</span></button>
             <button type="button" id="logoutButton" class="btn-logout hidden" title="Terminar sessão">Sair</button>
         </nav>
     </header>
@@ -148,8 +148,7 @@
             </div>
 
             <div class="sidebar-footer">
-                <button type="button" id="addEventButton" class="add-event-button hidden">＋ Adicionar evento</button>
-                <p id="normalUserNotice" class="role-notice hidden">👤 Perfil de Utilizador · Explora e inscreve-te nas atividades.</p>
+                <button type="button" id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
             </div>
         </aside>
 
@@ -247,8 +246,8 @@
             <h2 id="aboutTitle">Sobre o LocalSpot</h2>
             <p>O LocalSpot liga utilizadores locais a empresas, lojas, restaurantes e associações num mapa 3D interativo.</p>
             <ul style="line-height: 1.8; color: var(--muted); font-size: 14px; padding-left: 18px;">
-                <li><strong>Utilizadores Normais:</strong> Descobrem atividades perto de si e inscrevem-se num clique.</li>
-                <li><strong>Domínios Públicos:</strong> Empresas, lojas e restaurantes divulgam eventos e gerem vagas.</li>
+                <li><strong>Utilizadores Normais:</strong> Exploram atividades, inscrevem-se e podem criar eventos comunitários.</li>
+                <li><strong>Domínios Públicos:</strong> Empresas, lojas e restaurantes divulgam eventos oficiais com selo do estabelecimento.</li>
                 <li><strong>Administradores:</strong> Gerenciam utilizadores e moderam conteúdos na plataforma.</li>
             </ul>
         </div>
