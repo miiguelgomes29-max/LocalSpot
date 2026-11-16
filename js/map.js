@@ -1,19 +1,17 @@
 // ==========================================
-// MAPA (MapLibre GL JS - 3D Vetorial Fluído)
+// MAPA (MapLibre GL JS - 3D Vetorial com Edifícios 3D)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
 const map = new maplibregl.Map({
     container: 'map',
-    // Mapa Dark Mode (combina com a interface escura do LocalSpot)
-    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-    // Alternativa OpenStreetMap clássico:
-    // style: { version: 8, sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap" } }, layers: [{ id: "osm", type: "raster", source: "osm" }] },
+    style: 'https://tiles.openfreemap.org/styles/liberty',
     center: [-8.0, 39.6],
     zoom: 6,
-    pitch: 50,
+    pitch: 55,
     bearing: -15,
+    antialias: true,
     interactive: true,
     dragPan: true,
     scrollZoom: true,
@@ -98,11 +96,11 @@ function fitToEvents(list) {
     if (!points.length) return;
     
     if (points.length === 1) {
-        map.flyTo({ center: points[0], zoom: 13, pitch: 60 });
+        map.flyTo({ center: points[0], zoom: 15, pitch: 60 });
     } else {
         const bounds = new maplibregl.LngLatBounds(points[0], points[0]);
         points.forEach(p => bounds.extend(p));
-        map.fitBounds(bounds, { padding: 50, maxZoom: 13, pitch: 60 });
+        map.fitBounds(bounds, { padding: 50, maxZoom: 15, pitch: 60 });
     }
 }
 
@@ -112,7 +110,7 @@ function focusEvent(id) {
     
     map.flyTo({
         center: marker.getLngLat(),
-        zoom: Math.max(map.getZoom(), 15),
+        zoom: Math.max(map.getZoom(), 16),
         pitch: 65,
         bearing: 20,
         speed: 1.2
@@ -152,7 +150,7 @@ function locateUser() {
                     .setPopup(new maplibregl.Popup({ offset: 10 }).setText("📍 Estás aqui"))
                     .addTo(map);
 
-                map.flyTo({ center: [userPosition.lng, userPosition.lat], zoom: 12, pitch: 60 });
+                map.flyTo({ center: [userPosition.lng, userPosition.lat], zoom: 15, pitch: 60 });
                 resolve(userPosition);
             },
             () => reject(new Error("Não foi possível obter a tua localização. Verifica as permissões.")),
