@@ -102,7 +102,7 @@ function translateAuthError(error) {
         return "E-mail ou palavra-passe incorretos (ou a conta ainda não foi criada).";
     }
     if (msg.includes("email not confirmed")) {
-        return "Conta criada, mas o e-mail ainda não foi confirmado. Desativa «Confirm email» no Supabase ou verifica a tua caixa de entrada.";
+        return "Conta criada, mas o e-mail ainda não foi confirmado. Desativa «Confirm email» no Supabase.";
     }
     if (msg.includes("user already registered") || msg.includes("already been registered")) {
         return "Este e-mail já está registado. Muda para o separador «Entrar».";
@@ -111,10 +111,10 @@ function translateAuthError(error) {
         return "A palavra-passe tem de ter pelo menos 6 caracteres.";
     }
     if (msg.includes("rate limit") || msg.includes("too many requests")) {
-        return "Muitas tentativas seguidas. Aguarda alguns minutos ou desativa «Confirm email» no Supabase.";
+        return "Muitas tentativas seguidas. Aguarda alguns minutos e tenta novamente.";
     }
     if (msg.includes("database error saving new user")) {
-        return "Erro na tabela profiles do Supabase. Executa o script SQL de correção no SQL Editor.";
+        return "Erro na tabela profiles do Supabase. Verifica o script SQL no SQL Editor.";
     }
     return error.message;
 }
@@ -215,9 +215,8 @@ registerForm.addEventListener("submit", async e => {
         }
 
         if (data?.user) {
-            // Caso o Supabase ainda tenha "Confirm email" ativo, data.session vem a null
             if (!data.session) {
-                errEl.textContent = "Conta criada! No entanto, o Supabase está a exigir confirmação por e-mail. Vai a Authentication > Providers > Email no Supabase e desativa «Confirm email».";
+                errEl.textContent = "Conta criada! Desativa «Confirm email» em Authentication > Sign In / Providers no Supabase para entrar de imediato.";
                 errEl.classList.remove("hidden");
                 return;
             }
