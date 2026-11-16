@@ -1,5 +1,5 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite Real 3D + Terreno + Edifícios)
+// MAPA (MapLibre GL JS - Satélite Real 3D Clean + Relevo + Edifícios)
 // ==========================================
 
 window.onEventMarkerClick = null;
@@ -13,21 +13,15 @@ const REAL_3D_STYLE = {
                 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256,
-            attribution: '© Esri, Maxar, Earthstar Geographics'
+            attribution: '© Esri, Maxar'
         },
-        roads: {
+        cleanLabels: {
             type: 'raster',
             tiles: [
-                'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'
+                'https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png'
             ],
-            tileSize: 256
-        },
-        labels: {
-            type: 'raster',
-            tiles: [
-                'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
-            ],
-            tileSize: 256
+            tileSize: 256,
+            attribution: '© CARTO'
         },
         terrainSource: {
             type: 'raster-dem',
@@ -52,15 +46,10 @@ const REAL_3D_STYLE = {
             maxzoom: 22
         },
         {
-            id: 'roads-layer',
+            id: 'clean-labels-layer',
             type: 'raster',
-            source: 'roads',
-            paint: { 'raster-opacity': 0.7 }
-        },
-        {
-            id: 'labels-layer',
-            type: 'raster',
-            source: 'labels'
+            source: 'cleanLabels',
+            paint: { 'raster-opacity': 0.92 }
         },
         {
             id: '3d-buildings',
@@ -93,10 +82,10 @@ const REAL_3D_STYLE = {
 const map = new maplibregl.Map({
     container: 'map',
     style: REAL_3D_STYLE,
-    center: [-8.0, 39.6],
-    zoom: 6.3,
-    pitch: 60,
-    bearing: -15,
+    center: [-8.1, 39.6],
+    zoom: 6.4,
+    pitch: 55,
+    bearing: -12,
     maxPitch: 85,
     antialias: true,
     interactive: true,
@@ -134,8 +123,9 @@ function popupHTML(ev) {
     const enrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
     const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
+    const icon = ev.creatorType === "Utilizador" ? "👤" : "🏢";
     const organizerHtml = ev.creatorName
-        ? `<p style="color:#2563eb;font-weight:600;">🏢 ${escapeHTML(ev.creatorName)}</p>`
+        ? `<p style="color:#2563eb;font-weight:600;">${icon} ${escapeHTML(ev.creatorName)}</p>`
         : "";
 
     return `
@@ -183,7 +173,7 @@ function fitToEvents(list) {
     if (!points.length) return;
     
     if (points.length === 1) {
-        map.flyTo({ center: points[0], zoom: 14.5, pitch: 65, bearing: -15 });
+        map.flyTo({ center: points[0], zoom: 14.5, pitch: 65, bearing: -12 });
     } else {
         const bounds = new maplibregl.LngLatBounds(points[0], points[0]);
         points.forEach(p => bounds.extend(p));
