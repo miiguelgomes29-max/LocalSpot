@@ -151,7 +151,7 @@ nav { display: flex; gap: 12px; align-items: center; }
 .add-event-button { width: 100%; padding: 13px; border: none; border-radius: 8px; background: var(--primary); color: #fff; font-weight: bold; font-size: 15px; cursor: pointer; }
 .add-event-button:hover { background: var(--primary-hover); }
 
-/* Mapa */
+/* Mapa e Popups */
 .map-container { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
 #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 1; pointer-events: auto !important; }
 #map.picking { cursor: crosshair; }
@@ -159,6 +159,11 @@ nav { display: flex; gap: 12px; align-items: center; }
 .pick-banner button { border: none; background: rgba(0,0,0,0.1); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
 .pin { width: 34px; height: 34px; background: var(--pin, var(--primary)); border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; }
 .pin span { transform: rotate(45deg); font-size: 15px; }
+.popup { color: #0f172a; font-size: 13px; line-height: 1.45; }
+.popup h3 { margin: 4px 0 6px; font-size: 15px; }
+.popup p { margin: 3px 0; }
+.popup-cat { display: inline-block; background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.popup a { display: inline-block; margin-top: 6px; color: #2563eb; font-weight: 600; text-decoration: none; }
 
 /* Modais */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 16px; }
