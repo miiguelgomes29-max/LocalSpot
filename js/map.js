@@ -6,7 +6,10 @@ window.onEventMarkerClick = null;
 
 const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    // Mapa Dark Mode (combina com a interface escura do LocalSpot)
+    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    // Alternativa OpenStreetMap clássico:
+    // style: { version: 8, sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap" } }, layers: [{ id: "osm", type: "raster", source: "osm" }] },
     center: [-8.0, 39.6],
     zoom: 6,
     pitch: 50,
