@@ -1,11 +1,12 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite Real 3D Clean + Relevo + Edifícios)
+// MAPA (MapLibre GL JS - Satélite Real 3D Clean + Relevo + Edifícios + Etiquetas Vetoriais)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
 const REAL_3D_STYLE = {
     version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
         satellite: {
             type: 'raster',
@@ -14,14 +15,6 @@ const REAL_3D_STYLE = {
             ],
             tileSize: 256,
             attribution: '© Esri, Maxar'
-        },
-        cleanLabels: {
-            type: 'raster',
-            tiles: [
-                'https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png'
-            ],
-            tileSize: 256,
-            attribution: '© CARTO'
         },
         terrainSource: {
             type: 'raster-dem',
@@ -46,12 +39,6 @@ const REAL_3D_STYLE = {
             maxzoom: 22
         },
         {
-            id: 'clean-labels-layer',
-            type: 'raster',
-            source: 'cleanLabels',
-            paint: { 'raster-opacity': 0.92 }
-        },
-        {
             id: '3d-buildings',
             source: 'openmaptiles',
             'source-layer': 'building',
@@ -62,6 +49,55 @@ const REAL_3D_STYLE = {
                 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
                 'fill-extrusion-opacity': 0.72
+            }
+        },
+        {
+            id: 'road-labels',
+            type: 'symbol',
+            source: 'openmaptiles',
+            'source-layer': 'transportation_name',
+            minzoom: 13,
+            layout: {
+                'symbol-placement': 'line',
+                'text-field': ['coalesce', ['get', 'name:pt'], ['get', 'name']],
+                'text-font': ['Noto Sans Regular'],
+                'text-size': 11
+            },
+            paint: {
+                'text-color': '#e2e8f0',
+                'text-halo-color': 'rgba(15, 23, 42, 0.85)',
+                'text-halo-width': 1.3
+            }
+        },
+        {
+            id: 'place-labels',
+            type: 'symbol',
+            source: 'openmaptiles',
+            'source-layer': 'place',
+            filter: ['in', ['get', 'class'], ['literal', ['country', 'city', 'town', 'village']]],
+            layout: {
+                'text-field': ['coalesce', ['get', 'name:pt'], ['get', 'name']],
+                'text-font': ['Noto Sans Regular'],
+                'text-size': [
+                    'match',
+                    ['get', 'class'],
+                    'country', 15,
+                    'city', 13.5,
+                    'town', 11.5,
+                    10.5
+                ],
+                'text-transform': [
+                    'match',
+                    ['get', 'class'],
+                    'country', 'uppercase',
+                    'none'
+                ],
+                'text-letter-spacing': 0.05
+            },
+            paint: {
+                'text-color': '#f8fafc',
+                'text-halo-color': 'rgba(15, 23, 42, 0.9)',
+                'text-halo-width': 1.6
             }
         }
     ],
