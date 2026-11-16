@@ -420,38 +420,55 @@ $("adminUsersList").addEventListener("change", async e => {
 // ==========================================
 // SUPABASE: CARREGAR EVENTOS
 // ==========================================
+function mapDbEvent(item, index = 0) {
+    return {
+        id: item.id ?? (index + 1),
+        name: item.name,
+        description: item.description,
+        category: item.category,
+        date: item.date,
+        time: item.time,
+        location: item.location,
+        distrito: item.distrito,
+        latitude: Number(item.latitude),
+        longitude: Number(item.longitude),
+        image: item.image,
+        maxParticipants: item.max_participants,
+        enrolled: item.enrolled || 0,
+        creatorId: item.creator_id || null,
+        creatorName: item.creator_name || null,
+        creatorType: item.creator_type || null
+    };
+}
+
 async function loadEventsFromSupabase() {
-    const { data, error } = await supabaseClient
+    let { data, error } = await supabaseClient
         .from('events')
         .select('*');
 
     if (error) {
-        showToast("Erro ao carregar eventos da base de dados.", "error");
         console.error(error);
+        events.length = 0;
+        INITIAL_EVENTS.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
+        filterEvents({ fit: true });
         return;
     }
 
+    // Se a tabela estiver vazia, insere o evento inicial no Supabase
+    if ((!data || data.length === 0) && INITIAL_EVENTS.length > 0 && !localStorage.getItem("localspot_seeded")) {
+        localStorage.setItem("localspot_seeded", "1");
+        const { data: seeded } = await supabaseClient
+            .from('events')
+            .insert(INITIAL_EVENTS)
+            .select();
+        if (seeded && seeded.length > 0) {
+            data = seeded;
+        }
+    }
+
     events.length = 0;
-    data.forEach(item => {
-        events.push({
-            id: item.id,
-            name: item.name,
-            description: item.description,
-            category: item.category,
-            date: item.date,
-            time: item.time,
-            location: item.location,
-            distrito: item.distrito,
-            latitude: item.latitude,
-            longitude: item.longitude,
-            image: item.image,
-            maxParticipants: item.max_participants,
-            enrolled: item.enrolled || 0,
-            creatorId: item.creator_id,
-            creatorName: item.creator_name,
-            creatorType: item.creator_type
-        });
-    });
+    const sourceList = (data && data.length > 0) ? data : INITIAL_EVENTS;
+    sourceList.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
 
     filterEvents({ fit: true });
 }
