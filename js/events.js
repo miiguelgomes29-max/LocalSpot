@@ -35,6 +35,25 @@ const DISTRICTS = [
     { value: "madeira", label: "Madeira (Região Autónoma)", lat: 32.6669, lng: -16.9241 }
 ];
 
+const INITIAL_EVENTS = [
+    {
+        name: "Torneio Comunitário de Basquetebol 3v3",
+        description: "Torneio aberto a equipas locais com música ao vivo e convívio no parque.",
+        category: "desporto",
+        date: "2026-12-12",
+        time: "15:00",
+        location: "Parque Verde da Cidade",
+        distrito: "coimbra",
+        latitude: 40.3465,
+        longitude: -8.5944,
+        image: DEFAULT_IMAGE,
+        max_participants: 24,
+        enrolled: 8,
+        creator_name: "LocalSpot Comunidade",
+        creator_type: "Associação"
+    }
+];
+
 const events = [];
 
 function escapeHTML(value) {
