@@ -24,7 +24,6 @@ const userBadge = $("userBadge");
 const adminPanelBtn = $("adminPanelBtn");
 const logoutButton = $("logoutButton");
 const addEventButton = $("addEventButton");
-const normalUserNotice = $("normalUserNotice");
 const adminModal = $("adminModal");
 
 // Elementos de Filtros e Lista
@@ -311,21 +310,15 @@ function applyRoleUI() {
     userBadge.classList.remove("hidden");
 
     if (role === "admin") {
-        userBadge.textContent = `🛡️ Admin · ${full_name}`;
+        userBadge.textContent = `🛡️ ${full_name}`;
         adminPanelBtn.classList.remove("hidden");
-        addEventButton.classList.remove("hidden");
-        normalUserNotice.classList.add("hidden");
     } else if (role === "business") {
-        const tipo = business_type || "Domínio Público";
+        const tipo = business_type || "Empresa";
         userBadge.textContent = `🏢 ${tipo} · ${full_name}`;
         adminPanelBtn.classList.add("hidden");
-        addEventButton.classList.remove("hidden");
-        normalUserNotice.classList.add("hidden");
     } else {
         userBadge.textContent = `👤 ${full_name}`;
         adminPanelBtn.classList.add("hidden");
-        addEventButton.classList.add("hidden");
-        normalUserNotice.classList.remove("hidden");
     }
 }
 
@@ -454,7 +447,6 @@ async function loadEventsFromSupabase() {
         return;
     }
 
-    // Se a tabela estiver vazia, insere o evento inicial no Supabase
     if ((!data || data.length === 0) && INITIAL_EVENTS.length > 0 && !localStorage.getItem("localspot_seeded")) {
         localStorage.setItem("localspot_seeded", "1");
         const { data: seeded } = await supabaseClient
@@ -646,9 +638,13 @@ function displayEvents(list) {
             (ev.creatorId && ev.creatorId === currentProfile.id)
         );
 
-        const organizerBadge = ev.creatorName
-            ? `<div class="organizer-tag">🏢 ${escapeHTML(ev.creatorType ? ev.creatorType + " · " : "")}${escapeHTML(ev.creatorName)}</div>`
-            : "";
+        let organizerBadge = "";
+        if (ev.creatorName) {
+            const isNormalUser = ev.creatorType === "Utilizador";
+            const badgeIcon = isNormalUser ? "👤" : "🏢";
+            const prefix = !isNormalUser && ev.creatorType ? `${ev.creatorType} · ` : "";
+            organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
+        }
 
         const card = document.createElement("article");
         card.className = "event-card" + (past ? " past" : "") + (ev.id === activeId ? " active" : "");
@@ -913,10 +909,7 @@ function stopPicking() {
 }
 
 addEventButton.addEventListener("click", () => {
-    if (currentProfile?.role === "user") {
-        showToast("Apenas contas de Domínio Público ou Admin podem criar eventos.", "error");
-        return;
-    }
+    if (!currentProfile) return;
     if (pendingLocation) openModal(modal); else startPicking();
 });
 changeLocationButton.addEventListener("click", startPicking);
@@ -962,8 +955,8 @@ eventForm.addEventListener("submit", async e => {
     e.preventDefault();
     formError.classList.add("hidden");
 
-    if (!currentProfile || currentProfile.role === "user") {
-        showFormError("Sem permissão para publicar eventos.");
+    if (!currentProfile) {
+        showFormError("Inicia sessão para publicar eventos.");
         return;
     }
 
@@ -990,6 +983,10 @@ eventForm.addEventListener("submit", async e => {
     const maxPInput = $("eventLimit").value;
     const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
 
+    const creatorType = currentProfile.role === "admin"
+        ? "Admin"
+        : (currentProfile.role === "business" ? (currentProfile.business_type || "Empresa") : "Utilizador");
+
     const newEventData = {
         name: $("eventName").value.trim(),
         description: $("eventDescription").value.trim(),
@@ -1005,7 +1002,7 @@ eventForm.addEventListener("submit", async e => {
         enrolled: 0,
         creator_id: currentProfile.id,
         creator_name: currentProfile.full_name,
-        creator_type: currentProfile.role === "admin" ? "Admin" : (currentProfile.business_type || "Empresa")
+        creator_type: creatorType
     };
 
     const { data, error } = await supabaseClient
