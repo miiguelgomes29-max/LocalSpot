@@ -1,5 +1,5 @@
 // ==========================================
-// CONFIGURAÇÃO SUPABASE E LÓGICA DA APLICAÇÃO
+// CONFIGURAÇÃO SUPABASE E LÓGICA COMPLETA DA APLICAÇÃO
 // ==========================================
 const SUPABASE_URL = "https://ufzjexbihnwflqktpomm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmempleGJpaG53Zmxxa3Rwb21tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMjU5NDUsImV4cCI6MjEwOTkwMTk0NX0.hy3x0RuyuKYwTOGvdAA2hYKH_02SEy49YRaZHoD2ufA";
@@ -19,7 +19,11 @@ const businessTypeGroup = $("businessTypeGroup");
 const regNameLabel = $("regNameLabel");
 const regNameInput = $("regName");
 
-// Elementos do Cabeçalho e Perfil
+// Elementos do Cabeçalho e Notificações
+const notifBtn = $("notifBtn");
+const notifBadge = $("notifBadge");
+const notifDropdown = $("notifDropdown");
+const notifList = $("notifList");
 const userBadge = $("userBadge");
 const adminPanelBtn = $("adminPanelBtn");
 const logoutButton = $("logoutButton");
@@ -38,13 +42,15 @@ const radiusSlider = $("radiusSlider");
 const radiusValue = $("radiusValue");
 const sortFilter = $("sortFilter");
 const favoritesToggle = $("favoritesToggle");
+const freeOnlyToggle = $("freeOnlyToggle");
+const followingOnlyToggle = $("followingOnlyToggle");
 const resetFiltersBtn = $("resetFilters");
 const eventsList = $("eventsList");
 const eventCount = $("eventCount");
 const emptyState = $("emptyState");
 const locationButton = $("locationButton");
 
-// Elementos dos Modais de Evento
+// Elementos dos Modais
 const modal = $("eventModal");
 const closeModal = $("closeModal");
 const eventForm = $("eventForm");
@@ -55,6 +61,8 @@ const formError = $("formError");
 const changeLocationButton = $("changeLocationButton");
 const aboutModal = $("aboutModal");
 const detailModal = $("detailModal");
+const ticketModal = $("ticketModal");
+const reportModal = $("reportModal");
 const pickBanner = $("pickBanner");
 
 const STORAGE_FAVS = "localspot_favorites";
@@ -78,11 +86,24 @@ function saveJSON(key, value) {
 }
 
 // ---------- Estado Global ----------
-const state = { search: "", category: "all", district: "all", period: "all", radius: 100, sort: "date", onlyFavorites: false };
+const state = {
+    search: "",
+    category: "all",
+    district: "all",
+    period: "all",
+    radius: 100,
+    sort: "date",
+    onlyFavorites: false,
+    onlyFree: false,
+    onlyFollowing: false
+};
+
 let currentUser = null;
 let currentProfile = null;
 let favorites = new Set(loadJSON(STORAGE_FAVS, []).map(String));
 let myEnrollments = new Set();
+let myFollowing = new Map();
+let notifications = [];
 let activeId = null;
 let pendingLocation = null;
 let editingEventId = null;
@@ -103,30 +124,27 @@ function translateAuthError(error) {
     if (!error) return "Ocorreu um erro inesperado.";
     const msg = (error.message || "").toLowerCase();
 
-    if (msg.includes("invalid login credentials")) {
-        return "E-mail ou palavra-passe incorretos (ou a conta ainda não foi criada).";
-    }
-    if (msg.includes("email not confirmed")) {
-        return "Conta criada, mas o e-mail ainda não foi confirmado. Desativa «Confirm email» no Supabase.";
-    }
-    if (msg.includes("user already registered") || msg.includes("already been registered")) {
-        return "Este e-mail já está registado. Muda para o separador «Entrar».";
-    }
-    if (msg.includes("password should be at least")) {
-        return "A palavra-passe tem de ter pelo menos 6 caracteres.";
-    }
-    if (msg.includes("rate limit") || msg.includes("too many requests")) {
-        return "Muitas tentativas seguidas. Aguarda alguns minutos e tenta novamente.";
-    }
-    if (msg.includes("database error saving new user")) {
-        return "Erro na tabela profiles do Supabase. Verifica o script SQL no SQL Editor.";
-    }
+    if (msg.includes("invalid login credentials")) return "E-mail ou palavra-passe incorretos.";
+    if (msg.includes("email not confirmed")) return "Desativa «Confirm email» no Supabase para entrar de imediato.";
+    if (msg.includes("user already registered") || msg.includes("already been registered")) return "Este e-mail já está registado. Muda para «Entrar».";
+    if (msg.includes("password should be at least")) return "A palavra-passe tem de ter pelo menos 6 caracteres.";
+    if (msg.includes("rate limit") || msg.includes("too many requests")) return "Muitas tentativas seguidas. Aguarda alguns minutos.";
     return error.message;
 }
 
 // ==========================================
-// ALTERNAR VISTA MOBILE (LISTA / MAPA)
+// CONTROLOS DO MAPA E VISTA MOBILE
 // ==========================================
+$("mapStyleToggle").addEventListener("click", () => {
+    const mode = toggleMapStyleMode();
+    $("mapStyleToggle").textContent = mode === "satellite" ? "🗺️ Mapa Noturno" : "🛰️ Satélite 3D";
+});
+
+$("mapPitchToggle").addEventListener("click", () => {
+    const is3D = toggleMapPitchMode();
+    $("mapPitchToggle").textContent = is3D ? "📐 Vista 2D" : "🧊 Vista 3D";
+});
+
 function setMobileView(view) {
     mainEl.dataset.view = view;
     mobileViewToggle.textContent = view === "map" ? "📋 Ver Lista" : "🗺️ Ver Mapa";
@@ -165,7 +183,6 @@ regAccountType.addEventListener("change", () => {
     regNameInput.placeholder = isBusiness ? "Ex: Café Central / Ginásio Fit" : "Ex: João Silva";
 });
 
-// Login
 loginForm.addEventListener("submit", async e => {
     e.preventDefault();
     const errEl = $("loginError");
@@ -179,13 +196,11 @@ loginForm.addEventListener("submit", async e => {
 
     try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
         if (error) {
             errEl.textContent = translateAuthError(error);
             errEl.classList.remove("hidden");
             return;
         }
-
         if (data?.user) {
             await handleAuthenticatedSession(data.user);
             showToast("Sessão iniciada com sucesso!", "success");
@@ -199,7 +214,6 @@ loginForm.addEventListener("submit", async e => {
     }
 });
 
-// Registo
 registerForm.addEventListener("submit", async e => {
     e.preventDefault();
     const errEl = $("registerError");
@@ -218,13 +232,7 @@ registerForm.addEventListener("submit", async e => {
         const { data, error } = await supabaseClient.auth.signUp({
             email,
             password,
-            options: {
-                data: {
-                    full_name: fullName,
-                    role: role,
-                    business_type: businessType
-                }
-            }
+            options: { data: { full_name: fullName, role, business_type: businessType } }
         });
 
         if (error) {
@@ -235,16 +243,16 @@ registerForm.addEventListener("submit", async e => {
 
         if (data?.user) {
             if (!data.session) {
-                errEl.textContent = "Conta criada! Desativa «Confirm email» em Authentication > Sign In / Providers no Supabase para entrar de imediato.";
+                errEl.textContent = "Conta criada! Desativa «Confirm email» no Supabase para entrar de imediato.";
                 errEl.classList.remove("hidden");
                 return;
             }
 
             await supabaseClient.from("profiles").upsert({
                 id: data.user.id,
-                email: email,
+                email,
                 full_name: fullName,
-                role: role,
+                role,
                 business_type: businessType
             });
 
@@ -260,12 +268,13 @@ registerForm.addEventListener("submit", async e => {
     }
 });
 
-// Terminar Sessão
 logoutButton.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
     currentUser = null;
     currentProfile = null;
     myEnrollments.clear();
+    myFollowing.clear();
+    notifBtn.classList.add("hidden");
     userBadge.classList.add("hidden");
     adminPanelBtn.classList.add("hidden");
     logoutButton.classList.add("hidden");
@@ -273,21 +282,14 @@ logoutButton.addEventListener("click", async () => {
     showToast("Sessão terminada.");
 });
 
-// Carregar Perfil e Permissões
 async function handleAuthenticatedSession(user) {
     currentUser = user;
     const meta = user.user_metadata || {};
     let profile = null;
 
     try {
-        const { data } = await supabaseClient
-            .from("profiles")
-            .select("*")
-            .eq("id", user.id)
-            .maybeSingle();
-
+        const { data } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
         profile = data;
-
         if (!profile) {
             const newProfile = {
                 id: user.id,
@@ -296,12 +298,7 @@ async function handleAuthenticatedSession(user) {
                 role: meta.role || "user",
                 business_type: meta.business_type || null
             };
-            const { data: inserted } = await supabaseClient
-                .from("profiles")
-                .upsert(newProfile)
-                .select()
-                .maybeSingle();
-
+            const { data: inserted } = await supabaseClient.from("profiles").upsert(newProfile).select().maybeSingle();
             profile = inserted || newProfile;
         }
     } catch (e) {
@@ -319,7 +316,7 @@ async function handleAuthenticatedSession(user) {
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
 
-    await loadMyEnrollments();
+    await Promise.all([loadMyEnrollments(), loadMyFollowing(), loadNotifications()]);
     await loadEventsFromSupabase();
     checkSharedEventUrl();
 }
@@ -328,6 +325,7 @@ function applyRoleUI() {
     if (!currentProfile) return;
     const { role, full_name, business_type } = currentProfile;
 
+    notifBtn.classList.remove("hidden");
     logoutButton.classList.remove("hidden");
     userBadge.classList.remove("hidden");
 
@@ -358,12 +356,149 @@ async function initAuth() {
 }
 
 // ==========================================
+// CENTRO DE NOTIFICAÇÕES
+// ==========================================
+async function createNotification(targetUserId, eventId, title, message) {
+    if (!targetUserId || (currentUser && targetUserId === currentUser.id)) return;
+    try {
+        await supabaseClient.from("notifications").insert([{
+            user_id: targetUserId,
+            event_id: eventId,
+            title,
+            message
+        }]);
+    } catch (e) {}
+}
+
+async function loadNotifications() {
+    if (!currentUser) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from("notifications")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: false })
+            .limit(20);
+
+        if (!error && data) {
+            notifications = data;
+            renderNotifications();
+        }
+    } catch (e) {}
+}
+
+function renderNotifications() {
+    const unreadCount = notifications.filter(n => !n.is_read).length;
+    notifBadge.textContent = unreadCount;
+    notifBadge.classList.toggle("hidden", unreadCount === 0);
+
+    if (!notifications.length) {
+        notifList.innerHTML = `<p class="muted" style="padding:14px; font-size:12.5px; margin:0;">Sem notificações recentes.</p>`;
+        return;
+    }
+
+    notifList.innerHTML = notifications.map(n => `
+        <div class="notif-item${n.is_read ? "" : " unread"}" data-notif-id="${n.id}" data-event-id="${n.event_id || ""}">
+            <strong>${escapeHTML(n.title)}</strong>
+            <p>${escapeHTML(n.message)}</p>
+        </div>
+    `).join("");
+}
+
+notifBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    notifDropdown.classList.toggle("hidden");
+});
+
+document.addEventListener("click", e => {
+    if (!e.target.closest(".notif-wrap")) notifDropdown.classList.add("hidden");
+});
+
+notifList.addEventListener("click", async e => {
+    const item = e.target.closest(".notif-item");
+    if (!item) return;
+    const notifId = item.dataset.notifId;
+    const eventId = item.dataset.eventId;
+
+    await supabaseClient.from("notifications").update({ is_read: true }).eq("id", notifId);
+    const nObj = notifications.find(x => String(x.id) === String(notifId));
+    if (nObj) nObj.is_read = true;
+    renderNotifications();
+    notifDropdown.classList.add("hidden");
+
+    if (eventId) {
+        openEventDetails(eventId);
+    }
+});
+
+$("markAllReadBtn").addEventListener("click", async () => {
+    if (!currentUser) return;
+    await supabaseClient.from("notifications").update({ is_read: true }).eq("user_id", currentUser.id);
+    notifications.forEach(n => { n.is_read = true; });
+    renderNotifications();
+});
+
+// ==========================================
+// SEGUIR ORGANIZADORES
+// ==========================================
+async function loadMyFollowing() {
+    if (!currentUser) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from("follows")
+            .select("following_id, following_name")
+            .eq("follower_id", currentUser.id);
+
+        if (!error && data) {
+            myFollowing = new Map(data.map(r => [String(r.following_id), r.following_name]));
+        }
+    } catch (e) {}
+}
+
+async function toggleFollowOrganizer(creatorId, creatorName) {
+    if (!currentUser || !creatorId || creatorId === currentUser.id) return;
+    const key = String(creatorId);
+
+    if (myFollowing.has(key)) {
+        await supabaseClient.from("follows").delete().eq("follower_id", currentUser.id).eq("following_id", creatorId);
+        myFollowing.delete(key);
+        showToast(`Deixaste de seguir ${creatorName}.`);
+    } else {
+        await supabaseClient.from("follows").insert([{
+            follower_id: currentUser.id,
+            following_id: creatorId,
+            following_name: creatorName
+        }]);
+        myFollowing.set(key, creatorName);
+        showToast(`Agora segues ${creatorName}!`, "success");
+    }
+
+    if (!detailModal.classList.contains("hidden") && detailEventId) {
+        updateDetailFollowButton(creatorId);
+    }
+    if (state.onlyFollowing) filterEvents();
+}
+
+function updateDetailFollowButton(creatorId) {
+    const btn = $("detailFollowBtn");
+    if (!creatorId || !currentUser || String(creatorId) === String(currentUser.id)) {
+        btn.classList.add("hidden");
+        return;
+    }
+    const isFollowing = myFollowing.has(String(creatorId));
+    btn.classList.remove("hidden");
+    btn.classList.toggle("following", isFollowing);
+    btn.textContent = isFollowing ? "✓ A seguir" : "+ Seguir";
+}
+
+// ==========================================
 // MODAL DE PERFIL ("A MINHA CONTA")
 // ==========================================
 userBadge.addEventListener("click", () => {
     if (!currentProfile) return;
     $("profileEmailDisplay").textContent = currentProfile.email;
     $("profileNameInput").value = currentProfile.full_name;
+    $("profileBioInput").value = currentProfile.bio || "";
     renderProfileLists();
     openModal(profileModal);
 });
@@ -371,36 +506,33 @@ userBadge.addEventListener("click", () => {
 $("closeProfile").addEventListener("click", () => closeModalEl(profileModal));
 profileModal.addEventListener("mousedown", e => { if (e.target === profileModal) closeModalEl(profileModal); });
 
-$("tabMyEnrollments").addEventListener("click", () => {
-    $("tabMyEnrollments").classList.add("active");
-    $("tabMyCreated").classList.remove("active");
-    $("profileEnrolledList").classList.remove("hidden");
-    $("profileCreatedList").classList.add("hidden");
-});
+function switchProfileTab(activeTab, activePanel) {
+    ["tabMyEnrollments", "tabMyCreated", "tabMyFollowing"].forEach(id => $(id).classList.toggle("active", id === activeTab));
+    ["profileEnrolledList", "profileCreatedList", "profileFollowingList"].forEach(id => $(id).classList.toggle("hidden", id !== activePanel));
+}
 
-$("tabMyCreated").addEventListener("click", () => {
-    $("tabMyCreated").classList.add("active");
-    $("tabMyEnrollments").classList.remove("active");
-    $("profileCreatedList").classList.remove("hidden");
-    $("profileEnrolledList").classList.add("hidden");
-});
+$("tabMyEnrollments").addEventListener("click", () => switchProfileTab("tabMyEnrollments", "profileEnrolledList"));
+$("tabMyCreated").addEventListener("click", () => switchProfileTab("tabMyCreated", "profileCreatedList"));
+$("tabMyFollowing").addEventListener("click", () => switchProfileTab("tabMyFollowing", "profileFollowingList"));
 
 $("profileUpdateForm").addEventListener("submit", async e => {
     e.preventDefault();
     const newName = $("profileNameInput").value.trim();
+    const newBio = $("profileBioInput").value.trim();
     if (!newName || !currentProfile) return;
 
     const { error } = await supabaseClient
         .from("profiles")
-        .update({ full_name: newName })
+        .update({ full_name: newName, bio: newBio })
         .eq("id", currentProfile.id);
 
     if (error) {
-        showToast("Erro ao atualizar o nome do perfil.", "error");
+        showToast("Erro ao atualizar o perfil.", "error");
         return;
     }
 
     currentProfile.full_name = newName;
+    currentProfile.bio = newBio;
     applyRoleUI();
     showToast("Perfil atualizado com sucesso!", "success");
 });
@@ -416,7 +548,10 @@ function renderProfileLists() {
                     <strong>${escapeHTML(ev.name)}</strong>
                     <span>📅 ${escapeHTML(formatEventDate(ev))} · 📍 ${escapeHTML(ev.location)}</span>
                 </div>
-                <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn-ticket" onclick="closeModalEl(profileModal); window.openEventTicket('${ev.id}')">🎟️</button>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
+                </div>
             </div>
         `).join("")
         : `<p class="muted" style="font-size:13px;">Ainda não estás inscrito em nenhum evento.</p>`;
@@ -435,10 +570,25 @@ function renderProfileLists() {
             </div>
         `).join("")
         : `<p class="muted" style="font-size:13px;">Ainda não criaste nenhum evento.</p>`;
+
+    const followingArr = [...myFollowing.entries()];
+    $("profileFollowingList").innerHTML = followingArr.length
+        ? followingArr.map(([id, name]) => `
+            <div class="profile-event-item">
+                <strong>🏢 ${escapeHTML(name)}</strong>
+                <button type="button" class="btn-logout" onclick="window.unfollowFromProfile('${id}', '${escapeHTML(name)}')">Deixar de seguir</button>
+            </div>
+        `).join("")
+        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhum organizador.</p>`;
 }
 
+window.unfollowFromProfile = async (id, name) => {
+    await toggleFollowOrganizer(id, name);
+    renderProfileLists();
+};
+
 // ==========================================
-// PAINEL DE ADMINISTRAÇÃO
+// PAINEL DE ADMINISTRAÇÃO & MODERAÇÃO
 // ==========================================
 adminPanelBtn.addEventListener("click", async () => {
     if (currentProfile?.role !== "admin") return;
@@ -449,41 +599,76 @@ adminPanelBtn.addEventListener("click", async () => {
 $("closeAdmin").addEventListener("click", () => closeModalEl(adminModal));
 adminModal.addEventListener("mousedown", e => { if (e.target === adminModal) closeModalEl(adminModal); });
 
+$("tabAdminUsers").addEventListener("click", () => {
+    $("tabAdminUsers").classList.add("active");
+    $("tabAdminReports").classList.remove("active");
+    $("adminUsersList").classList.remove("hidden");
+    $("adminReportsList").classList.add("hidden");
+});
+
+$("tabAdminReports").addEventListener("click", () => {
+    $("tabAdminReports").classList.add("active");
+    $("tabAdminUsers").classList.remove("active");
+    $("adminReportsList").classList.remove("hidden");
+    $("adminUsersList").classList.add("hidden");
+});
+
 async function loadAdminDashboard() {
     const listEl = $("adminUsersList");
+    const reportsEl = $("adminReportsList");
     listEl.innerHTML = `<p class="muted">A carregar utilizadores...</p>`;
 
-    const { data: users, error } = await supabaseClient
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+    const [{ data: users }, { data: reports }] = await Promise.all([
+        supabaseClient.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabaseClient.from("reports").select("*").eq("status", "pendente").order("created_at", { ascending: false })
+    ]);
 
-    if (error) {
-        listEl.innerHTML = `<p class="form-error">Erro ao carregar utilizadores.</p>`;
-        return;
+    if (users) {
+        $("statTotalUsers").textContent = users.length;
+        $("statBusinessUsers").textContent = users.filter(u => u.role === "business").length;
+        $("statTotalEvents").textContent = events.length;
+
+        listEl.innerHTML = users.map(u => {
+            const typeLabel = u.role === "business" && u.business_type ? ` (${u.business_type})` : "";
+            return `
+                <div class="admin-user-row">
+                    <div class="admin-user-info">
+                        <strong>${escapeHTML(u.full_name)}${escapeHTML(typeLabel)}</strong>
+                        <span>${escapeHTML(u.email)}</span>
+                    </div>
+                    <select data-user-id="${u.id}" class="admin-role-select">
+                        <option value="user" ${u.role === "user" ? "selected" : ""}>👤 Utilizador</option>
+                        <option value="business" ${u.role === "business" ? "selected" : ""}>🏢 Domínio Público</option>
+                        <option value="admin" ${u.role === "admin" ? "selected" : ""}>🛡️ Admin</option>
+                    </select>
+                </div>
+            `;
+        }).join("");
     }
 
-    $("statTotalUsers").textContent = users.length;
-    $("statBusinessUsers").textContent = users.filter(u => u.role === "business").length;
-    $("statTotalEvents").textContent = events.length;
-
-    listEl.innerHTML = users.map(u => {
-        const typeLabel = u.role === "business" && u.business_type ? ` (${u.business_type})` : "";
-        return `
+    const pendingReports = reports || [];
+    $("statTotalReports").textContent = pendingReports.length;
+    reportsEl.innerHTML = pendingReports.length
+        ? pendingReports.map(r => `
             <div class="admin-user-row">
                 <div class="admin-user-info">
-                    <strong>${escapeHTML(u.full_name)}${escapeHTML(typeLabel)}</strong>
-                    <span>${escapeHTML(u.email)}</span>
+                    <strong>🚩 ${escapeHTML(r.event_name)}</strong>
+                    <span>Motivo: ${escapeHTML(r.reason)} · Por ${escapeHTML(r.reporter_name)}</span>
                 </div>
-                <select data-user-id="${u.id}" class="admin-role-select">
-                    <option value="user" ${u.role === "user" ? "selected" : ""}>👤 Utilizador</option>
-                    <option value="business" ${u.role === "business" ? "selected" : ""}>🏢 Domínio Público</option>
-                    <option value="admin" ${u.role === "admin" ? "selected" : ""}>🛡️ Admin</option>
-                </select>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn-soft" onclick="closeModalEl(adminModal); window.openEventDetails('${r.event_id}')">Ver</button>
+                    <button type="button" class="btn-logout" onclick="window.resolveReport(${r.id})">Arquivar</button>
+                </div>
             </div>
-        `;
-    }).join("");
+        `).join("")
+        : `<p class="muted" style="font-size:13px;">Nenhuma denúncia pendente.</p>`;
 }
+
+window.resolveReport = async reportId => {
+    await supabaseClient.from("reports").update({ status: "resolvida" }).eq("id", reportId);
+    showToast("Denúncia arquivada.");
+    await loadAdminDashboard();
+};
 
 $("adminUsersList").addEventListener("change", async e => {
     const select = e.target.closest(".admin-role-select");
@@ -492,17 +677,13 @@ $("adminUsersList").addEventListener("change", async e => {
     const userId = select.dataset.userId;
     const newRole = select.value;
 
-    const { error } = await supabaseClient
-        .from("profiles")
-        .update({ role: newRole })
-        .eq("id", userId);
-
+    const { error } = await supabaseClient.from("profiles").update({ role: newRole }).eq("id", userId);
     if (error) {
-        showToast("Erro ao atualizar cargo do utilizador.", "error");
+        showToast("Erro ao atualizar cargo.", "error");
         return;
     }
 
-    showToast("Permissões atualizadas com sucesso!", "success");
+    showToast("Permissões atualizadas!", "success");
     if (userId === currentProfile.id) {
         currentProfile.role = newRole;
         applyRoleUI();
@@ -528,6 +709,8 @@ function mapDbEvent(item, index = 0) {
         image: item.image,
         maxParticipants: item.max_participants,
         enrolled: item.enrolled || 0,
+        price: item.price || "Gratuito",
+        externalUrl: item.external_url || "",
         creatorId: item.creator_id || null,
         creatorName: item.creator_name || null,
         creatorType: item.creator_type || null
@@ -552,12 +735,9 @@ async function loadMyEnrollments() {
 }
 
 async function loadEventsFromSupabase() {
-    let { data, error } = await supabaseClient
-        .from("events")
-        .select("*");
+    let { data, error } = await supabaseClient.from("events").select("*");
 
     if (error) {
-        console.error(error);
         events.length = 0;
         INITIAL_EVENTS.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
         filterEvents({ fit: true });
@@ -566,13 +746,8 @@ async function loadEventsFromSupabase() {
 
     if ((!data || data.length === 0) && INITIAL_EVENTS.length > 0 && !localStorage.getItem("localspot_seeded")) {
         localStorage.setItem("localspot_seeded", "1");
-        const { data: seeded } = await supabaseClient
-            .from("events")
-            .insert(INITIAL_EVENTS)
-            .select();
-        if (seeded && seeded.length > 0) {
-            data = seeded;
-        }
+        const { data: seeded } = await supabaseClient.from("events").insert(INITIAL_EVENTS).select();
+        if (seeded && seeded.length > 0) data = seeded;
     }
 
     events.length = 0;
@@ -625,16 +800,7 @@ async function toggleEnrollment(id) {
     let newEnrolledCount = ev.enrolled || 0;
 
     if (isEnrolled) {
-        const { error: delErr } = await supabaseClient
-            .from("enrollments")
-            .delete()
-            .eq("event_id", ev.id)
-            .eq("user_id", currentUser.id);
-
-        if (delErr) {
-            console.warn("Tabela enrollments:", delErr.message);
-        }
-
+        await supabaseClient.from("enrollments").delete().eq("event_id", ev.id).eq("user_id", currentUser.id);
         myEnrollments.delete(idKey);
         newEnrolledCount = Math.max(0, newEnrolledCount - 1);
     } else {
@@ -644,29 +810,28 @@ async function toggleEnrollment(id) {
             return;
         }
 
-        const { error: insErr } = await supabaseClient
-            .from("enrollments")
-            .insert([{
-                event_id: ev.id,
-                user_id: currentUser.id,
-                user_name: currentProfile.full_name
-            }]);
-
-        if (insErr) {
-            console.warn("Tabela enrollments:", insErr.message);
-        }
+        await supabaseClient.from("enrollments").insert([{
+            event_id: ev.id,
+            user_id: currentUser.id,
+            user_name: currentProfile.full_name
+        }]);
 
         myEnrollments.add(idKey);
         newEnrolledCount += 1;
+
+        if (ev.creatorId) {
+            await createNotification(
+                ev.creatorId,
+                ev.id,
+                "Nova inscrição no teu evento!",
+                `${currentProfile.full_name} inscreveu-se em "${ev.name}".`
+            );
+        }
     }
 
-    const { error } = await supabaseClient
-        .from("events")
-        .update({ enrolled: newEnrolledCount })
-        .eq("id", ev.id);
-
+    const { error } = await supabaseClient.from("events").update({ enrolled: newEnrolledCount }).eq("id", ev.id);
     if (error) {
-        showToast("Erro ao atualizar as vagas na base de dados.", "error");
+        showToast("Erro ao atualizar as vagas.", "error");
         return;
     }
 
@@ -676,7 +841,7 @@ async function toggleEnrollment(id) {
     if (isEnrolled) {
         showToast(`Cancelaste a tua inscrição em "${ev.name}".`);
     } else {
-        showToast(`Inscrição confirmada em "${ev.name}"!`, "success");
+        showToast(`Inscrição confirmada! Bilhete QR disponível.`, "success");
     }
 
     filterEvents();
@@ -716,6 +881,8 @@ function sortEvents(list) {
     const sorted = [...list];
     if (state.sort === "name") {
         sorted.sort((a, b) => a.name.localeCompare(b.name, "pt"));
+    } else if (state.sort === "popular") {
+        sorted.sort((a, b) => (b.enrolled || 0) - (a.enrolled || 0));
     } else if (state.sort === "distance" && userPosition) {
         sorted.sort((a, b) => distanceOf(a) - distanceOf(b));
     } else {
@@ -735,14 +902,17 @@ function getFilteredEvents() {
             (state.district === "all" || ev.distrito === state.district) &&
             matchesPeriod(ev) &&
             matchesRadius(ev) &&
-            (!state.onlyFavorites || favorites.has(String(ev.id)));
+            (!state.onlyFavorites || favorites.has(String(ev.id))) &&
+            (!state.onlyFree || isFreePrice(ev.price)) &&
+            (!state.onlyFollowing || (ev.creatorId && myFollowing.has(String(ev.creatorId))));
     });
     return sortEvents(filtered);
 }
 
 function hasActiveFilters() {
     return state.search || state.category !== "all" || state.district !== "all" ||
-        state.period !== "all" || state.radius < 100 || state.onlyFavorites;
+        state.period !== "all" || state.radius < 100 || state.onlyFavorites ||
+        state.onlyFree || state.onlyFollowing;
 }
 
 function filterEvents({ fit = false } = {}) {
@@ -824,6 +994,7 @@ function displayEvents(list) {
                 <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="" class="event-image" loading="lazy"
                      onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
                 ${past ? '<span class="badge-past">Terminado</span>' : ""}
+                <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
                 <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav">${fav ? "★" : "☆"}</button>
             </div>
             <div class="event-meta">
@@ -850,6 +1021,7 @@ function displayEvents(list) {
 
 function setActive(id, scroll = true) {
     activeId = id;
+    highlightMarkerOnMap(id);
     eventsList.querySelectorAll(".event-card").forEach(c => {
         const on = String(c.dataset.id) === String(id);
         c.classList.toggle("active", on);
@@ -869,19 +1041,12 @@ eventsList.addEventListener("click", e => {
     const id = card.dataset.id;
     const action = e.target.closest("[data-action]")?.dataset.action;
 
-    if (action === "fav") {
-        toggleFavorite(id);
-    } else if (action === "enroll") {
-        toggleEnrollment(id);
-    } else if (action === "details") {
-        openEventDetails(id);
-    } else if (action === "edit") {
-        startEditEvent(id);
-    } else if (action === "delete") {
-        deleteEvent(id);
-    } else {
-        openEventOnMap(id);
-    }
+    if (action === "fav") toggleFavorite(id);
+    else if (action === "enroll") toggleEnrollment(id);
+    else if (action === "details") openEventDetails(id);
+    else if (action === "edit") startEditEvent(id);
+    else if (action === "delete") deleteEvent(id);
+    else openEventOnMap(id);
 });
 
 eventsList.addEventListener("keydown", e => {
@@ -904,13 +1069,9 @@ async function deleteEvent(id) {
     const ev = events.find(x => String(x.id) === String(id));
     if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
 
-    const { error } = await supabaseClient
-        .from("events")
-        .delete()
-        .eq("id", ev.id);
-
+    const { error } = await supabaseClient.from("events").delete().eq("id", ev.id);
     if (error) {
-        showToast("Erro ao apagar o evento da base de dados.", "error");
+        showToast("Erro ao apagar o evento.", "error");
         return;
     }
 
@@ -925,7 +1086,7 @@ async function deleteEvent(id) {
 }
 
 // ==========================================
-// MODAL DE DETALHES, INSCRITOS E COMENTÁRIOS
+// MODAL DE DETALHES, BILHETE QR, AVALIAÇÕES E COMENTÁRIOS
 // ==========================================
 async function openEventDetails(id) {
     const ev = events.find(x => String(x.id) === String(id));
@@ -944,6 +1105,7 @@ async function openEventDetails(id) {
     imgEl.onerror = () => { imgEl.src = DEFAULT_IMAGE; };
 
     $("detailCategory").textContent = cat ? `${cat.emoji} ${cat.label}` : ev.category;
+    $("detailPriceBadge").textContent = `🎟️ ${ev.price || "Gratuito"}`;
 
     const orgEl = $("detailOrganizer");
     if (ev.creatorName) {
@@ -955,11 +1117,22 @@ async function openEventDetails(id) {
         orgEl.classList.add("hidden");
     }
 
+    updateDetailFollowButton(ev.creatorId);
+
     $("detailTitle").textContent = ev.name;
     $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
     $("detailDateTime").textContent = formatEventDate(ev);
     $("detailLocation").textContent = `${ev.location} · ${districtLabel(ev.distrito)}`;
     $("detailVacancies").textContent = max ? `${currentEnrolled} / ${max} vagas` : `${currentEnrolled} inscritos (ilimitado)`;
+
+    const extLink = $("detailExternalLink");
+    const safeUrl = sanitizeUrl(ev.externalUrl);
+    if (safeUrl) {
+        extLink.href = safeUrl;
+        extLink.classList.remove("hidden");
+    } else {
+        extLink.classList.add("hidden");
+    }
 
     const enrollBtn = $("detailEnrollBtn");
     enrollBtn.disabled = false;
@@ -977,14 +1150,22 @@ async function openEventDetails(id) {
         enrollBtn.textContent = "✋ Inscrever-me";
     }
 
+    $("detailTicketBtn").classList.toggle("hidden", !enrolled);
     $("detailCalendarBtn").href = buildGoogleCalendarUrl(ev);
     $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
+    $("detailOwnerActions").classList.toggle("hidden", !canManageEvent(ev));
 
-    const ownerActions = $("detailOwnerActions");
-    ownerActions.classList.toggle("hidden", !canManageEvent(ev));
+    // Secção de avaliações visível se o evento já terminou
+    const reviewsSection = $("detailReviewsSection");
+    reviewsSection.classList.toggle("hidden", !past);
+    $("reviewForm").classList.toggle("hidden", !past || !enrolled);
 
     openModal(detailModal);
-    await Promise.all([loadEventAttendees(ev), loadEventComments(ev.id)]);
+    await Promise.all([
+        loadEventAttendees(ev),
+        loadEventComments(ev.id),
+        loadEventReviews(ev.id)
+    ]);
 }
 
 window.openEventDetails = openEventDetails;
@@ -992,8 +1173,17 @@ window.openEventDetails = openEventDetails;
 $("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
 detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) closeModalEl(detailModal); });
 
+$("detailFollowBtn").addEventListener("click", () => {
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (ev && ev.creatorId) toggleFollowOrganizer(ev.creatorId, ev.creatorName);
+});
+
 $("detailEnrollBtn").addEventListener("click", () => {
     if (detailEventId) toggleEnrollment(detailEventId);
+});
+
+$("detailTicketBtn").addEventListener("click", () => {
+    if (detailEventId) openEventTicket(detailEventId);
 });
 
 $("detailShareBtn").addEventListener("click", async () => {
@@ -1001,10 +1191,21 @@ $("detailShareBtn").addEventListener("click", async () => {
     const shareUrl = `${window.location.origin}${window.location.pathname}?evento=${detailEventId}`;
     try {
         await navigator.clipboard.writeText(shareUrl);
-        showToast("Link do evento copiado para a área de transferência!", "success");
+        showToast("Link do evento copiado!", "success");
     } catch (e) {
         showToast(shareUrl);
     }
+});
+
+$("detailIcsBtn").addEventListener("click", () => {
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (ev) downloadEventICS(ev);
+});
+
+$("detailReportBtn").addEventListener("click", () => {
+    if (!detailEventId) return;
+    $("reportForm").reset();
+    openModal(reportModal);
 });
 
 $("detailEditBtn").addEventListener("click", () => {
@@ -1013,10 +1214,160 @@ $("detailEditBtn").addEventListener("click", () => {
     startEditEvent(detailEventId);
 });
 
+$("detailDuplicateBtn").addEventListener("click", () => {
+    if (!detailEventId) return;
+    closeModalEl(detailModal);
+    startDuplicateEvent(detailEventId);
+});
+
 $("detailDeleteBtn").addEventListener("click", () => {
     if (detailEventId) deleteEvent(detailEventId);
 });
 
+// ---------- Bilhete Digital / QR Code ----------
+function drawDeterministicQR(canvas, seedText) {
+    const ctx = canvas.getContext("2d");
+    const size = canvas.width;
+    const cells = 21;
+    const cellSize = Math.floor(size / cells);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "#0f172a";
+
+    let hash = 0;
+    for (let i = 0; i < seedText.length; i++) {
+        hash = ((hash << 5) - hash + seedText.charCodeAt(i)) | 0;
+    }
+
+    const drawFinder = (ox, oy) => {
+        ctx.fillRect(ox * cellSize, oy * cellSize, 7 * cellSize, 7 * cellSize);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect((ox + 1) * cellSize, (oy + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect((ox + 2) * cellSize, (oy + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+    };
+
+    drawFinder(0, 0);
+    drawFinder(cells - 7, 0);
+    drawFinder(0, cells - 7);
+
+    for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+            const inFinder = (r < 8 && c < 8) || (r < 8 && c >= cells - 8) || (r >= cells - 8 && c < 8);
+            if (inFinder) continue;
+            hash = (hash * 1664525 + 1013904223) | 0;
+            if ((hash >>> 24) & 1) {
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            }
+        }
+    }
+}
+
+function openEventTicket(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev || !currentUser || !currentProfile) return;
+
+    const code = `LS-${ev.id}-${currentUser.id.slice(0, 6).toUpperCase()}`;
+    $("ticketEventName").textContent = ev.name;
+    $("ticketDateTime").textContent = `📅 ${formatEventDate(ev)}`;
+    $("ticketLocation").textContent = `📍 ${ev.location} · ${districtLabel(ev.distrito)}`;
+    $("ticketCodeText").textContent = code;
+    $("ticketUserName").textContent = `Participante: ${currentProfile.full_name}`;
+    drawDeterministicQR($("ticketQrCanvas"), code);
+    openModal(ticketModal);
+}
+
+window.openEventTicket = openEventTicket;
+
+$("closeTicket").addEventListener("click", () => closeModalEl(ticketModal));
+ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) closeModalEl(ticketModal); });
+
+// ---------- Denúncias ----------
+$("closeReport").addEventListener("click", () => closeModalEl(reportModal));
+reportModal.addEventListener("mousedown", e => { if (e.target === reportModal) closeModalEl(reportModal); });
+
+$("reportForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !currentProfile || !detailEventId) return;
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (!ev) return;
+
+    const reason = `${$("reportReason").value}${ $("reportDetails").value.trim() ? " — " + $("reportDetails").value.trim() : "" }`;
+    const { error } = await supabaseClient.from("reports").insert([{
+        event_id: ev.id,
+        event_name: ev.name,
+        reporter_id: currentUser.id,
+        reporter_name: currentProfile.full_name,
+        reason
+    }]);
+
+    if (error) {
+        showToast("Erro ao enviar denúncia.", "error");
+        return;
+    }
+
+    closeModalEl(reportModal);
+    showToast("Denúncia enviada à equipa de moderação.", "success");
+});
+
+// ---------- Avaliações (Estrelas) ----------
+async function loadEventReviews(eventId) {
+    const ratingBadge = $("detailRatingBadge");
+    const listEl = $("detailReviewsList");
+
+    const { data, error } = await supabaseClient
+        .from("reviews")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+        ratingBadge.classList.add("hidden");
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem avaliações.</p>`;
+        return;
+    }
+
+    const avg = (data.reduce((s, r) => s + r.rating, 0) / data.length).toFixed(1);
+    ratingBadge.textContent = `⭐ ${avg} (${data.length})`;
+    ratingBadge.classList.remove("hidden");
+
+    listEl.innerHTML = data.map(r => `
+        <div class="comment-item">
+            <div class="comment-head">
+                <strong>${escapeHTML(r.user_name)}</strong>
+                <span>${"⭐".repeat(r.rating)}</span>
+            </div>
+            ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
+        </div>
+    `).join("");
+}
+
+$("reviewForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !currentProfile || !detailEventId) return;
+
+    const rating = Number($("reviewRating").value);
+    const comment = $("reviewText").value.trim();
+
+    const { error } = await supabaseClient.from("reviews").upsert({
+        event_id: detailEventId,
+        user_id: currentUser.id,
+        user_name: currentProfile.full_name,
+        rating,
+        comment
+    }, { onConflict: "event_id,user_id" });
+
+    if (error) {
+        showToast("Erro ao guardar avaliação.", "error");
+        return;
+    }
+
+    $("reviewText").value = "";
+    await loadEventReviews(detailEventId);
+    showToast("Avaliação registada!", "success");
+});
+
+// ---------- Inscritos e Comentários ----------
 async function loadEventAttendees(ev) {
     const listEl = $("detailAttendeesList");
     const countEl = $("detailAttendeesCount");
@@ -1050,12 +1401,7 @@ async function loadEventComments(eventId) {
         .eq("event_id", eventId)
         .order("created_at", { ascending: true });
 
-    if (error) {
-        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem comentários.</p>`;
-        return;
-    }
-
-    if (!data || data.length === 0) {
+    if (error || !data || data.length === 0) {
         listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda ninguém comentou. Deixa a primeira mensagem!</p>`;
         return;
     }
@@ -1082,19 +1428,27 @@ $("commentForm").addEventListener("submit", async e => {
     const content = input.value.trim();
     if (!content) return;
 
-    const { error } = await supabaseClient
-        .from("comments")
-        .insert([{
-            event_id: detailEventId,
-            user_id: currentUser.id,
-            user_name: currentProfile.full_name,
-            user_role: currentProfile.role,
-            content
-        }]);
+    const { error } = await supabaseClient.from("comments").insert([{
+        event_id: detailEventId,
+        user_id: currentUser.id,
+        user_name: currentProfile.full_name,
+        user_role: currentProfile.role,
+        content
+    }]);
 
     if (error) {
-        showToast("Erro ao publicar comentário. Verifica se a tabela comments foi criada.", "error");
+        showToast("Erro ao publicar comentário.", "error");
         return;
+    }
+
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (ev && ev.creatorId) {
+        await createNotification(
+            ev.creatorId,
+            ev.id,
+            `Novo comentário em "${ev.name}"`,
+            `${currentProfile.full_name}: ${content}`
+        );
     }
 
     input.value = "";
@@ -1103,11 +1457,7 @@ $("commentForm").addEventListener("submit", async e => {
 });
 
 window.deleteComment = async commentId => {
-    const { error } = await supabaseClient
-        .from("comments")
-        .delete()
-        .eq("id", commentId);
-
+    const { error } = await supabaseClient.from("comments").delete().eq("id", commentId);
     if (!error && detailEventId) {
         await loadEventComments(detailEventId);
         showToast("Comentário removido.");
@@ -1125,9 +1475,7 @@ categoryChips.addEventListener("click", e => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
     state.category = chip.dataset.category;
-    categoryChips.querySelectorAll(".chip").forEach(c => {
-        c.classList.toggle("active", c === chip);
-    });
+    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c === chip));
     filterEvents({ fit: true });
 });
 
@@ -1140,11 +1488,7 @@ radiusSlider.addEventListener("input", async () => {
     radiusValue.textContent = val >= 100 ? "Sem limite" : `${val} km`;
 
     if (val < 100 && !userPosition) {
-        try {
-            await locateUser();
-        } catch (err) {
-            showToast("Ativa a localização para usar o filtro por raio.", "error");
-        }
+        try { await locateUser(); } catch (err) { showToast("Ativa a localização para usar o raio.", "error"); }
     }
     filterEvents({ fit: true });
 });
@@ -1167,23 +1511,39 @@ favoritesToggle.addEventListener("click", () => {
     state.onlyFavorites = !state.onlyFavorites;
     favoritesToggle.setAttribute("aria-pressed", state.onlyFavorites);
     favoritesToggle.classList.toggle("on", state.onlyFavorites);
-    favoritesToggle.textContent = state.onlyFavorites ? "★ Só favoritos" : "☆ Só favoritos";
+    favoritesToggle.textContent = state.onlyFavorites ? "★ Favoritos" : "☆ Favoritos";
+    filterEvents({ fit: true });
+});
+
+freeOnlyToggle.addEventListener("click", () => {
+    state.onlyFree = !state.onlyFree;
+    freeOnlyToggle.setAttribute("aria-pressed", state.onlyFree);
+    freeOnlyToggle.classList.toggle("on", state.onlyFree);
+    filterEvents({ fit: true });
+});
+
+followingOnlyToggle.addEventListener("click", () => {
+    state.onlyFollowing = !state.onlyFollowing;
+    followingOnlyToggle.setAttribute("aria-pressed", state.onlyFollowing);
+    followingOnlyToggle.classList.toggle("on", state.onlyFollowing);
     filterEvents({ fit: true });
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    Object.assign(state, { search: "", category: "all", district: "all", period: "all", radius: 100, onlyFavorites: false });
+    Object.assign(state, {
+        search: "", category: "all", district: "all", period: "all",
+        radius: 100, onlyFavorites: false, onlyFree: false, onlyFollowing: false
+    });
     searchInput.value = "";
     districtFilter.value = "all";
     periodFilter.value = "all";
     radiusSlider.value = 100;
     radiusValue.textContent = "Sem limite";
-    favoritesToggle.setAttribute("aria-pressed", "false");
     favoritesToggle.classList.remove("on");
-    favoritesToggle.textContent = "☆ Só favoritos";
-    categoryChips.querySelectorAll(".chip").forEach(c => {
-        c.classList.toggle("active", c.dataset.category === "all");
-    });
+    favoritesToggle.textContent = "☆ Favoritos";
+    freeOnlyToggle.classList.remove("on");
+    followingOnlyToggle.classList.remove("on");
+    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.category === "all"));
     filterEvents({ fit: true });
 });
 
@@ -1203,7 +1563,7 @@ locationButton.addEventListener("click", async () => {
 });
 
 // ==========================================
-// MODAIS, CRIAÇÃO E EDIÇÃO DE EVENTOS
+// MODAIS, CRIAÇÃO, EDIÇÃO E DUPLICAÇÃO DE EVENTOS
 // ==========================================
 function openModal(el) {
     el.classList.remove("hidden");
@@ -1235,26 +1595,25 @@ function resetEventForm() {
     coordsText.classList.remove("ok");
 }
 
-function startEditEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !canManageEvent(ev)) return;
-
-    editingEventId = ev.id;
-    $("eventModalTitle").textContent = "Editar evento";
-    $("eventSubmitBtn").textContent = "Guardar alterações";
+function populateEventForm(ev, isEdit) {
+    editingEventId = isEdit ? ev.id : null;
+    $("eventModalTitle").textContent = isEdit ? "Editar evento" : "Duplicar evento";
+    $("eventSubmitBtn").textContent = isEdit ? "Guardar alterações" : "Publicar novo evento";
 
     $("eventName").value = ev.name;
     $("eventDescription").value = ev.description || "";
     $("eventCategory").value = ev.category;
-    $("eventDate").value = ev.date;
+    $("eventPrice").value = ev.price || "Gratuito";
+    $("eventDate").value = isEdit ? ev.date : "";
     $("eventTime").value = ev.time;
     $("eventLocation").value = ev.location;
     $("eventFormDistrict").value = ev.distrito;
     $("eventLimit").value = ev.maxParticipants || "";
+    $("eventExternalUrl").value = ev.externalUrl || "";
 
     pendingLocation = { lat: ev.latitude, lng: ev.longitude };
     setTempMarker(pendingLocation);
-    coordsText.textContent = `📍 Local atual (${ev.latitude.toFixed(4)}, ${ev.longitude.toFixed(4)})`;
+    coordsText.textContent = `📍 Local (${ev.latitude.toFixed(4)}, ${ev.longitude.toFixed(4)})`;
     coordsText.classList.add("ok");
 
     if (ev.image && ev.image !== DEFAULT_IMAGE) {
@@ -1268,6 +1627,16 @@ function startEditEvent(id) {
     openModal(modal);
 }
 
+function startEditEvent(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (ev && canManageEvent(ev)) populateEventForm(ev, true);
+}
+
+function startDuplicateEvent(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (ev) populateEventForm(ev, false);
+}
+
 window.startEditEvent = startEditEvent;
 
 closeModal.addEventListener("click", () => { closeEventModal(); resetEventForm(); });
@@ -1279,7 +1648,9 @@ aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) clo
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
+    if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
+    else if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
+    else if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
     else if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
     else if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
     else if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
@@ -1287,7 +1658,7 @@ document.addEventListener("keydown", e => {
     else if (!pickBanner.classList.contains("hidden")) stopPicking();
 });
 
-// Pesquisa de morada durante escolha no mapa (Nominatim OpenStreetMap)
+// Pesquisa de morada durante escolha no mapa
 async function searchAddressOnMap() {
     const query = $("pickAddressInput").value.trim();
     if (!query) return;
@@ -1300,9 +1671,7 @@ async function searchAddressOnMap() {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(query)}`);
         const results = await res.json();
         if (results && results.length > 0) {
-            const lat = parseFloat(results[0].lat);
-            const lng = parseFloat(results[0].lon);
-            flyToCoordinates(lng, lat, 16);
+            flyToCoordinates(parseFloat(results[0].lon), parseFloat(results[0].lat), 16);
             showToast("Local encontrado! Clica no ponto exato do mapa.");
         } else {
             showToast("Morada não encontrada em Portugal.", "error");
@@ -1317,10 +1686,7 @@ async function searchAddressOnMap() {
 
 $("pickAddressBtn").addEventListener("click", searchAddressOnMap);
 $("pickAddressInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        searchAddressOnMap();
-    }
+    if (e.key === "Enter") { e.preventDefault(); searchAddressOnMap(); }
 });
 
 function startPicking() {
@@ -1365,7 +1731,7 @@ eventImageInput.addEventListener("change", () => {
     imagePreview.classList.remove("hidden");
 });
 
-function resizeImage(file, maxSize = 800) {
+function resizeImageToBlob(file, maxSize = 900) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
@@ -1378,12 +1744,29 @@ function resizeImage(file, maxSize = 800) {
                 canvas.width = Math.round(img.width * scale);
                 canvas.height = Math.round(img.height * scale);
                 canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.78));
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+                canvas.toBlob(blob => resolve({ blob, dataUrl }), "image/jpeg", 0.8);
             };
             img.src = reader.result;
         };
         reader.readAsDataURL(file);
     });
+}
+
+async function uploadOrEncodeEventImage(file) {
+    const { blob, dataUrl } = await resizeImageToBlob(file);
+    try {
+        const fileName = `${currentUser.id}/${Date.now()}.jpg`;
+        const { error } = await supabaseClient.storage
+            .from("event-images")
+            .upload(fileName, blob, { contentType: "image/jpeg", upsert: true });
+
+        if (!error) {
+            const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
+            if (data?.publicUrl) return data.publicUrl;
+        }
+    } catch (e) {}
+    return dataUrl;
 }
 
 function showFormError(message) {
@@ -1399,9 +1782,8 @@ eventForm.addEventListener("submit", async e => {
         showFormError("Inicia sessão para publicar eventos.");
         return;
     }
-
     if (!pendingLocation) {
-        showFormError("Escolhe primeiro a localização no mapa (botão «Alterar no mapa»).");
+        showFormError("Escolhe primeiro a localização no mapa.");
         return;
     }
     if (!eventForm.checkValidity()) {
@@ -1409,26 +1791,64 @@ eventForm.addEventListener("submit", async e => {
         return;
     }
 
-    const existingEvent = editingEventId
-        ? events.find(x => String(x.id) === String(editingEventId))
-        : null;
+    const submitBtn = $("eventSubmitBtn");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "A guardar...";
 
-    let image = existingEvent ? existingEvent.image : DEFAULT_IMAGE;
-    const file = eventImageInput.files[0];
-    if (file) {
-        try {
-            image = await resizeImage(file);
-        } catch (err) {
-            showFormError(err.message);
+    try {
+        const existingEvent = editingEventId
+            ? events.find(x => String(x.id) === String(editingEventId))
+            : null;
+
+        let image = existingEvent ? existingEvent.image : DEFAULT_IMAGE;
+        const file = eventImageInput.files[0];
+        if (file) {
+            image = await uploadOrEncodeEventImage(file);
+        }
+
+        const maxPInput = $("eventLimit").value;
+        const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
+        const priceVal = $("eventPrice").value.trim() || "Gratuito";
+        const extUrlVal = sanitizeUrl($("eventExternalUrl").value);
+
+        if (editingEventId) {
+            const updatedData = {
+                name: $("eventName").value.trim(),
+                description: $("eventDescription").value.trim(),
+                category: $("eventCategory").value,
+                date: $("eventDate").value,
+                time: $("eventTime").value,
+                location: $("eventLocation").value.trim(),
+                distrito: $("eventFormDistrict").value,
+                latitude: pendingLocation.lat,
+                longitude: pendingLocation.lng,
+                image,
+                max_participants: maxParticipants,
+                price: priceVal,
+                external_url: extUrlVal
+            };
+
+            const { error } = await supabaseClient.from("events").update(updatedData).eq("id", editingEventId);
+            if (error) {
+                showFormError("Erro ao guardar alterações do evento.");
+                return;
+            }
+
+            const editedId = editingEventId;
+            closeEventModal();
+            resetEventForm();
+            await loadEventsFromSupabase();
+            setActive(editedId);
+            focusEvent(editedId);
+            showToast("Evento atualizado com sucesso!", "success");
             return;
         }
-    }
 
-    const maxPInput = $("eventLimit").value;
-    const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
+        const creatorType = currentProfile.role === "admin"
+            ? "Admin"
+            : (currentProfile.role === "business" ? (currentProfile.business_type || "Empresa") : "Utilizador");
 
-    if (editingEventId) {
-        const updatedData = {
+        const newEventData = {
             name: $("eventName").value.trim(),
             description: $("eventDescription").value.trim(),
             category: $("eventCategory").value,
@@ -1438,73 +1858,37 @@ eventForm.addEventListener("submit", async e => {
             distrito: $("eventFormDistrict").value,
             latitude: pendingLocation.lat,
             longitude: pendingLocation.lng,
-            image: image,
-            max_participants: maxParticipants
+            image,
+            max_participants: maxParticipants,
+            enrolled: 0,
+            price: priceVal,
+            external_url: extUrlVal,
+            creator_id: currentProfile.id,
+            creator_name: currentProfile.full_name,
+            creator_type: creatorType
         };
 
-        const { error } = await supabaseClient
-            .from("events")
-            .update(updatedData)
-            .eq("id", editingEventId);
-
+        const { data, error } = await supabaseClient.from("events").insert([newEventData]).select();
         if (error) {
-            showFormError("Erro ao guardar alterações do evento.");
-            console.error(error);
+            showFormError("Erro ao publicar o evento na base de dados.");
             return;
         }
 
-        const editedId = editingEventId;
         closeEventModal();
         resetEventForm();
         await loadEventsFromSupabase();
-        setActive(editedId);
-        focusEvent(editedId);
-        showToast("Evento atualizado com sucesso!", "success");
-        return;
+
+        if (data && data[0]) {
+            setActive(data[0].id);
+            focusEvent(data[0].id);
+        }
+        showToast("Evento publicado com sucesso!", "success");
+    } catch (err) {
+        showFormError(err.message || "Erro inesperado ao processar o evento.");
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = editingEventId ? "Guardar alterações" : "Publicar evento";
     }
-
-    const creatorType = currentProfile.role === "admin"
-        ? "Admin"
-        : (currentProfile.role === "business" ? (currentProfile.business_type || "Empresa") : "Utilizador");
-
-    const newEventData = {
-        name: $("eventName").value.trim(),
-        description: $("eventDescription").value.trim(),
-        category: $("eventCategory").value,
-        date: $("eventDate").value,
-        time: $("eventTime").value,
-        location: $("eventLocation").value.trim(),
-        distrito: $("eventFormDistrict").value,
-        latitude: pendingLocation.lat,
-        longitude: pendingLocation.lng,
-        image: image,
-        max_participants: maxParticipants,
-        enrolled: 0,
-        creator_id: currentProfile.id,
-        creator_name: currentProfile.full_name,
-        creator_type: creatorType
-    };
-
-    const { data, error } = await supabaseClient
-        .from("events")
-        .insert([newEventData])
-        .select();
-
-    if (error) {
-        showFormError("Erro ao publicar o evento na base de dados.");
-        console.error(error);
-        return;
-    }
-
-    closeEventModal();
-    resetEventForm();
-    await loadEventsFromSupabase();
-
-    if (data && data[0]) {
-        setActive(data[0].id);
-        focusEvent(data[0].id);
-    }
-    showToast("Evento publicado com sucesso!", "success");
 });
 
 // Arranque
