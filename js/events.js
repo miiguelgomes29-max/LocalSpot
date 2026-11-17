@@ -49,6 +49,7 @@ const INITIAL_EVENTS = [
         image: DEFAULT_IMAGE,
         max_participants: 24,
         enrolled: 8,
+        price: "Gratuito",
         creator_name: "LocalSpot Comunidade",
         creator_type: "Associação"
     }
@@ -62,8 +63,21 @@ function escapeHTML(value) {
     }[ch]));
 }
 
+function sanitizeUrl(url) {
+    if (!url) return "";
+    const trimmed = String(url).trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(trimmed)) return "https://" + trimmed;
+    return "";
+}
+
 function normalizeText(value) {
     return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isFreePrice(price) {
+    const p = normalizeText(price || "gratuito").trim();
+    return !p || p === "gratuito" || p === "gratis" || p === "0" || p === "0€" || p === "0 €";
 }
 
 function eventDateTime(ev) {
@@ -111,4 +125,34 @@ function buildGoogleCalendarUrl(ev) {
         location: `${ev.location}, ${districtLabel(ev.distrito)}`
     });
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function downloadEventICS(ev) {
+    const start = eventDateTime(ev);
+    if (isNaN(start)) return;
+    const end = new Date(start.getTime() + 2 * 3600000);
+    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const ics = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//LocalSpot//PT",
+        "BEGIN:VEVENT",
+        `UID:localspot-${ev.id}@localspot.app`,
+        `DTSTAMP:${fmt(new Date())}`,
+        `DTSTART:${fmt(start)}`,
+        `DTEND:${fmt(end)}`,
+        `SUMMARY:${ev.name.replace(/\n/g, " ")}`,
+        `DESCRIPTION:${(ev.description || "Evento no LocalSpot").replace(/\n/g, " ")}`,
+        `LOCATION:${ev.location}, ${districtLabel(ev.distrito)}`,
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${ev.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
