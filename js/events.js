@@ -97,3 +97,18 @@ function nearestDistrict(lat, lng) {
     });
     return best.value;
 }
+
+function buildGoogleCalendarUrl(ev) {
+    const start = eventDateTime(ev);
+    if (isNaN(start)) return "https://calendar.google.com";
+    const end = new Date(start.getTime() + 2 * 3600000);
+    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const params = new URLSearchParams({
+        action: "TEMPLATE",
+        text: ev.name,
+        dates: `${fmt(start)}/${fmt(end)}`,
+        details: ev.description || "Evento no LocalSpot",
+        location: `${ev.location}, ${districtLabel(ev.distrito)}`
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
