@@ -25,8 +25,11 @@ const adminPanelBtn = $("adminPanelBtn");
 const logoutButton = $("logoutButton");
 const addEventButton = $("addEventButton");
 const adminModal = $("adminModal");
+const profileModal = $("profileModal");
 
 // Elementos de Filtros e Lista
+const mainEl = $("main");
+const mobileViewToggle = $("mobileViewToggle");
 const searchInput = $("searchInput");
 const categoryChips = $("categoryChips");
 const districtFilter = $("districtFilter");
@@ -51,6 +54,7 @@ const coordsText = $("selectedCoordinates");
 const formError = $("formError");
 const changeLocationButton = $("changeLocationButton");
 const aboutModal = $("aboutModal");
+const detailModal = $("detailModal");
 const pickBanner = $("pickBanner");
 
 const STORAGE_FAVS = "localspot_favorites";
@@ -77,10 +81,12 @@ function saveJSON(key, value) {
 const state = { search: "", category: "all", district: "all", period: "all", radius: 100, sort: "date", onlyFavorites: false };
 let currentUser = null;
 let currentProfile = null;
-let favorites = new Set(loadJSON(STORAGE_FAVS, []));
+let favorites = new Set(loadJSON(STORAGE_FAVS, []).map(String));
 let myEnrollments = new Set();
 let activeId = null;
 let pendingLocation = null;
+let editingEventId = null;
+let detailEventId = null;
 let currentList = [];
 
 // ---------- Toast Notifications ----------
@@ -119,9 +125,23 @@ function translateAuthError(error) {
 }
 
 // ==========================================
+// ALTERNAR VISTA MOBILE (LISTA / MAPA)
+// ==========================================
+function setMobileView(view) {
+    mainEl.dataset.view = view;
+    mobileViewToggle.textContent = view === "map" ? "📋 Ver Lista" : "🗺️ Ver Mapa";
+    if (view === "map" && typeof map !== "undefined") {
+        setTimeout(() => map.resize(), 60);
+    }
+}
+
+mobileViewToggle.addEventListener("click", () => {
+    setMobileView(mainEl.dataset.view === "map" ? "list" : "map");
+});
+
+// ==========================================
 // SISTEMA DE AUTENTICAÇÃO E PERFIS
 // ==========================================
-
 tabLogin.addEventListener("click", () => {
     tabLogin.classList.add("active");
     tabRegister.classList.remove("active");
@@ -171,7 +191,7 @@ loginForm.addEventListener("submit", async e => {
             showToast("Sessão iniciada com sucesso!", "success");
         }
     } catch (err) {
-        errEl.textContent = "Falha de ligação ao servidor. Verifica a internet ou o servidor local.";
+        errEl.textContent = "Falha de ligação ao servidor.";
         errEl.classList.remove("hidden");
     } finally {
         btn.disabled = false;
@@ -245,6 +265,7 @@ logoutButton.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
     currentUser = null;
     currentProfile = null;
+    myEnrollments.clear();
     userBadge.classList.add("hidden");
     adminPanelBtn.classList.add("hidden");
     logoutButton.classList.add("hidden");
@@ -252,11 +273,9 @@ logoutButton.addEventListener("click", async () => {
     showToast("Sessão terminada.");
 });
 
-// Carregar Perfil e Aplicar Permissões
+// Carregar Perfil e Permissões
 async function handleAuthenticatedSession(user) {
     currentUser = user;
-    myEnrollments = new Set(loadJSON(`localspot_enrolled_${user.id}`, []));
-
     const meta = user.user_metadata || {};
     let profile = null;
 
@@ -299,7 +318,10 @@ async function handleAuthenticatedSession(user) {
     applyRoleUI();
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
+
+    await loadMyEnrollments();
     await loadEventsFromSupabase();
+    checkSharedEventUrl();
 }
 
 function applyRoleUI() {
@@ -336,6 +358,86 @@ async function initAuth() {
 }
 
 // ==========================================
+// MODAL DE PERFIL ("A MINHA CONTA")
+// ==========================================
+userBadge.addEventListener("click", () => {
+    if (!currentProfile) return;
+    $("profileEmailDisplay").textContent = currentProfile.email;
+    $("profileNameInput").value = currentProfile.full_name;
+    renderProfileLists();
+    openModal(profileModal);
+});
+
+$("closeProfile").addEventListener("click", () => closeModalEl(profileModal));
+profileModal.addEventListener("mousedown", e => { if (e.target === profileModal) closeModalEl(profileModal); });
+
+$("tabMyEnrollments").addEventListener("click", () => {
+    $("tabMyEnrollments").classList.add("active");
+    $("tabMyCreated").classList.remove("active");
+    $("profileEnrolledList").classList.remove("hidden");
+    $("profileCreatedList").classList.add("hidden");
+});
+
+$("tabMyCreated").addEventListener("click", () => {
+    $("tabMyCreated").classList.add("active");
+    $("tabMyEnrollments").classList.remove("active");
+    $("profileCreatedList").classList.remove("hidden");
+    $("profileEnrolledList").classList.add("hidden");
+});
+
+$("profileUpdateForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const newName = $("profileNameInput").value.trim();
+    if (!newName || !currentProfile) return;
+
+    const { error } = await supabaseClient
+        .from("profiles")
+        .update({ full_name: newName })
+        .eq("id", currentProfile.id);
+
+    if (error) {
+        showToast("Erro ao atualizar o nome do perfil.", "error");
+        return;
+    }
+
+    currentProfile.full_name = newName;
+    applyRoleUI();
+    showToast("Perfil atualizado com sucesso!", "success");
+});
+
+function renderProfileLists() {
+    const enrolledEvents = events.filter(ev => myEnrollments.has(String(ev.id)));
+    const createdEvents = events.filter(ev => ev.creatorId === currentProfile.id);
+
+    $("profileEnrolledList").innerHTML = enrolledEvents.length
+        ? enrolledEvents.map(ev => `
+            <div class="profile-event-item">
+                <div>
+                    <strong>${escapeHTML(ev.name)}</strong>
+                    <span>📅 ${escapeHTML(formatEventDate(ev))} · 📍 ${escapeHTML(ev.location)}</span>
+                </div>
+                <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
+            </div>
+        `).join("")
+        : `<p class="muted" style="font-size:13px;">Ainda não estás inscrito em nenhum evento.</p>`;
+
+    $("profileCreatedList").innerHTML = createdEvents.length
+        ? createdEvents.map(ev => `
+            <div class="profile-event-item">
+                <div>
+                    <strong>${escapeHTML(ev.name)}</strong>
+                    <span>👥 ${ev.enrolled || 0}${ev.maxParticipants ? "/" + ev.maxParticipants : ""} inscritos · ${escapeHTML(formatEventDate(ev))}</span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.startEditEvent('${ev.id}')">✏️</button>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Ver</button>
+                </div>
+            </div>
+        `).join("")
+        : `<p class="muted" style="font-size:13px;">Ainda não criaste nenhum evento.</p>`;
+}
+
+// ==========================================
 // PAINEL DE ADMINISTRAÇÃO
 // ==========================================
 adminPanelBtn.addEventListener("click", async () => {
@@ -344,10 +446,8 @@ adminPanelBtn.addEventListener("click", async () => {
     await loadAdminDashboard();
 });
 
-$("closeAdmin").addEventListener("click", () => {
-    adminModal.classList.add("hidden");
-    adminModal.setAttribute("aria-hidden", "true");
-});
+$("closeAdmin").addEventListener("click", () => closeModalEl(adminModal));
+adminModal.addEventListener("mousedown", e => { if (e.target === adminModal) closeModalEl(adminModal); });
 
 async function loadAdminDashboard() {
     const listEl = $("adminUsersList");
@@ -411,7 +511,7 @@ $("adminUsersList").addEventListener("change", async e => {
 });
 
 // ==========================================
-// SUPABASE: CARREGAR EVENTOS
+// SUPABASE: CARREGAR EVENTOS E INSCRIÇÕES
 // ==========================================
 function mapDbEvent(item, index = 0) {
     return {
@@ -434,10 +534,27 @@ function mapDbEvent(item, index = 0) {
     };
 }
 
+async function loadMyEnrollments() {
+    if (!currentUser) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from("enrollments")
+            .select("event_id")
+            .eq("user_id", currentUser.id);
+
+        if (!error && data) {
+            myEnrollments = new Set(data.map(r => String(r.event_id)));
+            saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
+            return;
+        }
+    } catch (e) {}
+    myEnrollments = new Set(loadJSON(`localspot_enrolled_${currentUser.id}`, []).map(String));
+}
+
 async function loadEventsFromSupabase() {
     let { data, error } = await supabaseClient
-        .from('events')
-        .select('*');
+        .from("events")
+        .select("*");
 
     if (error) {
         console.error(error);
@@ -450,7 +567,7 @@ async function loadEventsFromSupabase() {
     if ((!data || data.length === 0) && INITIAL_EVENTS.length > 0 && !localStorage.getItem("localspot_seeded")) {
         localStorage.setItem("localspot_seeded", "1");
         const { data: seeded } = await supabaseClient
-            .from('events')
+            .from("events")
             .insert(INITIAL_EVENTS)
             .select();
         if (seeded && seeded.length > 0) {
@@ -463,6 +580,18 @@ async function loadEventsFromSupabase() {
     sourceList.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
 
     filterEvents({ fit: true });
+}
+
+function checkSharedEventUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get("evento");
+    if (!sharedId) return;
+    const ev = events.find(x => String(x.id) === String(sharedId));
+    if (ev) {
+        setActive(ev.id, true);
+        focusEvent(ev.id);
+        openEventDetails(ev.id);
+    }
 }
 
 // ---------- Preencher controlos ----------
@@ -485,17 +614,28 @@ function setupControls() {
     $("eventDate").min = today;
 }
 
-// ---------- Inscrição em Atividades ----------
+// ---------- Inscrição Real em Atividades ----------
 async function toggleEnrollment(id) {
-    if (!currentUser) return;
-    const ev = events.find(x => x.id === id);
+    if (!currentUser || !currentProfile) return;
+    const ev = events.find(x => String(x.id) === String(id));
     if (!ev) return;
 
-    const isEnrolled = myEnrollments.has(id);
+    const idKey = String(ev.id);
+    const isEnrolled = myEnrollments.has(idKey);
     let newEnrolledCount = ev.enrolled || 0;
 
     if (isEnrolled) {
-        myEnrollments.delete(id);
+        const { error: delErr } = await supabaseClient
+            .from("enrollments")
+            .delete()
+            .eq("event_id", ev.id)
+            .eq("user_id", currentUser.id);
+
+        if (delErr) {
+            console.warn("Tabela enrollments:", delErr.message);
+        }
+
+        myEnrollments.delete(idKey);
         newEnrolledCount = Math.max(0, newEnrolledCount - 1);
     } else {
         const isFull = ev.maxParticipants && newEnrolledCount >= ev.maxParticipants;
@@ -503,17 +643,30 @@ async function toggleEnrollment(id) {
             showToast("Vagas esgotadas para este evento!", "error");
             return;
         }
-        myEnrollments.add(id);
+
+        const { error: insErr } = await supabaseClient
+            .from("enrollments")
+            .insert([{
+                event_id: ev.id,
+                user_id: currentUser.id,
+                user_name: currentProfile.full_name
+            }]);
+
+        if (insErr) {
+            console.warn("Tabela enrollments:", insErr.message);
+        }
+
+        myEnrollments.add(idKey);
         newEnrolledCount += 1;
     }
 
     const { error } = await supabaseClient
-        .from('events')
+        .from("events")
         .update({ enrolled: newEnrolledCount })
-        .eq('id', id);
+        .eq("id", ev.id);
 
     if (error) {
-        showToast("Erro ao atualizar a inscrição na base de dados.", "error");
+        showToast("Erro ao atualizar as vagas na base de dados.", "error");
         return;
     }
 
@@ -525,7 +678,11 @@ async function toggleEnrollment(id) {
     } else {
         showToast(`Inscrição confirmada em "${ev.name}"!`, "success");
     }
+
     filterEvents();
+    if (!detailModal.classList.contains("hidden") && String(detailEventId) === idKey) {
+        openEventDetails(ev.id);
+    }
 }
 
 // ---------- Filtros & Ordenação ----------
@@ -578,7 +735,7 @@ function getFilteredEvents() {
             (state.district === "all" || ev.distrito === state.district) &&
             matchesPeriod(ev) &&
             matchesRadius(ev) &&
-            (!state.onlyFavorites || favorites.has(ev.id));
+            (!state.onlyFavorites || favorites.has(String(ev.id)));
     });
     return sortEvents(filtered);
 }
@@ -601,6 +758,13 @@ function formatKm(km) {
     return km < 10 ? `${km.toFixed(1).replace(".", ",")} km` : `${Math.round(km)} km`;
 }
 
+function canManageEvent(ev) {
+    return currentProfile && (
+        currentProfile.role === "admin" ||
+        (ev.creatorId && ev.creatorId === currentProfile.id)
+    );
+}
+
 function displayEvents(list) {
     eventsList.innerHTML = "";
     eventCount.textContent = list.length;
@@ -611,8 +775,8 @@ function displayEvents(list) {
     list.forEach(ev => {
         const cat = CATEGORIES[ev.category];
         const km = distanceOf(ev);
-        const fav = favorites.has(ev.id);
-        const enrolled = myEnrollments.has(ev.id);
+        const fav = favorites.has(String(ev.id));
+        const enrolled = myEnrollments.has(String(ev.id));
         const past = isPast(ev);
 
         const currentEnrolled = ev.enrolled || 0;
@@ -631,12 +795,9 @@ function displayEvents(list) {
             } else {
                 enrollBtnHtml = `<button type="button" class="register-btn" data-action="enroll">✋ Inscrever-me</button>`;
             }
+        } else {
+            enrollBtnHtml = `<button type="button" class="register-btn" disabled>Terminado</button>`;
         }
-
-        const canDelete = currentProfile && (
-            currentProfile.role === "admin" ||
-            (ev.creatorId && ev.creatorId === currentProfile.id)
-        );
 
         let organizerBadge = "";
         if (ev.creatorName) {
@@ -646,8 +807,15 @@ function displayEvents(list) {
             organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
         }
 
+        const ownerBar = canManageEvent(ev)
+            ? `<div class="owner-card-bar">
+                    <button type="button" class="edit-btn" data-action="edit">✏️ Editar</button>
+                    <button type="button" class="delete-btn" data-action="delete">🗑 Apagar</button>
+               </div>`
+            : "";
+
         const card = document.createElement("article");
-        card.className = "event-card" + (past ? " past" : "") + (ev.id === activeId ? " active" : "");
+        card.className = "event-card" + (past ? " past" : "") + (String(ev.id) === String(activeId) ? " active" : "");
         card.dataset.id = ev.id;
         card.tabIndex = 0;
 
@@ -659,7 +827,7 @@ function displayEvents(list) {
                 <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav">${fav ? "★" : "☆"}</button>
             </div>
             <div class="event-meta">
-                <span class="category" style="--pin:${cat ? cat.color : "#3b82f6"}">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
+                <span class="category">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
                 ${km !== null ? `<span class="distance">${formatKm(km)}</span>` : ""}
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
@@ -668,9 +836,11 @@ function displayEvents(list) {
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
             
             <div class="registration-info">👥 ${vagasLabel}</div>
-            ${enrollBtnHtml}
-
-            ${canDelete ? `<button type="button" class="delete-btn" data-action="delete">🗑 Apagar evento</button>` : ""}
+            <div class="card-actions-grid">
+                ${enrollBtnHtml}
+                <button type="button" class="details-btn" data-action="details">Detalhes</button>
+            </div>
+            ${ownerBar}
         `;
         frag.appendChild(card);
     });
@@ -681,7 +851,7 @@ function displayEvents(list) {
 function setActive(id, scroll = true) {
     activeId = id;
     eventsList.querySelectorAll(".event-card").forEach(c => {
-        const on = Number(c.dataset.id) === id;
+        const on = String(c.dataset.id) === String(id);
         c.classList.toggle("active", on);
         if (on && scroll) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
@@ -689,19 +859,24 @@ function setActive(id, scroll = true) {
 
 function openEventOnMap(id) {
     setActive(id, false);
+    if (window.innerWidth <= 820) setMobileView("map");
     focusEvent(id);
 }
 
 eventsList.addEventListener("click", e => {
     const card = e.target.closest(".event-card");
     if (!card) return;
-    const id = Number(card.dataset.id);
+    const id = card.dataset.id;
     const action = e.target.closest("[data-action]")?.dataset.action;
 
     if (action === "fav") {
         toggleFavorite(id);
     } else if (action === "enroll") {
         toggleEnrollment(id);
+    } else if (action === "details") {
+        openEventDetails(id);
+    } else if (action === "edit") {
+        startEditEvent(id);
     } else if (action === "delete") {
         deleteEvent(id);
     } else {
@@ -712,26 +887,27 @@ eventsList.addEventListener("click", e => {
 eventsList.addEventListener("keydown", e => {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("event-card")) {
         e.preventDefault();
-        openEventOnMap(Number(e.target.dataset.id));
+        openEventOnMap(e.target.dataset.id);
     }
 });
 
 window.onEventMarkerClick = id => setActive(id, true);
 
 function toggleFavorite(id) {
-    if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+    const key = String(id);
+    if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
     saveJSON(STORAGE_FAVS, [...favorites]);
     filterEvents();
 }
 
 async function deleteEvent(id) {
-    const ev = events.find(x => x.id === id);
+    const ev = events.find(x => String(x.id) === String(id));
     if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
 
     const { error } = await supabaseClient
-        .from('events')
+        .from("events")
         .delete()
-        .eq('id', id);
+        .eq("id", ev.id);
 
     if (error) {
         showToast("Erro ao apagar o evento da base de dados.", "error");
@@ -739,15 +915,206 @@ async function deleteEvent(id) {
     }
 
     events.splice(events.indexOf(ev), 1);
-    favorites.delete(id);
-    myEnrollments.delete(id);
+    favorites.delete(String(ev.id));
+    myEnrollments.delete(String(ev.id));
     saveJSON(STORAGE_FAVS, [...favorites]);
     if (currentUser) saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
+    if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
     filterEvents();
     showToast("Evento apagado com sucesso.");
 }
 
-// ---------- Event Listeners ----------
+// ==========================================
+// MODAL DE DETALHES, INSCRITOS E COMENTÁRIOS
+// ==========================================
+async function openEventDetails(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
+
+    detailEventId = ev.id;
+    const cat = CATEGORIES[ev.category];
+    const past = isPast(ev);
+    const enrolled = myEnrollments.has(String(ev.id));
+    const currentEnrolled = ev.enrolled || 0;
+    const max = ev.maxParticipants;
+    const isFull = max && currentEnrolled >= max;
+
+    const imgEl = $("detailImage");
+    imgEl.src = ev.image || DEFAULT_IMAGE;
+    imgEl.onerror = () => { imgEl.src = DEFAULT_IMAGE; };
+
+    $("detailCategory").textContent = cat ? `${cat.emoji} ${cat.label}` : ev.category;
+
+    const orgEl = $("detailOrganizer");
+    if (ev.creatorName) {
+        const isNormal = ev.creatorType === "Utilizador";
+        orgEl.textContent = `${isNormal ? "👤" : "🏢"} ${ev.creatorName}`;
+        orgEl.classList.toggle("user-tag", isNormal);
+        orgEl.classList.remove("hidden");
+    } else {
+        orgEl.classList.add("hidden");
+    }
+
+    $("detailTitle").textContent = ev.name;
+    $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
+    $("detailDateTime").textContent = formatEventDate(ev);
+    $("detailLocation").textContent = `${ev.location} · ${districtLabel(ev.distrito)}`;
+    $("detailVacancies").textContent = max ? `${currentEnrolled} / ${max} vagas` : `${currentEnrolled} inscritos (ilimitado)`;
+
+    const enrollBtn = $("detailEnrollBtn");
+    enrollBtn.disabled = false;
+    enrollBtn.classList.remove("registered");
+    if (past) {
+        enrollBtn.textContent = "Evento terminado";
+        enrollBtn.disabled = true;
+    } else if (enrolled) {
+        enrollBtn.textContent = "✓ Inscrito (Cancelar)";
+        enrollBtn.classList.add("registered");
+    } else if (isFull) {
+        enrollBtn.textContent = "Esgotado";
+        enrollBtn.disabled = true;
+    } else {
+        enrollBtn.textContent = "✋ Inscrever-me";
+    }
+
+    $("detailCalendarBtn").href = buildGoogleCalendarUrl(ev);
+    $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
+
+    const ownerActions = $("detailOwnerActions");
+    ownerActions.classList.toggle("hidden", !canManageEvent(ev));
+
+    openModal(detailModal);
+    await Promise.all([loadEventAttendees(ev), loadEventComments(ev.id)]);
+}
+
+window.openEventDetails = openEventDetails;
+
+$("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
+detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) closeModalEl(detailModal); });
+
+$("detailEnrollBtn").addEventListener("click", () => {
+    if (detailEventId) toggleEnrollment(detailEventId);
+});
+
+$("detailShareBtn").addEventListener("click", async () => {
+    if (!detailEventId) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?evento=${detailEventId}`;
+    try {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Link do evento copiado para a área de transferência!", "success");
+    } catch (e) {
+        showToast(shareUrl);
+    }
+});
+
+$("detailEditBtn").addEventListener("click", () => {
+    if (!detailEventId) return;
+    closeModalEl(detailModal);
+    startEditEvent(detailEventId);
+});
+
+$("detailDeleteBtn").addEventListener("click", () => {
+    if (detailEventId) deleteEvent(detailEventId);
+});
+
+async function loadEventAttendees(ev) {
+    const listEl = $("detailAttendeesList");
+    const countEl = $("detailAttendeesCount");
+    countEl.textContent = ev.enrolled || 0;
+    listEl.innerHTML = `<span class="muted" style="font-size:12px;">A carregar inscritos...</span>`;
+
+    const { data, error } = await supabaseClient
+        .from("enrollments")
+        .select("user_name")
+        .eq("event_id", ev.id)
+        .order("created_at", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        listEl.innerHTML = (ev.enrolled || 0) > 0
+            ? `<span class="attendee-pill">👥 ${ev.enrolled} participantes confirmados</span>`
+            : `<span class="muted" style="font-size:12.5px;">Sê o primeiro a inscrever-te neste evento.</span>`;
+        return;
+    }
+
+    countEl.textContent = Math.max(data.length, ev.enrolled || 0);
+    listEl.innerHTML = data.map(row => `<span class="attendee-pill">👤 ${escapeHTML(row.user_name)}</span>`).join("");
+}
+
+async function loadEventComments(eventId) {
+    const listEl = $("detailCommentsList");
+    listEl.innerHTML = `<p class="muted" style="font-size:12px;">A carregar comentários...</p>`;
+
+    const { data, error } = await supabaseClient
+        .from("comments")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem comentários.</p>`;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda ninguém comentou. Deixa a primeira mensagem!</p>`;
+        return;
+    }
+
+    listEl.innerHTML = data.map(c => {
+        const canDel = currentProfile && (currentProfile.role === "admin" || c.user_id === currentProfile.id);
+        const dateStr = new Date(c.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        return `
+            <div class="comment-item">
+                <div class="comment-head">
+                    <strong>${escapeHTML(c.user_name)}</strong>
+                    <span class="muted">${dateStr} ${canDel ? `<button type="button" class="delete-btn" style="margin:0 0 0 6px;" onclick="window.deleteComment(${c.id})">×</button>` : ""}</span>
+                </div>
+                <p>${escapeHTML(c.content)}</p>
+            </div>
+        `;
+    }).join("");
+}
+
+$("commentForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !currentProfile || !detailEventId) return;
+    const input = $("commentInput");
+    const content = input.value.trim();
+    if (!content) return;
+
+    const { error } = await supabaseClient
+        .from("comments")
+        .insert([{
+            event_id: detailEventId,
+            user_id: currentUser.id,
+            user_name: currentProfile.full_name,
+            user_role: currentProfile.role,
+            content
+        }]);
+
+    if (error) {
+        showToast("Erro ao publicar comentário. Verifica se a tabela comments foi criada.", "error");
+        return;
+    }
+
+    input.value = "";
+    await loadEventComments(detailEventId);
+    showToast("Comentário publicado!", "success");
+});
+
+window.deleteComment = async commentId => {
+    const { error } = await supabaseClient
+        .from("comments")
+        .delete()
+        .eq("id", commentId);
+
+    if (!error && detailEventId) {
+        await loadEventComments(detailEventId);
+        showToast("Comentário removido.");
+    }
+};
+
+// ---------- Event Listeners de Filtros ----------
 let searchTimer;
 searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
@@ -835,7 +1202,9 @@ locationButton.addEventListener("click", async () => {
     }
 });
 
-// ---------- Modais ----------
+// ==========================================
+// MODAIS, CRIAÇÃO E EDIÇÃO DE EVENTOS
+// ==========================================
 function openModal(el) {
     el.classList.remove("hidden");
     el.setAttribute("aria-hidden", "false");
@@ -843,13 +1212,20 @@ function openModal(el) {
     if (focusable) setTimeout(() => focusable.focus(), 50);
 }
 
+function closeModalEl(el) {
+    el.classList.add("hidden");
+    el.setAttribute("aria-hidden", "true");
+}
+
 function closeEventModal() {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
+    closeModalEl(modal);
 }
 
 function resetEventForm() {
     eventForm.reset();
+    editingEventId = null;
+    $("eventModalTitle").textContent = "Adicionar evento";
+    $("eventSubmitBtn").textContent = "Publicar evento";
     imagePreview.classList.add("hidden");
     imagePreview.removeAttribute("src");
     formError.classList.add("hidden");
@@ -859,38 +1235,100 @@ function resetEventForm() {
     coordsText.classList.remove("ok");
 }
 
+function startEditEvent(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev || !canManageEvent(ev)) return;
+
+    editingEventId = ev.id;
+    $("eventModalTitle").textContent = "Editar evento";
+    $("eventSubmitBtn").textContent = "Guardar alterações";
+
+    $("eventName").value = ev.name;
+    $("eventDescription").value = ev.description || "";
+    $("eventCategory").value = ev.category;
+    $("eventDate").value = ev.date;
+    $("eventTime").value = ev.time;
+    $("eventLocation").value = ev.location;
+    $("eventFormDistrict").value = ev.distrito;
+    $("eventLimit").value = ev.maxParticipants || "";
+
+    pendingLocation = { lat: ev.latitude, lng: ev.longitude };
+    setTempMarker(pendingLocation);
+    coordsText.textContent = `📍 Local atual (${ev.latitude.toFixed(4)}, ${ev.longitude.toFixed(4)})`;
+    coordsText.classList.add("ok");
+
+    if (ev.image && ev.image !== DEFAULT_IMAGE) {
+        imagePreview.src = ev.image;
+        imagePreview.classList.remove("hidden");
+    } else {
+        imagePreview.classList.add("hidden");
+    }
+
+    formError.classList.add("hidden");
+    openModal(modal);
+}
+
+window.startEditEvent = startEditEvent;
+
 closeModal.addEventListener("click", () => { closeEventModal(); resetEventForm(); });
 modal.addEventListener("mousedown", e => { if (e.target === modal) { closeEventModal(); resetEventForm(); } });
 
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
-$("closeAbout").addEventListener("click", () => {
-    aboutModal.classList.add("hidden");
-    aboutModal.setAttribute("aria-hidden", "true");
-});
-aboutModal.addEventListener("mousedown", e => {
-    if (e.target === aboutModal) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
-});
+$("closeAbout").addEventListener("click", () => closeModalEl(aboutModal));
+aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) closeModalEl(aboutModal); });
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
-    else if (!aboutModal.classList.contains("hidden")) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
-    else if (!adminModal.classList.contains("hidden")) {
-        adminModal.classList.add("hidden");
-        adminModal.setAttribute("aria-hidden", "true");
-    }
+    else if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
+    else if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
+    else if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
+    else if (!adminModal.classList.contains("hidden")) closeModalEl(adminModal);
     else if (!pickBanner.classList.contains("hidden")) stopPicking();
+});
+
+// Pesquisa de morada durante escolha no mapa (Nominatim OpenStreetMap)
+async function searchAddressOnMap() {
+    const query = $("pickAddressInput").value.trim();
+    if (!query) return;
+
+    const btn = $("pickAddressBtn");
+    btn.disabled = true;
+    btn.textContent = "...";
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+        if (results && results.length > 0) {
+            const lat = parseFloat(results[0].lat);
+            const lng = parseFloat(results[0].lon);
+            flyToCoordinates(lng, lat, 16);
+            showToast("Local encontrado! Clica no ponto exato do mapa.");
+        } else {
+            showToast("Morada não encontrada em Portugal.", "error");
+        }
+    } catch (e) {
+        showToast("Erro ao pesquisar morada.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Ir";
+    }
+}
+
+$("pickAddressBtn").addEventListener("click", searchAddressOnMap);
+$("pickAddressInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        searchAddressOnMap();
+    }
 });
 
 function startPicking() {
     closeEventModal();
+    if (window.innerWidth <= 820) setMobileView("map");
     pickBanner.classList.remove("hidden");
+    $("pickAddressInput").focus();
+
     pickLocation(latlng => {
         pickBanner.classList.add("hidden");
         pendingLocation = { lat: latlng.lat, lng: latlng.lng };
@@ -910,12 +1348,14 @@ function stopPicking() {
 
 addEventButton.addEventListener("click", () => {
     if (!currentProfile) return;
-    if (pendingLocation) openModal(modal); else startPicking();
+    resetEventForm();
+    startPicking();
 });
+
 changeLocationButton.addEventListener("click", startPicking);
 $("cancelPick").addEventListener("click", () => {
     stopPicking();
-    if (pendingLocation) openModal(modal);
+    if (pendingLocation || editingEventId) openModal(modal);
 });
 
 eventImageInput.addEventListener("change", () => {
@@ -969,7 +1409,11 @@ eventForm.addEventListener("submit", async e => {
         return;
     }
 
-    let image = DEFAULT_IMAGE;
+    const existingEvent = editingEventId
+        ? events.find(x => String(x.id) === String(editingEventId))
+        : null;
+
+    let image = existingEvent ? existingEvent.image : DEFAULT_IMAGE;
     const file = eventImageInput.files[0];
     if (file) {
         try {
@@ -982,6 +1426,42 @@ eventForm.addEventListener("submit", async e => {
 
     const maxPInput = $("eventLimit").value;
     const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
+
+    if (editingEventId) {
+        const updatedData = {
+            name: $("eventName").value.trim(),
+            description: $("eventDescription").value.trim(),
+            category: $("eventCategory").value,
+            date: $("eventDate").value,
+            time: $("eventTime").value,
+            location: $("eventLocation").value.trim(),
+            distrito: $("eventFormDistrict").value,
+            latitude: pendingLocation.lat,
+            longitude: pendingLocation.lng,
+            image: image,
+            max_participants: maxParticipants
+        };
+
+        const { error } = await supabaseClient
+            .from("events")
+            .update(updatedData)
+            .eq("id", editingEventId);
+
+        if (error) {
+            showFormError("Erro ao guardar alterações do evento.");
+            console.error(error);
+            return;
+        }
+
+        const editedId = editingEventId;
+        closeEventModal();
+        resetEventForm();
+        await loadEventsFromSupabase();
+        setActive(editedId);
+        focusEvent(editedId);
+        showToast("Evento atualizado com sucesso!", "success");
+        return;
+    }
 
     const creatorType = currentProfile.role === "admin"
         ? "Admin"
@@ -1006,7 +1486,7 @@ eventForm.addEventListener("submit", async e => {
     };
 
     const { data, error } = await supabaseClient
-        .from('events')
+        .from("events")
         .insert([newEventData])
         .select();
 
@@ -1024,7 +1504,7 @@ eventForm.addEventListener("submit", async e => {
         setActive(data[0].id);
         focusEvent(data[0].id);
     }
-    showToast("Evento publicado no Supabase com sucesso!", "success");
+    showToast("Evento publicado com sucesso!", "success");
 });
 
 // Arranque
