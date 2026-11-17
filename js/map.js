@@ -1,26 +1,16 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite Real 3D + Relevo + Edifícios + Etiquetas Vetoriais)
+// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
-const REAL_3D_STYLE = {
-    version: 8,
-    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-    sources: {
-        satellite: {
-            type: 'raster',
-            tiles: [
-                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-            ],
-            tileSize: 256,
-            attribution: '© Esri, Maxar'
-        },
+function buildMapStyle(mode = "satellite") {
+    const isSatellite = mode === "satellite";
+
+    const sources = {
         terrainSource: {
             type: 'raster-dem',
-            tiles: [
-                'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
-            ],
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
             tileSize: 256,
             encoding: 'terrarium',
             maxzoom: 15
@@ -29,15 +19,37 @@ const REAL_3D_STYLE = {
             type: 'vector',
             url: 'https://tiles.openfreemap.org/planet'
         }
-    },
-    layers: [
-        {
+    };
+
+    if (isSatellite) {
+        sources.satellite = {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            attribution: '© Esri, Maxar'
+        };
+    }
+
+    const layers = [];
+
+    if (isSatellite) {
+        layers.push({
             id: 'satellite-layer',
             type: 'raster',
             source: 'satellite',
             minzoom: 0,
             maxzoom: 22
-        },
+        });
+    } else {
+        layers.push(
+            { id: 'bg', type: 'background', paint: { 'background-color': '#0b1120' } },
+            { id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water', paint: { 'fill-color': '#172554' } },
+            { id: 'landuse', type: 'fill', source: 'openmaptiles', 'source-layer': 'landuse', paint: { 'fill-color': '#111827', 'fill-opacity': 0.6 } },
+            { id: 'roads', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation', paint: { 'line-color': '#334155', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 15, 3] } }
+        );
+    }
+
+    layers.push(
         {
             id: '3d-buildings',
             source: 'openmaptiles',
@@ -45,10 +57,10 @@ const REAL_3D_STYLE = {
             type: 'fill-extrusion',
             minzoom: 14,
             paint: {
-                'fill-extrusion-color': '#e2e8f0',
+                'fill-extrusion-color': isSatellite ? '#e2e8f0' : '#3b82f6',
                 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-                'fill-extrusion-opacity': 0.72
+                'fill-extrusion-opacity': isSatellite ? 0.72 : 0.45
             }
         },
         {
@@ -78,20 +90,8 @@ const REAL_3D_STYLE = {
             layout: {
                 'text-field': ['coalesce', ['get', 'name:pt'], ['get', 'name']],
                 'text-font': ['Noto Sans Regular'],
-                'text-size': [
-                    'match',
-                    ['get', 'class'],
-                    'country', 15,
-                    'city', 13.5,
-                    'town', 11.5,
-                    10.5
-                ],
-                'text-transform': [
-                    'match',
-                    ['get', 'class'],
-                    'country', 'uppercase',
-                    'none'
-                ],
+                'text-size': ['match', ['get', 'class'], 'country', 15, 'city', 13.5, 'town', 11.5, 10.5],
+                'text-transform': ['match', ['get', 'class'], 'country', 'uppercase', 'none'],
                 'text-letter-spacing': 0.05
             },
             paint: {
@@ -100,24 +100,30 @@ const REAL_3D_STYLE = {
                 'text-halo-width': 1.6
             }
         }
-    ],
-    terrain: {
-        source: 'terrainSource',
-        exaggeration: 1.5
-    },
-    sky: {
-        'sky-color': '#1d4ed8',
-        'sky-horizon-blend': 0.5,
-        'horizon-color': '#93c5fd',
-        'horizon-fog-blend': 0.5,
-        'fog-color': '#0f172a',
-        'fog-ground-blend': 0.4
-    }
-};
+    );
+
+    return {
+        version: 8,
+        glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+        sources,
+        layers,
+        terrain: { source: 'terrainSource', exaggeration: 1.5 },
+        sky: {
+            'sky-color': isSatellite ? '#1d4ed8' : '#020617',
+            'sky-horizon-blend': 0.5,
+            'horizon-color': isSatellite ? '#93c5fd' : '#1e293b',
+            'horizon-fog-blend': 0.5,
+            'fog-color': '#0f172a',
+            'fog-ground-blend': 0.4
+        }
+    };
+}
+
+let currentMapMode = "satellite";
 
 const map = new maplibregl.Map({
     container: 'map',
-    style: REAL_3D_STYLE,
+    style: buildMapStyle("satellite"),
     center: [-8.1, 39.6],
     zoom: 6.4,
     pitch: 55,
@@ -143,6 +149,18 @@ map.on('load', () => {
         showEventsOnMap(currentList);
     }
 });
+
+function toggleMapStyleMode() {
+    currentMapMode = currentMapMode === "satellite" ? "dark" : "satellite";
+    map.setStyle(buildMapStyle(currentMapMode));
+    return currentMapMode;
+}
+
+function toggleMapPitchMode() {
+    const is3D = map.getPitch() > 20;
+    map.easeTo({ pitch: is3D ? 0 : 60, bearing: is3D ? 0 : -12, duration: 600 });
+    return !is3D;
+}
 
 function createCustomMarkerElement(category) {
     const c = CATEGORIES[category] || CATEGORIES.comunidade;
@@ -171,7 +189,7 @@ function popupHTML(ev) {
             ${organizerHtml}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)}</p>
-            <p>👥 <strong>${vagasText}</strong></p>
+            <p>👥 <strong>${vagasText}</strong> · 🎟️ ${escapeHTML(ev.price || "Gratuito")}</p>
             <div class="popup-links">
                 <button type="button" onclick="window.openEventDetails('${ev.id}')">Ver detalhes</button>
                 <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
@@ -206,6 +224,13 @@ function showEventsOnMap(list) {
     });
 }
 
+function highlightMarkerOnMap(id) {
+    markerById.forEach((marker, key) => {
+        const pin = marker.getElement().querySelector('.pin');
+        if (pin) pin.classList.toggle('selected', key === String(id));
+    });
+}
+
 function fitToEvents(list) {
     const points = list.filter(e => typeof e.latitude === "number").map(e => [e.longitude, e.latitude]);
     if (!points.length) return;
@@ -222,6 +247,7 @@ function fitToEvents(list) {
 function focusEvent(id) {
     const marker = markerById.get(String(id));
     if (!marker) return;
+    highlightMarkerOnMap(id);
     
     map.flyTo({
         center: marker.getLngLat(),
@@ -253,7 +279,6 @@ function locateUser() {
         navigator.geolocation.getCurrentPosition(
             pos => {
                 userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                
                 if (userMarker) userMarker.remove();
                 
                 const userEl = document.createElement('div');
