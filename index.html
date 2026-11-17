@@ -76,6 +76,19 @@
             <h1>LocalSpot</h1>
         </a>
         <nav aria-label="Navegação principal">
+            <div class="notif-wrap">
+                <button type="button" id="notifBtn" class="btn-icon hidden" title="Notificações" aria-label="Notificações">
+                    🔔 <span id="notifBadge" class="notif-badge hidden">0</span>
+                </button>
+                <div id="notifDropdown" class="notif-dropdown hidden">
+                    <div class="notif-dropdown-head">
+                        <strong>Notificações</strong>
+                        <button type="button" id="markAllReadBtn" class="btn-link small">Marcar lidas</button>
+                    </div>
+                    <div id="notifList" class="notif-list"></div>
+                </div>
+            </div>
+
             <button type="button" id="userBadge" class="user-badge hidden" title="Abrir o meu perfil"></button>
             <button type="button" id="adminPanelBtn" class="btn-admin hidden">🛡️ Admin</button>
             <button type="button" id="aboutButton" class="btn-link">Sobre</button>
@@ -95,7 +108,7 @@
 
                 <div class="search">
                     <label for="searchInput" class="sr-only">Procurar eventos</label>
-                    <input type="search" id="searchInput" placeholder="🔎 Procurar por nome, local ou descrição..." autocomplete="off">
+                    <input type="search" id="searchInput" placeholder="🔎 Procurar por nome, local ou organizador..." autocomplete="off">
                 </div>
 
                 <div class="chips" id="categoryChips" role="group" aria-label="Filtrar por categoria"></div>
@@ -118,18 +131,21 @@
                         <label for="radiusSlider">Raio máx.: <span id="radiusValue">Sem limite</span></label>
                         <input type="range" id="radiusSlider" min="5" max="100" value="100" class="slider">
                     </div>
-                    <div class="field">
+                    <div class="field" style="grid-column: span 2;">
                         <label for="sortFilter">Ordenar por</label>
                         <select id="sortFilter">
-                            <option value="date">Data</option>
-                            <option value="distance">Proximidade</option>
+                            <option value="date">Data (mais próximos primeiro)</option>
+                            <option value="distance">Proximidade a mim</option>
+                            <option value="popular">Mais populares (inscritos)</option>
                             <option value="name">Nome (A–Z)</option>
                         </select>
                     </div>
-                    <div class="field field-toggle">
-                        <label class="sr-only" for="favoritesToggle">Mostrar só favoritos</label>
-                        <button type="button" id="favoritesToggle" class="btn-toggle" aria-pressed="false">☆ Só favoritos</button>
-                    </div>
+                </div>
+
+                <div class="quick-toggles">
+                    <button type="button" id="favoritesToggle" class="btn-toggle" aria-pressed="false">☆ Favoritos</button>
+                    <button type="button" id="freeOnlyToggle" class="btn-toggle" aria-pressed="false">🎟️ Gratuitos</button>
+                    <button type="button" id="followingOnlyToggle" class="btn-toggle" aria-pressed="false">👥 A seguir</button>
                 </div>
 
                 <div class="events-container">
@@ -153,6 +169,11 @@
         </aside>
 
         <section class="map-container" aria-label="Mapa de eventos">
+            <div class="map-floating-controls">
+                <button type="button" id="mapStyleToggle" class="map-ctrl-btn" title="Alternar entre Satélite 3D e Mapa Noturno 3D">🗺️ Mapa Noturno</button>
+                <button type="button" id="mapPitchToggle" class="map-ctrl-btn" title="Alternar inclinação 3D / 2D">📐 Vista 2D</button>
+            </div>
+
             <div id="pickBanner" class="pick-banner hidden" role="status">
                 <div class="pick-banner-top">
                     <span>📍 Clica no mapa ou pesquisa uma morada</span>
@@ -186,10 +207,18 @@
                 <input type="text" id="eventName" maxlength="80" placeholder="Ex: Torneio de Futebol" required>
 
                 <label for="eventDescription">Descrição</label>
-                <textarea id="eventDescription" maxlength="400" rows="3" placeholder="Descreve o evento, requisitos ou programa..."></textarea>
+                <textarea id="eventDescription" maxlength="500" rows="3" placeholder="Descreve o evento, requisitos ou programa..."></textarea>
 
-                <label for="eventCategory">Categoria *</label>
-                <select id="eventCategory" required></select>
+                <div class="form-row">
+                    <div>
+                        <label for="eventCategory">Categoria *</label>
+                        <select id="eventCategory" required></select>
+                    </div>
+                    <div>
+                        <label for="eventPrice">Entrada / Preço</label>
+                        <input type="text" id="eventPrice" maxlength="30" placeholder="Gratuito (ou ex: 5 €)">
+                    </div>
+                </div>
 
                 <div class="form-row">
                     <div>
@@ -205,11 +234,19 @@
                 <label for="eventLocation">Local (nome do sítio) *</label>
                 <input type="text" id="eventLocation" maxlength="80" placeholder="Ex: Parque da Cidade" required>
 
-                <label for="eventFormDistrict">Distrito *</label>
-                <select id="eventFormDistrict" required></select>
+                <div class="form-row">
+                    <div>
+                        <label for="eventFormDistrict">Distrito *</label>
+                        <select id="eventFormDistrict" required></select>
+                    </div>
+                    <div>
+                        <label for="eventLimit">Limite de vagas</label>
+                        <input type="number" id="eventLimit" min="1" placeholder="Ilimitado">
+                    </div>
+                </div>
 
-                <label for="eventLimit">Limite de inscrições (opcional)</label>
-                <input type="number" id="eventLimit" min="1" placeholder="Deixa vazio para ilimitado">
+                <label for="eventExternalUrl">Website / Bilheteira / Instagram (opcional)</label>
+                <input type="text" id="eventExternalUrl" maxlength="160" placeholder="https://...">
 
                 <label for="eventImage">Fotografia (opcional)</label>
                 <input type="file" id="eventImage" accept="image/png, image/jpeg, image/webp">
@@ -221,7 +258,7 @@
         </div>
     </div>
 
-    <!-- MODAL: DETALHES DO EVENTO, INSCRITOS E COMENTÁRIOS -->
+    <!-- MODAL: DETALHES DO EVENTO, INSCRITOS, AVALIAÇÕES E COMENTÁRIOS -->
     <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content detail-modal-content">
             <button type="button" id="closeDetail" class="close-button" aria-label="Fechar">×</button>
@@ -229,10 +266,16 @@
 
             <div class="detail-header-row">
                 <span id="detailCategory" class="category"></span>
+                <span id="detailPriceBadge" class="price-badge"></span>
                 <span id="detailOrganizer" class="organizer-tag"></span>
+                <button type="button" id="detailFollowBtn" class="follow-btn hidden">+ Seguir</button>
             </div>
 
-            <h2 id="detailTitle" style="margin: 8px 0;"></h2>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-top:8px;">
+                <h2 id="detailTitle" style="margin: 0;"></h2>
+                <span id="detailRatingBadge" class="rating-badge hidden"></span>
+            </div>
+
             <p id="detailDescription" class="detail-desc"></p>
 
             <div class="detail-meta-grid">
@@ -250,16 +293,42 @@
                 </div>
             </div>
 
+            <a id="detailExternalLink" href="#" target="_blank" rel="noopener" class="external-link-banner hidden">🌐 Aceder à página oficial / bilheteira →</a>
+
             <div class="detail-actions-bar">
                 <button type="button" id="detailEnrollBtn" class="register-btn" style="margin:0;">✋ Inscrever-me</button>
+                <button type="button" id="detailTicketBtn" class="btn-ticket hidden">🎟️ Bilhete QR</button>
                 <button type="button" id="detailShareBtn" class="btn-soft">🔗 Partilhar</button>
-                <a id="detailCalendarBtn" href="#" target="_blank" rel="noopener" class="btn-soft" style="text-decoration:none; text-align:center;">📅 Calendário</a>
                 <a id="detailDirectionsBtn" href="#" target="_blank" rel="noopener" class="btn-soft" style="text-decoration:none; text-align:center;">🧭 Direções</a>
             </div>
 
+            <div class="detail-secondary-links">
+                <a id="detailCalendarBtn" href="#" target="_blank" rel="noopener" class="btn-link small">📅 Google Calendar</a>
+                <button type="button" id="detailIcsBtn" class="btn-link small">📥 Descarregar .ICS (Apple/Outlook)</button>
+                <button type="button" id="detailReportBtn" class="btn-link small" style="color:var(--muted); margin-left:auto;">🚩 Denunciar</button>
+            </div>
+
             <div id="detailOwnerActions" class="detail-owner-actions hidden">
-                <button type="button" id="detailEditBtn" class="btn-edit">✏️ Editar evento</button>
-                <button type="button" id="detailDeleteBtn" class="btn-danger-outline">🗑 Apagar evento</button>
+                <button type="button" id="detailEditBtn" class="btn-edit">✏️ Editar</button>
+                <button type="button" id="detailDuplicateBtn" class="btn-soft">📋 Duplicar</button>
+                <button type="button" id="detailDeleteBtn" class="btn-danger-outline">🗑 Apagar</button>
+            </div>
+
+            <!-- AVALIAÇÕES PÓS-EVENTO -->
+            <div id="detailReviewsSection" class="detail-section hidden">
+                <h3>⭐ Avaliações dos Participantes</h3>
+                <form id="reviewForm" class="review-form hidden">
+                    <select id="reviewRating" aria-label="Classificação">
+                        <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
+                        <option value="4">⭐⭐⭐⭐ (4/5)</option>
+                        <option value="3">⭐⭐⭐ (3/5)</option>
+                        <option value="2">⭐⭐ (2/5)</option>
+                        <option value="1">⭐ (1/5)</option>
+                    </select>
+                    <input type="text" id="reviewText" maxlength="200" placeholder="Como foi a experiência?">
+                    <button type="submit" class="btn-primary-sm">Avaliar</button>
+                </form>
+                <div id="detailReviewsList" class="comments-list"></div>
             </div>
 
             <div class="detail-section">
@@ -278,39 +347,86 @@
         </div>
     </div>
 
+    <!-- MODAL: BILHETE DIGITAL / QR CODE -->
+    <div id="ticketModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content ticket-modal-content">
+            <button type="button" id="closeTicket" class="close-button" aria-label="Fechar">×</button>
+            <div class="ticket-card">
+                <span class="ticket-badge">🎟️ PASSE DE ENTRADA LOCALSPOT</span>
+                <h2 id="ticketEventName"></h2>
+                <p id="ticketDateTime" class="muted"></p>
+                <p id="ticketLocation" class="muted"></p>
+                <div class="qr-box">
+                    <canvas id="ticketQrCanvas" width="160" height="160"></canvas>
+                </div>
+                <strong id="ticketCodeText" class="ticket-code"></strong>
+                <p id="ticketUserName" style="margin:6px 0 0; font-size:13px;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DENUNCIAR EVENTO -->
+    <div id="reportModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="width: 440px;">
+            <button type="button" id="closeReport" class="close-button" aria-label="Fechar">×</button>
+            <h2>🚩 Denunciar Evento</h2>
+            <p class="muted" style="font-size:13px; margin-top:-6px;">Ajuda-nos a manter o LocalSpot seguro e atualizado.</p>
+            <form id="reportForm">
+                <label for="reportReason">Motivo *</label>
+                <select id="reportReason" required>
+                    <option value="Informação falsa ou enganosa">Informação falsa ou enganosa</option>
+                    <option value="Evento cancelado ou duplicado">Evento cancelado ou duplicado</option>
+                    <option value="Spam ou publicidade abusiva">Spam ou publicidade abusiva</option>
+                    <option value="Conteúdo impróprio">Conteúdo impróprio</option>
+                </select>
+                <label for="reportDetails">Detalhes adicionais (opcional)</label>
+                <textarea id="reportDetails" rows="3" maxlength="250" placeholder="Explica brevemente o problema..."></textarea>
+                <button type="submit" class="submit-button" style="background:var(--danger);">Enviar Denúncia</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: PERFIL DO UTILIZADOR -->
     <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 560px;">
+        <div class="modal-content" style="width: 580px;">
             <button type="button" id="closeProfile" class="close-button" aria-label="Fechar">×</button>
             <h2>👤 O Meu Perfil</h2>
             <p id="profileEmailDisplay" class="muted" style="margin-top: -10px; font-size: 13px;"></p>
 
-            <form id="profileUpdateForm" class="profile-edit-row">
-                <div style="flex: 1;">
-                    <label for="profileNameInput">Nome apresentado nos eventos</label>
-                    <input type="text" id="profileNameInput" maxlength="80" required style="margin-bottom: 0;">
+            <form id="profileUpdateForm" class="profile-edit-box">
+                <div class="form-row">
+                    <div>
+                        <label for="profileNameInput">Nome apresentado</label>
+                        <input type="text" id="profileNameInput" maxlength="80" required>
+                    </div>
+                    <div>
+                        <label for="profileBioInput">Biografia / Descrição curta</label>
+                        <input type="text" id="profileBioInput" maxlength="140" placeholder="Ex: Organizador de torneios locais">
+                    </div>
                 </div>
-                <button type="submit" class="btn-primary-sm" style="height: 41px; align-self: flex-end;">Guardar</button>
+                <button type="submit" class="btn-primary-sm" style="margin-top: 8px;">Guardar alterações do perfil</button>
             </form>
 
-            <div class="auth-tabs" style="margin-top: 18px;">
-                <button type="button" id="tabMyEnrollments" class="auth-tab active">As minhas inscrições</button>
-                <button type="button" id="tabMyCreated" class="auth-tab">Eventos criados</button>
+            <div class="auth-tabs" style="margin-top: 16px; grid-template-columns: repeat(3, 1fr);">
+                <button type="button" id="tabMyEnrollments" class="auth-tab active">Inscrições</button>
+                <button type="button" id="tabMyCreated" class="auth-tab">Criados</button>
+                <button type="button" id="tabMyFollowing" class="auth-tab">A Seguir</button>
             </div>
 
             <div id="profileEnrolledList" class="profile-events-list"></div>
             <div id="profileCreatedList" class="profile-events-list hidden"></div>
+            <div id="profileFollowingList" class="profile-events-list hidden"></div>
         </div>
     </div>
 
     <!-- MODAL: PAINEL ADMIN -->
     <div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 620px;">
+        <div class="modal-content" style="width: 650px;">
             <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">×</button>
             <h2>🛡️ Painel de Administração</h2>
-            <p class="muted" style="margin-top: -8px;">Gere os utilizadores registados e define permissões de Domínio Público ou Administrador.</p>
+            <p class="muted" style="margin-top: -8px;">Gestão de utilizadores, permissões e moderação de denúncias.</p>
 
-            <div class="admin-stats">
+            <div class="admin-stats" style="grid-template-columns: repeat(4, 1fr);">
                 <div class="stat-box">
                     <span id="statTotalUsers">0</span>
                     <small>Utilizadores</small>
@@ -323,10 +439,19 @@
                     <span id="statTotalEvents">0</span>
                     <small>Eventos Ativos</small>
                 </div>
+                <div class="stat-box">
+                    <span id="statTotalReports" style="color:var(--danger);">0</span>
+                    <small>Denúncias</small>
+                </div>
             </div>
 
-            <h3 style="font-size: 15px; margin: 18px 0 10px;">Utilizadores Registados</h3>
+            <div class="auth-tabs" style="margin-top: 16px;">
+                <button type="button" id="tabAdminUsers" class="auth-tab active">Utilizadores Registados</button>
+                <button type="button" id="tabAdminReports" class="auth-tab">Denúncias Pendentes</button>
+            </div>
+
             <div id="adminUsersList" class="admin-users-list"></div>
+            <div id="adminReportsList" class="admin-users-list hidden"></div>
         </div>
     </div>
 
@@ -337,16 +462,16 @@
             <h2 id="aboutTitle">Sobre o LocalSpot</h2>
             <p>O LocalSpot liga utilizadores locais a empresas, lojas, restaurantes e associações num mapa 3D interativo.</p>
             <ul style="line-height: 1.8; color: var(--muted); font-size: 14px; padding-left: 18px;">
-                <li><strong>Utilizadores Normais:</strong> Exploram atividades, inscrevem-se, comentam e criam eventos comunitários.</li>
+                <li><strong>Utilizadores Normais:</strong> Exploram atividades, inscrevem-se com bilhete QR, avaliam, seguem organizadores e criam eventos comunitários.</li>
                 <li><strong>Domínios Públicos:</strong> Empresas, lojas e restaurantes divulgam eventos oficiais com selo do estabelecimento.</li>
-                <li><strong>Administradores:</strong> Gerenciam utilizadores e moderam conteúdos na plataforma.</li>
+                <li><strong>Administradores:</strong> Gerenciam utilizadores, atribuem cargos e moderam denúncias na plataforma.</li>
             </ul>
         </div>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <!-- SDK do Supabase -->
+    <!-- SDK do Supabase e MapLibre -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="js/events.js"></script>
