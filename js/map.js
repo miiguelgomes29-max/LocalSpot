@@ -1,5 +1,5 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite Real 3D Clean + Relevo + Edifícios + Etiquetas Vetoriais)
+// MAPA (MapLibre GL JS - Satélite Real 3D + Relevo + Edifícios + Etiquetas Vetoriais)
 // ==========================================
 
 window.onEventMarkerClick = null;
@@ -158,7 +158,7 @@ function popupHTML(ev) {
     
     const enrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
-    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
+    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos`;
     const icon = ev.creatorType === "Utilizador" ? "👤" : "🏢";
     const organizerHtml = ev.creatorName
         ? `<p style="color:#2563eb;font-weight:600;">${icon} ${escapeHTML(ev.creatorName)}</p>`
@@ -169,11 +169,13 @@ function popupHTML(ev) {
             <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
             <h3>${escapeHTML(ev.name)}</h3>
             ${organizerHtml}
-            ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)}</p>
             <p>👥 <strong>${vagasText}</strong></p>
-            <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
+            <div class="popup-links">
+                <button type="button" onclick="window.openEventDetails('${ev.id}')">Ver detalhes</button>
+                <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
+            </div>
         </div>`;
 }
 
@@ -200,7 +202,7 @@ function showEventsOnMap(list) {
         });
 
         markers.push(marker);
-        markerById.set(ev.id, marker);
+        markerById.set(String(ev.id), marker);
     });
 }
 
@@ -218,7 +220,7 @@ function fitToEvents(list) {
 }
 
 function focusEvent(id) {
-    const marker = markerById.get(id);
+    const marker = markerById.get(String(id));
     if (!marker) return;
     
     map.flyTo({
@@ -232,6 +234,10 @@ function focusEvent(id) {
     map.once("moveend", () => {
         if (!marker.getPopup().isOpen()) marker.togglePopup();
     });
+}
+
+function flyToCoordinates(lng, lat, zoom = 15) {
+    map.flyTo({ center: [lng, lat], zoom, pitch: 60 });
 }
 
 // ---------- Localização do utilizador ----------
