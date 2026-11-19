@@ -162,7 +162,7 @@ nav button, .user-badge { white-space: nowrap; }
 .event-image { width: 100%; height: 140px; object-fit: cover; border-radius: 7px; display: block; }
 .badge-past { position: absolute; left: 8px; top: 8px; background: rgba(15, 23, 42, 0.85); color: var(--muted); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
 .badge-price-card { position: absolute; left: 8px; bottom: 8px; background: rgba(15, 23, 42, 0.85); color: #4ade80; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(74, 222, 128, 0.3); }
-.fav-btn { position: absolute; right: 8px; top: 8px; width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(15, 23, 42, 0.75); color: #fff; cursor: pointer; }
+.fav-btn { position: absolute; right: 8px; top: 8px; width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(15, 23, 42, 0.75); color: #fff; cursor: pointer; outline: none; }
 .fav-btn.on { color: #facc15; }
 .event-meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 8px; }
 .category { background: var(--primary-soft); color: var(--primary); padding: 3px 9px; border-radius: 12px; font-weight: 600; font-size: 12px; }
@@ -174,11 +174,11 @@ nav button, .user-badge { white-space: nowrap; }
 /* Botões do Cartão */
 .registration-info { font-size: 12.5px; color: var(--primary); font-weight: 600; margin: 10px 0 8px; }
 .card-actions-grid { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-.register-btn { display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; text-align: center; }
+.register-btn { display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; text-align: center; outline: none; }
 .register-btn:hover:not(:disabled) { background: var(--primary); color: #fff; }
 .register-btn.registered { background: var(--success); border-color: var(--success); color: #fff; }
 .register-btn:disabled { background: var(--border); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
-.details-btn { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.details-btn { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; outline: none; }
 .details-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 .owner-card-bar { display: flex; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
@@ -220,11 +220,47 @@ nav button, .user-badge { white-space: nowrap; }
 .pin { width: 34px; height: 34px; background: var(--pin, var(--primary)); border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.45); transition: transform 0.2s; }
 .pin.selected { transform: rotate(-45deg) scale(1.22); box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.45); }
 .pin span { transform: rotate(45deg); font-size: 15px; }
-.popup { color: #0f172a; font-size: 13px; line-height: 1.45; }
-.popup h3 { margin: 4px 0 6px; font-size: 15px; }
-.popup p { margin: 3px 0; }
-.popup-cat { display: inline-block; background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-.popup a { display: inline-block; margin-top: 6px; color: #2563eb; font-weight: 600; text-decoration: none; outline: none; }
+
+/* Cartão Popup do Mapa (idêntico aos cartões da lista lateral) */
+.maplibregl-popup-content {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--bg) !important; }
+.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--bg) !important; }
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--bg) !important; }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--bg) !important; }
+
+.popup-card { width: 268px; font-family: system-ui, -apple-system, sans-serif; }
+.popup-card .event-image-wrap { margin-bottom: 9px; }
+.popup-card .event-image { height: 118px; border-radius: 8px; }
+.popup-card .event-meta { margin-bottom: 6px; }
+.popup-card h4 { margin: 0 0 5px 0; font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+.popup-card .organizer-tag { margin-bottom: 6px; }
+.popup-card p { margin: 3px 0; font-size: 12.5px; color: var(--muted); }
+.popup-card .registration-info { margin: 8px 0; font-size: 12.5px; }
+.popup-actions-grid { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+.popup-actions-grid .register-btn { padding: 7px 8px; font-size: 12.5px; }
+.popup-actions-grid .details-btn { padding: 7px 9px; font-size: 12px; }
+.popup-dir-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12.5px;
+    text-decoration: none;
+    outline: none;
+    transition: 0.15s;
+}
+.popup-dir-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 /* Modais */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 16px; }
