@@ -110,12 +110,16 @@ let editingEventId = null;
 let detailEventId = null;
 let currentList = [];
 
-// Estado Social estilo Bump
+// Estado Social Completo estilo Bump
 window.friendsList = [];
+let friendshipRecords = new Map(); // friend_id -> friendship row (id, bump_count)
 let incomingFriendRequests = [];
 let sentFriendRequestIds = new Set();
-let allEnrollmentsMap = new Map(); // event_id -> array of user_ids
+let allEnrollmentsMap = new Map();
+let activeChatFriendId = null;
+let unreadMessagesBySender = new Map();
 let locationSyncInterval = null;
+let geoWatchId = null;
 let realtimeChannel = null;
 
 const BUMP_STATUSES = [
@@ -125,7 +129,7 @@ const BUMP_STATUSES = [
     { emoji: "📚", text: "A estudar" },
     { emoji: "🎧", text: "A ouvir música" },
     { emoji: "🏃", text: "A treinar" },
-    { emoji: "🍔", text: "A almoçar/jantar" },
+    { emoji: "🍔", text: "A comer" },
     { emoji: "🏠", text: "Em casa" }
 ];
 
@@ -152,7 +156,7 @@ function translateAuthError(error) {
 }
 
 // ==========================================
-// INJEÇÃO SEGURA DA UI SOCIAL (BUMP)
+// INJEÇÃO DA UI SOCIAL COMPLETA (BUMP)
 // ==========================================
 function ensureSocialUI() {
     // 1. Botão Amigos no Header
@@ -166,18 +170,36 @@ function ensureSocialUI() {
         nav.insertBefore(friendsBtn, notifBtn);
     }
 
-    // 2. Botão Modo Fantasma nos controlos do mapa
+    // 2. Controlos Sociais no Mapa (Privacidade 3 modos + Check-in rápido)
     const mapCtrls = document.querySelector(".map-floating-controls");
-    if (mapCtrls && !$("ghostModeMapBtn")) {
-        const ghostBtn = document.createElement("button");
-        ghostBtn.type = "button";
-        ghostBtn.id = "ghostModeMapBtn";
-        ghostBtn.className = "map-ctrl-btn hidden";
-        ghostBtn.textContent = "📍 Visível";
-        mapCtrls.appendChild(ghostBtn);
+    if (mapCtrls && !$("privacyMapBtn")) {
+        const privacyBtn = document.createElement("button");
+        privacyBtn.type = "button";
+        privacyBtn.id = "privacyMapBtn";
+        privacyBtn.className = "map-ctrl-btn hidden";
+        privacyBtn.textContent = "📍 Precisa";
+        privacyBtn.title = "Alternar privacidade: Precisa / Borrão / Fantasma";
+        mapCtrls.appendChild(privacyBtn);
+
+        const checkinBtn = document.createElement("button");
+        checkinBtn.type = "button";
+        checkinBtn.id = "quickCheckinMapBtn";
+        checkinBtn.className = "map-ctrl-btn hidden";
+        checkinBtn.textContent = "📌 Check-in";
+        checkinBtn.title = "Partilhar onde estás agora";
+        mapCtrls.appendChild(checkinBtn);
     }
 
-    // 3. Campos de Foto de Perfil, Estado/Mood e Modo Fantasma no Modal de Perfil
+    // 3. Banner de Hangout (Amigos Juntos) no Mapa
+    const mapContainer = document.querySelector(".map-container");
+    if (mapContainer && !$("hangoutBanner")) {
+        const hBanner = document.createElement("div");
+        hBanner.id = "hangoutBanner";
+        hBanner.className = "hangout-banner hidden";
+        mapContainer.appendChild(hBanner);
+    }
+
+    // 4. Campos Bump no Modal de Perfil (Foto + Estado Personalizado + Privacidade 3 modos)
     const profileForm = $("profileUpdateForm");
     if (profileForm && !$("profileAvatarBox")) {
         const avatarSection = document.createElement("div");
@@ -191,22 +213,25 @@ function ensureSocialUI() {
                     <input type="file" id="profileAvatarInput" accept="image/*" style="padding:6px; font-size:12px;">
                 </div>
             </div>
-            <label>Estado atual (visível no mapa para amigos)</label>
+            <label>Estado / Vibe atual (visível no mapa)</label>
             <div id="statusPillsContainer" class="status-pills-grid">
                 ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
             </div>
-            <div class="ghost-toggle-bar">
-                <div>
-                    <strong style="font-size:13px; display:block;">👻 Modo Fantasma</strong>
-                    <span style="font-size:11.5px; color:var(--muted);">Oculta a tua localização ao vivo no mapa</span>
-                </div>
-                <input type="checkbox" id="profileGhostCheckbox" style="width:18px; height:18px; margin:0; cursor:pointer;">
+            <div style="display:grid; grid-template-columns: 64px 1fr; gap:8px; margin-bottom:12px;">
+                <input type="text" id="profileCustomEmoji" maxlength="4" placeholder="📍" style="text-align:center;">
+                <input type="text" id="profileCustomStatus" maxlength="40" placeholder="Escreve o teu estado personalizado...">
+            </div>
+            <label>Privacidade da localização no mapa</label>
+            <div id="privacySelectorGrid" class="privacy-selector-grid">
+                <button type="button" class="privacy-opt-btn" data-mode="precise">📍 Precisa</button>
+                <button type="button" class="privacy-opt-btn" data-mode="blurred">🌫️ Borrão (~400m)</button>
+                <button type="button" class="privacy-opt-btn" data-mode="ghost">👻 Fantasma</button>
             </div>
         `;
         profileForm.insertBefore(avatarSection, profileForm.firstChild);
     }
 
-    // 4. Modal de Amigos & Social estilo Bump
+    // 5. Modal de Amigos & Social estilo Bump
     if (!$("friendsModal")) {
         const fModal = document.createElement("div");
         fModal.id = "friendsModal";
@@ -216,7 +241,7 @@ function ensureSocialUI() {
             <div class="modal-content">
                 <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
                 <h2 style="margin:0 0 4px;">👊 Social & Amigos</h2>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Vê onde estão os teus amigos, envia Bumps e descobre a que eventos vão.</p>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Vê a bateria, velocidade e localização dos teus amigos, envia Bumps e abre o chat.</p>
                 
                 <div class="auth-tabs" style="margin-bottom:14px;">
                     <button type="button" id="tabFriendsList" class="auth-tab active">👥 Amigos (<span id="friendsTabCount">0</span>)</button>
@@ -241,6 +266,37 @@ function ensureSocialUI() {
         document.body.appendChild(fModal);
     }
 
+    // 6. Modal de Chat Direto & Emoji Bombs (Bump Chat)
+    if (!$("friendChatModal")) {
+        const chatModal = document.createElement("div");
+        chatModal.id = "friendChatModal";
+        chatModal.className = "modal hidden";
+        chatModal.setAttribute("aria-hidden", "true");
+        chatModal.innerHTML = `
+            <div class="modal-content" style="width:440px;">
+                <button type="button" id="closeFriendChatModal" class="close-button" aria-label="Fechar">&times;</button>
+                <div id="chatFriendHeader" style="display:flex; align-items:center; gap:10px; margin-bottom:12px;"></div>
+                
+                <div class="emoji-bomb-bar" title="Enviar chuva de emojis em tempo real!">
+                    <button type="button" class="emoji-bomb-btn" data-bomb="👊">👊</button>
+                    <button type="button" class="emoji-bomb-btn" data-bomb="🔥">🔥</button>
+                    <button type="button" class="emoji-bomb-btn" data-bomb="❤️">❤️</button>
+                    <button type="button" class="emoji-bomb-btn" data-bomb="😂">😂</button>
+                    <button type="button" class="emoji-bomb-btn" data-bomb="🎉">🎉</button>
+                    <button type="button" class="emoji-bomb-btn" data-bomb="👀">👀</button>
+                </div>
+
+                <div id="chatMessagesBox" class="chat-messages-box"></div>
+
+                <form id="friendChatForm" style="display:flex; gap:8px;">
+                    <input type="text" id="friendChatInput" placeholder="Escreve uma mensagem..." required autocomplete="off">
+                    <button type="submit" class="btn-primary-sm">Enviar</button>
+                </form>
+            </div>
+        `;
+        document.body.appendChild(chatModal);
+    }
+
     bindSocialEvents();
 }
 
@@ -260,6 +316,48 @@ function bindSocialEvents() {
         closeFriendsBtn.dataset.bound = "1";
         closeFriendsBtn.addEventListener("click", () => closeModalEl(friendsModal));
         friendsModal.addEventListener("mousedown", e => { if (e.target === friendsModal) closeModalEl(friendsModal); });
+    }
+
+    const closeChatBtn = $("closeFriendChatModal");
+    const chatModal = $("friendChatModal");
+    if (closeChatBtn && !closeChatBtn.dataset.bound) {
+        closeChatBtn.dataset.bound = "1";
+        closeChatBtn.addEventListener("click", () => {
+            activeChatFriendId = null;
+            closeModalEl(chatModal);
+        });
+        chatModal.addEventListener("mousedown", e => {
+            if (e.target === chatModal) {
+                activeChatFriendId = null;
+                closeModalEl(chatModal);
+            }
+        });
+    }
+
+    const chatForm = $("friendChatForm");
+    if (chatForm && !chatForm.dataset.bound) {
+        chatForm.dataset.bound = "1";
+        chatForm.addEventListener("submit", async e => {
+            e.preventDefault();
+            if (!activeChatFriendId) return;
+            const input = $("friendChatInput");
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = "";
+            await sendDirectMessage(activeChatFriendId, text, "text");
+        });
+    }
+
+    const bombBar = document.querySelector(".emoji-bomb-bar");
+    if (bombBar && !bombBar.dataset.bound) {
+        bombBar.dataset.bound = "1";
+        bombBar.addEventListener("click", async e => {
+            const btn = e.target.closest(".emoji-bomb-btn");
+            if (!btn || !activeChatFriendId) return;
+            const emoji = btn.dataset.bomb;
+            launchEmojiBombAnimation(emoji);
+            await sendDirectMessage(activeChatFriendId, emoji, "emoji_bomb");
+        });
     }
 
     const tabList = $("tabFriendsList");
@@ -290,10 +388,16 @@ function bindSocialEvents() {
         });
     }
 
-    const ghostMapBtn = $("ghostModeMapBtn");
-    if (ghostMapBtn && !ghostMapBtn.dataset.bound) {
-        ghostMapBtn.dataset.bound = "1";
-        ghostMapBtn.addEventListener("click", () => toggleGhostMode());
+    const privacyMapBtn = $("privacyMapBtn");
+    if (privacyMapBtn && !privacyMapBtn.dataset.bound) {
+        privacyMapBtn.dataset.bound = "1";
+        privacyMapBtn.addEventListener("click", () => cyclePrivacyMode());
+    }
+
+    const checkinMapBtn = $("quickCheckinMapBtn");
+    if (checkinMapBtn && !checkinMapBtn.dataset.bound) {
+        checkinMapBtn.dataset.bound = "1";
+        checkinMapBtn.addEventListener("click", () => doQuickCheckin());
     }
 
     const statusContainer = $("statusPillsContainer");
@@ -304,10 +408,20 @@ function bindSocialEvents() {
             if (!btn) return;
             statusContainer.querySelectorAll(".status-pill-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            if (currentProfile) {
-                currentProfile.status_emoji = btn.dataset.emoji;
-                currentProfile.status_text = btn.dataset.text;
-            }
+            if ($("profileCustomEmoji")) $("profileCustomEmoji").value = btn.dataset.emoji;
+            if ($("profileCustomStatus")) $("profileCustomStatus").value = btn.dataset.text;
+        });
+    }
+
+    const privacyGrid = $("privacySelectorGrid");
+    if (privacyGrid && !privacyGrid.dataset.bound) {
+        privacyGrid.dataset.bound = "1";
+        privacyGrid.addEventListener("click", e => {
+            const btn = e.target.closest(".privacy-opt-btn");
+            if (!btn) return;
+            privacyGrid.querySelectorAll(".privacy-opt-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            if (currentProfile) currentProfile.privacy_mode = btn.dataset.mode;
         });
     }
 
@@ -462,6 +576,7 @@ registerForm.addEventListener("submit", async e => {
 logoutButton.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
     if (locationSyncInterval) clearInterval(locationSyncInterval);
+    if (geoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
     if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
     currentUser = null;
     currentProfile = null;
@@ -470,7 +585,9 @@ logoutButton.addEventListener("click", async () => {
     window.friendsList = [];
     if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
     if ($("friendsNavBtn")) $("friendsNavBtn").classList.add("hidden");
-    if ($("ghostModeMapBtn")) $("ghostModeMapBtn").classList.add("hidden");
+    if ($("privacyMapBtn")) $("privacyMapBtn").classList.add("hidden");
+    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.add("hidden");
+    if ($("hangoutBanner")) $("hangoutBanner").classList.add("hidden");
     notifBtn.classList.add("hidden");
     userBadge.classList.add("hidden");
     adminPanelBtn.classList.add("hidden");
@@ -509,6 +626,10 @@ async function handleAuthenticatedSession(user) {
     }
 
     currentProfile = profile;
+    if (!currentProfile.privacy_mode) {
+        currentProfile.privacy_mode = currentProfile.ghost_mode ? "ghost" : "precise";
+    }
+
     applyRoleUI();
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
@@ -518,6 +639,7 @@ async function handleAuthenticatedSession(user) {
         loadAllEnrollmentsSummary(),
         loadMyFollowing(),
         loadNotifications(),
+        loadUnreadMessagesCount(),
         loadSocialData()
     ]);
     await loadEventsFromSupabase();
@@ -535,14 +657,22 @@ function renderAvatarChip(profile, sizeClass = "sm") {
 
 function applyRoleUI() {
     if (!currentProfile) return;
-    const { role, full_name, business_type, ghost_mode } = currentProfile;
+    const { role, full_name, business_type, privacy_mode } = currentProfile;
 
     if ($("friendsNavBtn")) $("friendsNavBtn").classList.remove("hidden");
-    if ($("ghostModeMapBtn")) {
-        const gBtn = $("ghostModeMapBtn");
-        gBtn.classList.remove("hidden");
-        gBtn.classList.toggle("ghost-on", !!ghost_mode);
-        gBtn.textContent = ghost_mode ? "👻 Modo Fantasma" : "📍 Visível";
+    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.remove("hidden");
+    if ($("privacyMapBtn")) {
+        const pBtn = $("privacyMapBtn");
+        pBtn.classList.remove("hidden", "privacy-blurred", "privacy-ghost");
+        if (privacy_mode === "ghost") {
+            pBtn.classList.add("privacy-ghost");
+            pBtn.textContent = "👻 Fantasma";
+        } else if (privacy_mode === "blurred") {
+            pBtn.classList.add("privacy-blurred");
+            pBtn.textContent = "🌫️ Borrão";
+        } else {
+            pBtn.textContent = "📍 Precisa";
+        }
     }
 
     notifBtn.classList.remove("hidden");
@@ -579,8 +709,42 @@ async function initAuth() {
 }
 
 // ==========================================
-// SISTEMA SOCIAL ESTILO BUMP (AMIGOS, LOCALIZAÇÃO AO VIVO, BUMPS)
+// SISTEMA SOCIAL COMPLETO ESTILO BUMP
 // ==========================================
+window.updateHangoutBanner = (hangoutNames, firstFriend) => {
+    const banner = $("hangoutBanner");
+    if (!banner) return;
+    if (!hangoutNames || hangoutNames.length === 0) {
+        banner.classList.add("hidden");
+        return;
+    }
+    banner.textContent = `🔥 Hangout! ${hangoutNames[0]} estão juntos agora!`;
+    banner.classList.remove("hidden");
+    banner.onclick = () => {
+        if (firstFriend) focusFriendOnMap(firstFriend.id);
+    };
+};
+
+async function loadUnreadMessagesCount() {
+    if (!currentUser) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from("friend_messages")
+            .select("sender_id")
+            .eq("receiver_id", currentUser.id)
+            .eq("is_read", false);
+
+        if (!error && data) {
+            unreadMessagesBySender = new Map();
+            data.forEach(m => {
+                const k = String(m.sender_id);
+                unreadMessagesBySender.set(k, (unreadMessagesBySender.get(k) || 0) + 1);
+            });
+            updateSocialBadges();
+        }
+    } catch (e) {}
+}
+
 async function loadSocialData() {
     if (!currentUser) return;
     try {
@@ -594,11 +758,13 @@ async function loadSocialData() {
         const acceptedIds = new Set();
         const incomingRows = [];
         sentFriendRequestIds = new Set();
+        friendshipRecords = new Map();
 
         rows.forEach(r => {
             if (r.status === "accepted") {
                 const otherId = r.requester_id === currentUser.id ? r.addressee_id : r.requester_id;
                 acceptedIds.add(otherId);
+                friendshipRecords.set(String(otherId), r);
             } else if (r.status === "pending") {
                 if (r.addressee_id === currentUser.id) {
                     incomingRows.push(r);
@@ -623,7 +789,12 @@ async function loadSocialData() {
         }
 
         window.friendsList = [...acceptedIds]
-            .map(id => profilesById.get(id))
+            .map(id => {
+                const prof = profilesById.get(id);
+                if (!prof) return null;
+                const fRow = friendshipRecords.get(String(id));
+                return { ...prof, bump_count: fRow?.bump_count || 0 };
+            })
             .filter(Boolean);
 
         incomingFriendRequests = incomingRows.map(r => ({
@@ -640,14 +811,17 @@ async function loadSocialData() {
 }
 
 function updateSocialBadges() {
-    const reqCount = incomingFriendRequests.length;
+    let totalUnreadMsgs = 0;
+    unreadMessagesBySender.forEach(v => { totalUnreadMsgs += v; });
+    const badgeTotal = incomingFriendRequests.length + totalUnreadMsgs;
+
     const navBadge = $("friendsReqBadge");
     if (navBadge) {
-        navBadge.textContent = reqCount;
-        navBadge.classList.toggle("hidden", reqCount === 0);
+        navBadge.textContent = badgeTotal;
+        navBadge.classList.toggle("hidden", badgeTotal === 0);
     }
     if ($("friendsTabCount")) $("friendsTabCount").textContent = window.friendsList.length;
-    if ($("requestsTabCount")) $("requestsTabCount").textContent = reqCount;
+    if ($("requestsTabCount")) $("requestsTabCount").textContent = incomingFriendRequests.length;
 }
 
 function renderFriendsModalContent() {
@@ -690,22 +864,26 @@ function renderFriendsModalContent() {
     }
 
     container.innerHTML = window.friendsList.map(f => {
-        const hasLocation = !f.ghost_mode && typeof f.last_lat === "number" && typeof f.last_lng === "number";
-        const statusStr = f.ghost_mode
+        const isGhost = f.ghost_mode || f.privacy_mode === "ghost";
+        const hasLocation = !isGhost && typeof f.last_lat === "number" && typeof f.last_lng === "number";
+        const batStr = typeof f.battery_level === "number" ? ` · ${f.is_charging ? "⚡" : "🔋"}${f.battery_level}%` : "";
+        const statusStr = isGhost
             ? "👻 Modo Fantasma"
-            : `${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "No LocalSpot")}`;
+            : `${f.current_place ? "📍 " + escapeHTML(f.current_place) : (f.status_emoji || "📍") + " " + escapeHTML(f.status_text || "Online")}${batStr}`;
+        const unread = unreadMessagesBySender.get(String(f.id)) || 0;
 
         return `
             <div class="friend-row">
                 <div class="friend-row-left">
                     ${renderAvatarChip(f, "")}
                     <div class="friend-row-info">
-                        <strong>${escapeHTML(f.full_name)}</strong>
+                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0}</small></strong>
                         <span>${statusStr}</span>
                     </div>
                 </div>
                 <div class="friend-row-actions">
-                    <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊 Bump</button>
+                    <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>
+                    <button type="button" class="btn-soft" onclick="window.openFriendChat('${f.id}')" title="Chat & Emoji Bombs">💬${unread > 0 ? ` (${unread})` : ""}</button>
                     ${hasLocation ? `<button type="button" class="btn-soft" onclick="window.locateFriendOnMap('${f.id}')" title="Ver no mapa">📍</button>` : ""}
                     <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover amigo">×</button>
                 </div>
@@ -832,7 +1010,9 @@ window.locateFriendOnMap = friendId => {
     }
 };
 
-// Animação e Envio de BUMP!
+// ==========================================
+// BUMP, EMOJI BOMBS & CHAT DIRETO
+// ==========================================
 function triggerBumpVisual(emoji = "👊", text = "BUMP!") {
     const existing = document.querySelector(".bump-overlay");
     if (existing) existing.remove();
@@ -847,77 +1027,275 @@ function triggerBumpVisual(emoji = "👊", text = "BUMP!") {
     setTimeout(() => overlay.remove(), 1850);
 }
 
+function launchEmojiBombAnimation(emoji = "👊") {
+    for (let i = 0; i < 14; i++) {
+        setTimeout(() => {
+            const el = document.createElement("div");
+            el.className = "flying-emoji-bomb";
+            el.textContent = emoji;
+            el.style.left = `${8 + Math.random() * 84}vw`;
+            el.style.fontSize = `${28 + Math.round(Math.random() * 22)}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2250);
+        }, i * 75);
+    }
+}
+
 window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     if (!currentUser || !currentProfile) return;
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     const targetName = friend ? friend.full_name : "amigo";
 
-    triggerBumpVisual(emoji, `${emoji} ${label} para ${targetName}!`);
+    // Incrementar contador de Bumps
+    const fRow = friendshipRecords.get(String(friendId));
+    const nextCount = (fRow?.bump_count || 0) + 1;
+    if (fRow) {
+        fRow.bump_count = nextCount;
+        await supabaseClient.from("friendships").update({ bump_count: nextCount }).eq("id", fRow.id);
+    }
+    if (friend) friend.bump_count = nextCount;
+
+    triggerBumpVisual(emoji, `${emoji} ${label} com ${targetName}! (#${nextCount})`);
+    renderFriendsModalContent();
+    if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.friendsList);
 
     await createNotification(
         friendId,
         null,
-        `${emoji} ${currentProfile.full_name} enviou-te um ${label}`,
+        `${emoji} ${currentProfile.full_name} fez Bump contigo! (#${nextCount})`,
         `Abre o mapa para ver onde ${currentProfile.full_name} está agora!`
     );
 };
 
-// Sincronização de Localização ao Vivo & Modo Fantasma
-window.syncMyLiveLocation = async (lat, lng) => {
-    if (!currentUser || !currentProfile || currentProfile.ghost_mode) return;
+window.openFriendChat = async friendId => {
+    const friend = window.friendsList.find(f => String(f.id) === String(friendId));
+    if (!friend) return;
+
+    activeChatFriendId = String(friend.id);
+    closeModalEl($("friendsModal"));
+
+    $("chatFriendHeader").innerHTML = `
+        ${renderAvatarChip(friend, "")}
+        <div>
+            <strong style="display:block; font-size:15px;">${escapeHTML(friend.full_name)}</strong>
+            <span style="font-size:12px; color:#f9a8d4;">👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}</span>
+        </div>
+    `;
+
+    openModal($("friendChatModal"));
+    await loadChatHistory(activeChatFriendId);
+};
+
+async function loadChatHistory(friendId) {
+    const box = $("chatMessagesBox");
+    box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">A carregar mensagens...</p>`;
+
+    const { data, error } = await supabaseClient
+        .from("friend_messages")
+        .select("*")
+        .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+    if (error) {
+        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Executa o SQL no Supabase para ativar o chat direto.</p>`;
+        return;
+    }
+
+    // Marcar como lidas
+    await supabaseClient
+        .from("friend_messages")
+        .update({ is_read: true })
+        .eq("sender_id", friendId)
+        .eq("receiver_id", currentUser.id)
+        .eq("is_read", false);
+
+    unreadMessagesBySender.delete(String(friendId));
+    updateSocialBadges();
+    renderFriendsModalContent();
+
+    if (!data || data.length === 0) {
+        box.innerHTML = `<p class="muted" style="font-size:12.5px; text-align:center; margin-top:80px;">Envia uma mensagem ou dispara um Emoji Bomb acima! 🚀</p>`;
+        return;
+    }
+
+    box.innerHTML = data.map(m => {
+        const isMine = String(m.sender_id) === String(currentUser.id);
+        const timeStr = new Date(m.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+        const contentDisplay = m.msg_type === "emoji_bomb"
+            ? `<span style="font-size:24px;">${escapeHTML(m.content)}</span> <small style="display:inline;">Emoji Bomb!</small>`
+            : escapeHTML(m.content);
+
+        return `
+            <div class="chat-bubble ${isMine ? "mine" : "theirs"}">
+                ${contentDisplay}
+                <small>${timeStr}</small>
+            </div>
+        `;
+    }).join("");
+
+    box.scrollTop = box.scrollHeight;
+}
+
+async function sendDirectMessage(receiverId, content, msgType = "text") {
+    if (!currentUser) return;
+    const { error } = await supabaseClient.from("friend_messages").insert([{
+        sender_id: currentUser.id,
+        receiver_id: receiverId,
+        content,
+        msg_type: msgType
+    }]);
+
+    if (error) {
+        showToast("Erro ao enviar mensagem (verifica o SQL no Supabase).", "error");
+        return;
+    }
+
+    if (String(activeChatFriendId) === String(receiverId)) {
+        await loadChatHistory(receiverId);
+    }
+}
+
+// ==========================================
+// TELEMETRIA BUMP: BATERIA, VELOCIDADE, PRIVACIDADE & CHECK-IN
+// ==========================================
+async function getDeviceBatteryTelemetry() {
+    if (!navigator.getBattery) return {};
+    try {
+        const bat = await navigator.getBattery();
+        return {
+            battery_level: Math.round(bat.level * 100),
+            is_charging: !!bat.charging
+        };
+    } catch (e) {
+        return {};
+    }
+}
+
+function applyPrivacyOffset(lat, lng, mode) {
+    if (mode !== "blurred") return { lat, lng };
+    // Desvio determinístico ~380m para ocultar morada exata no modo Borrão
+    const seed = currentUser ? currentUser.id.charCodeAt(0) : 7;
+    const angle = (seed % 360) * (Math.PI / 180);
+    const offsetDeg = 0.0035;
+    return {
+        lat: lat + Math.cos(angle) * offsetDeg,
+        lng: lng + Math.sin(angle) * offsetDeg
+    };
+}
+
+window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
+    if (!currentUser || !currentProfile) return;
+    const mode = currentProfile.privacy_mode || (currentProfile.ghost_mode ? "ghost" : "precise");
+    if (mode === "ghost") return;
+
+    const coords = applyPrivacyOffset(lat, lng, mode);
+    const batInfo = await getDeviceBatteryTelemetry();
+
     try {
         await supabaseClient.from("profiles").update({
-            last_lat: lat,
-            last_lng: lng,
-            last_seen: new Date().toISOString()
+            last_lat: coords.lat,
+            last_lng: coords.lng,
+            speed_kmh: speedKmh,
+            last_seen: new Date().toISOString(),
+            ...batInfo
         }).eq("id", currentUser.id);
     } catch (e) {}
 };
 
-async function toggleGhostMode(forceValue = null) {
+async function cyclePrivacyMode() {
     if (!currentUser || !currentProfile) return;
-    const nextGhost = forceValue !== null ? forceValue : !currentProfile.ghost_mode;
+    const order = ["precise", "blurred", "ghost"];
+    const current = currentProfile.privacy_mode || "precise";
+    const next = order[(order.indexOf(current) + 1) % order.length];
 
-    const updatePayload = { ghost_mode: nextGhost };
-    if (nextGhost) {
+    const isGhost = next === "ghost";
+    const updatePayload = { privacy_mode: next, ghost_mode: isGhost };
+
+    if (isGhost) {
         updatePayload.last_lat = null;
         updatePayload.last_lng = null;
     } else if (userPosition) {
-        updatePayload.last_lat = userPosition.lat;
-        updatePayload.last_lng = userPosition.lng;
+        const coords = applyPrivacyOffset(userPosition.lat, userPosition.lng, next);
+        updatePayload.last_lat = coords.lat;
+        updatePayload.last_lng = coords.lng;
         updatePayload.last_seen = new Date().toISOString();
     }
 
     const { error } = await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
     if (error) {
-        showToast("Erro ao alterar Modo Fantasma.", "error");
+        showToast("Erro ao atualizar modo de privacidade.", "error");
         return;
     }
 
-    currentProfile.ghost_mode = nextGhost;
-    if ($("profileGhostCheckbox")) $("profileGhostCheckbox").checked = nextGhost;
+    Object.assign(currentProfile, updatePayload);
     applyRoleUI();
 
-    if (nextGhost) {
-        showToast("👻 Modo Fantasma ativo — estás invisível no mapa.");
-    } else {
-        showToast("📍 Estás visível para os teus amigos!", "success");
+    if (next === "ghost") showToast("👻 Modo Fantasma — estás invisível no mapa.");
+    else if (next === "blurred") showToast("🌫️ Modo Borrão — os amigos veem apenas a tua zona aproximada.");
+    else {
+        showToast("📍 Localização Precisa ativa!", "success");
         if (!userPosition) {
             try { await locateUser(); } catch (e) {}
         }
     }
 }
 
+async function doQuickCheckin() {
+    if (!currentUser || !currentProfile) return;
+    if (!userPosition) {
+        try { await locateUser(); } catch (e) {}
+    }
+
+    // Sugerir evento próximo se existir a menos de 500m
+    let suggestedName = currentProfile.current_place || "";
+    if (userPosition && events.length > 0) {
+        const nearby = events.find(ev => distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude) <= 0.5);
+        if (nearby) suggestedName = nearby.name;
+    }
+
+    const place = prompt("Onde estás agora? (Deixa vazio para limpar o Check-in)", suggestedName);
+    if (place === null) return;
+
+    const cleanPlace = place.trim() || null;
+    const { error } = await supabaseClient
+        .from("profiles")
+        .update({ current_place: cleanPlace, last_seen: new Date().toISOString() })
+        .eq("id", currentUser.id);
+
+    if (error) {
+        showToast("Erro ao guardar Check-in.", "error");
+        return;
+    }
+
+    currentProfile.current_place = cleanPlace;
+    if (cleanPlace) {
+        showToast(`📌 Check-in feito em "${cleanPlace}"!`, "success");
+        for (const f of window.friendsList) {
+            await createNotification(
+                f.id,
+                null,
+                `📌 ${currentProfile.full_name} fez Check-in`,
+                `Está agora em: ${cleanPlace}`
+            );
+        }
+    } else {
+        showToast("Check-in removido.");
+    }
+}
+
 function startLiveSocialSync() {
     if (locationSyncInterval) clearInterval(locationSyncInterval);
+    if (geoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
 
     if (navigator.permissions && navigator.permissions.query) {
         navigator.permissions.query({ name: "geolocation" }).then(res => {
-            if (res.state === "granted" && !currentProfile?.ghost_mode) {
-                navigator.geolocation.getCurrentPosition(pos => {
+            if (res.state === "granted" && navigator.geolocation) {
+                geoWatchId = navigator.geolocation.watchPosition(pos => {
                     userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
-                });
+                    const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng, speedKmh);
+                }, () => {}, { enableHighAccuracy: true, maximumAge: 15000 });
             }
         }).catch(() => {});
     }
@@ -925,15 +1303,15 @@ function startLiveSocialSync() {
     locationSyncInterval = setInterval(async () => {
         if (!currentUser) return;
         await loadSocialData();
-        if (userPosition && !currentProfile?.ghost_mode) {
-            await window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+        if (userPosition && currentProfile?.privacy_mode !== "ghost") {
+            await window.syncMyLiveLocation(userPosition.lat, userPosition.lng, 0);
         }
-    }, 30000);
+    }, 25000);
 
-    // Subscrição Realtime para receber Bumps e Pedidos na hora
+    // Subscrição Realtime para Bumps, Mensagens, Emoji Bombs e Amigos
     if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
     realtimeChannel = supabaseClient
-        .channel(`social_${currentUser.id}`)
+        .channel(`bump_live_${currentUser.id}`)
         .on("postgres_changes", {
             event: "INSERT",
             schema: "public",
@@ -944,11 +1322,34 @@ function startLiveSocialSync() {
             if (notif) {
                 notifications.unshift(notif);
                 renderNotifications();
-                if (notif.title && (notif.title.includes("Bump") || notif.title.includes("Acenou"))) {
+                if (notif.title && notif.title.includes("Bump")) {
                     triggerBumpVisual("👊", notif.title);
+                    loadSocialData();
                 } else {
                     showToast(notif.title, "success");
                 }
+            }
+        })
+        .on("postgres_changes", {
+            event: "INSERT",
+            schema: "public",
+            table: "friend_messages",
+            filter: `receiver_id=eq.${currentUser.id}`
+        }, async payload => {
+            const msg = payload.new;
+            if (!msg) return;
+            if (msg.msg_type === "emoji_bomb") {
+                launchEmojiBombAnimation(msg.content);
+            }
+            if (String(activeChatFriendId) === String(msg.sender_id)) {
+                await loadChatHistory(msg.sender_id);
+            } else {
+                const senderId = String(msg.sender_id);
+                unreadMessagesBySender.set(senderId, (unreadMessagesBySender.get(senderId) || 0) + 1);
+                updateSocialBadges();
+                renderFriendsModalContent();
+                const sender = window.friendsList.find(f => String(f.id) === senderId);
+                showToast(`💬 ${sender ? sender.full_name : "Amigo"}: ${msg.content}`, "success");
             }
         })
         .on("postgres_changes", {
@@ -1101,7 +1502,7 @@ function updateDetailFollowButton(creatorId) {
 }
 
 // ==========================================
-// MODAL DE PERFIL ("A MINHA CONTA" + FOTO + ESTADO + MODO FANTASMA)
+// MODAL DE PERFIL ("A MINHA CONTA" + FOTO + ESTADO + PRIVACIDADE)
 // ==========================================
 userBadge.addEventListener("click", () => {
     if (!currentProfile) return;
@@ -1116,13 +1517,22 @@ userBadge.addEventListener("click", () => {
             : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
     }
     if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
-    if ($("profileGhostCheckbox")) $("profileGhostCheckbox").checked = !!currentProfile.ghost_mode;
+
+    const curEmoji = currentProfile.status_emoji || "📍";
+    const curText = currentProfile.status_text || "No LocalSpot";
+    if ($("profileCustomEmoji")) $("profileCustomEmoji").value = curEmoji;
+    if ($("profileCustomStatus")) $("profileCustomStatus").value = curText;
 
     if ($("statusPillsContainer")) {
-        const curEmoji = currentProfile.status_emoji || "📍";
-        const curText = currentProfile.status_text || "No LocalSpot";
         $("statusPillsContainer").querySelectorAll(".status-pill-btn").forEach(btn => {
             btn.classList.toggle("active", btn.dataset.emoji === curEmoji && btn.dataset.text === curText);
+        });
+    }
+
+    const curMode = currentProfile.privacy_mode || (currentProfile.ghost_mode ? "ghost" : "precise");
+    if ($("privacySelectorGrid")) {
+        $("privacySelectorGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.mode === curMode);
         });
     }
 
@@ -1172,9 +1582,10 @@ $("profileUpdateForm").addEventListener("submit", async e => {
         avatarUrl = await uploadAvatarImage(avatarFile);
     }
 
-    const ghostMode = $("profileGhostCheckbox") ? $("profileGhostCheckbox").checked : !!currentProfile.ghost_mode;
-    const statusEmoji = currentProfile.status_emoji || "📍";
-    const statusText = currentProfile.status_text || "No LocalSpot";
+    const privacyMode = currentProfile.privacy_mode || "precise";
+    const ghostMode = privacyMode === "ghost";
+    const statusEmoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
+    const statusText = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
 
     const updateObj = {
         full_name: newName,
@@ -1182,12 +1593,18 @@ $("profileUpdateForm").addEventListener("submit", async e => {
         avatar_url: avatarUrl,
         status_emoji: statusEmoji,
         status_text: statusText,
+        privacy_mode: privacyMode,
         ghost_mode: ghostMode
     };
 
     if (ghostMode) {
         updateObj.last_lat = null;
         updateObj.last_lng = null;
+    } else if (userPosition) {
+        const coords = applyPrivacyOffset(userPosition.lat, userPosition.lng, privacyMode);
+        updateObj.last_lat = coords.lat;
+        updateObj.last_lng = coords.lng;
+        updateObj.last_seen = new Date().toISOString();
     }
 
     const { error } = await supabaseClient
@@ -2357,7 +2774,8 @@ aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) clo
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
+    if ($("friendChatModal") && !$("friendChatModal").classList.contains("hidden")) { activeChatFriendId = null; closeModalEl($("friendChatModal")); }
+    else if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
     else if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
     else if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
     else if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
