@@ -145,15 +145,62 @@ const markerById = new Map();
 
 let friendMarkers = [];
 const friendMarkerById = new Map();
+let activeRadarCoords = null;
+
+function ensureRadarLineLayer() {
+    if (!map.getSource("friend-radar")) {
+        map.addSource("friend-radar", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] }
+        });
+        map.addLayer({
+            id: "friend-radar-line",
+            type: "line",
+            source: "friend-radar",
+            paint: {
+                "line-color": "#ec4899",
+                "line-width": 4,
+                "line-dasharray": [2, 1.5],
+                "line-opacity": 0.9
+            }
+        });
+    }
+    if (activeRadarCoords && map.getSource("friend-radar")) {
+        map.getSource("friend-radar").setData({
+            type: "Feature",
+            geometry: {
+                type: "LineString",
+                coordinates: activeRadarCoords
+            }
+        });
+    }
+}
+
+function drawFriendRadarLine(fromLngLat, toLngLat) {
+    activeRadarCoords = [fromLngLat, toLngLat];
+    ensureRadarLineLayer();
+}
+
+function clearFriendRadarLine() {
+    activeRadarCoords = null;
+    if (map.getSource("friend-radar")) {
+        map.getSource("friend-radar").setData({ type: "FeatureCollection", features: [] });
+    }
+}
 
 map.on('load', () => {
     map.resize();
+    ensureRadarLineLayer();
     if (typeof currentList !== 'undefined' && currentList.length > 0) {
         showEventsOnMap(currentList);
     }
     if (typeof window.friendsList !== 'undefined' && window.friendsList.length > 0) {
         showFriendsOnMap(window.friendsList);
     }
+});
+
+map.on('style.load', () => {
+    ensureRadarLineLayer();
 });
 
 function toggleMapStyleMode() {
@@ -213,7 +260,7 @@ function popupHTML(ev) {
 
     const friendsGoing = typeof window.getFriendsGoingToEvent === "function" ? window.getFriendsGoingToEvent(ev.id) : [];
     const friendsBadge = friendsGoing.length
-        ? `<div class="friends-going-badge">👥 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
+        ? `<div class="friends-going-badge">👊 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
         : "";
 
     return `
@@ -271,6 +318,7 @@ function showEventsOnMap(list) {
             .addTo(map);
 
         el.addEventListener('click', () => {
+            clearFriendRadarLine();
             if (typeof window.onEventMarkerClick === "function") {
                 window.onEventMarkerClick(ev.id);
             }
@@ -301,32 +349,62 @@ function formatLastSeen(isoDate) {
     return `Há ${Math.floor(diffH / 24)}d`;
 }
 
+function formatBattery(level, charging) {
+    if (typeof level !== "number") return null;
+    if (charging) return `⚡ ${level}%`;
+    if (level <= 20) return `🪫 ${level}%`;
+    return `🔋 ${level}%`;
+}
+
+function formatSpeed(speedKmh) {
+    if (typeof speedKmh !== "number" || speedKmh <= 2) return "🧍 Parado";
+    if (speedKmh <= 12) return `🚶 ${speedKmh} km/h`;
+    if (speedKmh <= 30) return `🚲 ${speedKmh} km/h`;
+    return `🚗 ${speedKmh} km/h`;
+}
+
 function friendPopupHTML(friend) {
     const avatarInner = friend.avatar_url
         ? `<img src="${escapeHTML(friend.avatar_url)}" alt="" onerror="this.remove()">`
         : escapeHTML(getInitials(friend.full_name));
 
-    const statusLine = `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`;
+    const placeOrStatus = friend.current_place
+        ? `📍 ${escapeHTML(friend.current_place)}`
+        : `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`;
+
     const seenLine = formatLastSeen(friend.last_seen);
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${friend.last_lat},${friend.last_lng}`;
+    const batLabel = formatBattery(friend.battery_level, friend.is_charging);
+    const spdLabel = formatSpeed(friend.speed_kmh);
+    const bumps = friend.bump_count || 0;
 
     let distText = "";
     if (userPosition && typeof friend.last_lat === "number" && typeof friend.last_lng === "number") {
         const km = distanceKm(userPosition.lat, userPosition.lng, friend.last_lat, friend.last_lng);
-        distText = km < 0.5 ? " · ⚡ Mesmo ao pé de ti!" : ` · A ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`;
+        const walkMins = Math.max(1, Math.round((km / 5) * 60));
+        distText = km < 0.2
+            ? " · 🔥 Mesmo ao pé de ti!"
+            : ` · A ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km (~${walkMins} min)`;
     }
+
+    const privacyHint = friend.privacy_mode === "blurred" ? " (Zona aprox.)" : "";
 
     return `
         <div class="friend-popup-card">
             <div class="friend-popup-header">
                 <div class="avatar-circle lg">${avatarInner}</div>
                 <h4>${escapeHTML(friend.full_name)}</h4>
-                <span class="friend-popup-status">${statusLine}</span>
+                <span class="friend-popup-status">${placeOrStatus}${privacyHint}</span>
+            </div>
+            <div class="friend-telemetry-row">
+                ${batLabel ? `<span class="telemetry-chip">${batLabel}</span>` : ""}
+                <span class="telemetry-chip">${spdLabel}</span>
+                <span class="telemetry-chip bump-streak">👊 ${bumps} Bumps</span>
             </div>
             <div class="friend-popup-meta">🟢 ${seenLine}${distText}</div>
             <div class="friend-bump-actions">
                 <button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Fazer Bump!</button>
-                <button type="button" class="btn-wave" onclick="window.sendBump('${friend.id}', '👋', 'Acenou-te!')">👋 Acenar</button>
+                <button type="button" class="btn-wave" onclick="window.openFriendChat('${friend.id}')">💬 Chat / Bombs</button>
             </div>
             <a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter com ${escapeHTML(friend.full_name.split(" ")[0])}</a>
         </div>`;
@@ -337,9 +415,37 @@ function showFriendsOnMap(friends) {
     friendMarkers = [];
     friendMarkerById.clear();
 
-    friends.forEach(f => {
-        if (f.ghost_mode || typeof f.last_lat !== "number" || typeof f.last_lng !== "number") return;
+    const visibleFriends = friends.filter(f =>
+        !f.ghost_mode &&
+        f.privacy_mode !== "ghost" &&
+        typeof f.last_lat === "number" &&
+        typeof f.last_lng === "number"
+    );
 
+    // Detetar Hangouts (amigos a menos de 150m entre si)
+    const hangoutIds = new Set();
+    const hangoutNames = [];
+    for (let i = 0; i < visibleFriends.length; i++) {
+        for (let j = i + 1; j < visibleFriends.length; j++) {
+            const d = distanceKm(
+                visibleFriends[i].last_lat,
+                visibleFriends[i].last_lng,
+                visibleFriends[j].last_lat,
+                visibleFriends[j].last_lng
+            );
+            if (d <= 0.15) {
+                hangoutIds.add(visibleFriends[i].id);
+                hangoutIds.add(visibleFriends[j].id);
+                hangoutNames.push(`${visibleFriends[i].full_name.split(" ")[0]} & ${visibleFriends[j].full_name.split(" ")[0]}`);
+            }
+        }
+    }
+
+    if (typeof window.updateHangoutBanner === "function") {
+        window.updateHangoutBanner(hangoutNames, visibleFriends.find(f => hangoutIds.has(f.id)));
+    }
+
+    visibleFriends.forEach(f => {
         const el = document.createElement("div");
         el.className = "friend-map-pin";
         const avatarContent = f.avatar_url
@@ -348,22 +454,39 @@ function showFriendsOnMap(friends) {
 
         const isRecent = f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000;
         const firstName = f.full_name.trim().split(/\s+/)[0];
+        const isHangout = hangoutIds.has(f.id);
+        const isBlurred = f.privacy_mode === "blurred";
+
+        const bubbleText = isHangout
+            ? `🔥 Hangout! ${f.status_emoji || ""}`
+            : (f.current_place ? `📍 ${escapeHTML(f.current_place)}` : `${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "Online")}`);
+
+        const batPill = typeof f.battery_level === "number"
+            ? `<span class="friend-battery-pill${f.battery_level <= 20 && !f.is_charging ? " low" : ""}">${f.is_charging ? "⚡" : ""}${f.battery_level}%</span>`
+            : "";
 
         el.innerHTML = `
-            <div class="friend-status-bubble">${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "Online")}</div>
-            <div class="friend-avatar-pin">
+            <div class="friend-status-bubble">${bubbleText}</div>
+            <div class="friend-avatar-pin${isHangout ? " hangout-glow" : ""}${isBlurred ? " blurred-pin" : ""}">
                 ${avatarContent}
+                ${batPill}
                 ${isRecent ? '<span class="friend-online-dot"></span>' : ""}
             </div>
-            <div class="friend-name-tag">${escapeHTML(firstName)}</div>
+            <div class="friend-name-tag">${escapeHTML(firstName)}${f.speed_kmh > 15 ? " 🚗" : ""}</div>
         `;
 
         const popup = new maplibregl.Popup({
-            offset: [0, -42],
+            offset: [0, -44],
             closeButton: false,
             focusAfterOpen: false,
-            maxWidth: '280px'
+            maxWidth: '290px'
         }).setHTML(friendPopupHTML(f));
+
+        el.addEventListener("click", () => {
+            if (userPosition) {
+                drawFriendRadarLine([userPosition.lng, userPosition.lat], [f.last_lng, f.last_lat]);
+            }
+        });
 
         const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([f.last_lng, f.last_lat])
@@ -379,8 +502,13 @@ function focusFriendOnMap(friendId) {
     const marker = friendMarkerById.get(String(friendId));
     if (!marker) return false;
 
+    const targetLngLat = marker.getLngLat();
+    if (userPosition) {
+        drawFriendRadarLine([userPosition.lng, userPosition.lat], [targetLngLat.lng, targetLngLat.lat]);
+    }
+
     map.flyTo({
-        center: marker.getLngLat(),
+        center: targetLngLat,
         zoom: Math.max(map.getZoom(), 16),
         pitch: 65,
         speed: 1.2
@@ -415,6 +543,7 @@ function fitToEvents(list) {
 function focusEvent(id) {
     const marker = markerById.get(String(id));
     if (!marker) return;
+    clearFriendRadarLine();
     highlightMarkerOnMap(id);
     
     map.flyTo({
@@ -447,8 +576,9 @@ function locateUser() {
         navigator.geolocation.getCurrentPosition(
             pos => {
                 userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
                 if (typeof window.syncMyLiveLocation === "function") {
-                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng, speedKmh);
                 }
 
                 if (userMarker) userMarker.remove();
@@ -470,7 +600,7 @@ function locateUser() {
                 resolve(userPosition);
             },
             () => reject(new Error("Não foi possível obter a tua localização. Verifica as permissões.")),
-            { enableHighAccuracy: false, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 10000 }
         );
     });
 }
