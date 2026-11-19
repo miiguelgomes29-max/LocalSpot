@@ -1,5 +1,5 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios)
+// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios + Amigos Bump)
 // ==========================================
 
 window.onEventMarkerClick = null;
@@ -143,10 +143,16 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 let markers = [];
 const markerById = new Map();
 
+let friendMarkers = [];
+const friendMarkerById = new Map();
+
 map.on('load', () => {
     map.resize();
     if (typeof currentList !== 'undefined' && currentList.length > 0) {
         showEventsOnMap(currentList);
+    }
+    if (typeof window.friendsList !== 'undefined' && window.friendsList.length > 0) {
+        showFriendsOnMap(window.friendsList);
     }
 });
 
@@ -205,6 +211,11 @@ function popupHTML(ev) {
         organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
     }
 
+    const friendsGoing = typeof window.getFriendsGoingToEvent === "function" ? window.getFriendsGoingToEvent(ev.id) : [];
+    const friendsBadge = friendsGoing.length
+        ? `<div class="friends-going-badge">👥 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
+        : "";
+
     return `
         <div class="popup-card">
             <div class="event-image-wrap">
@@ -219,6 +230,7 @@ function popupHTML(ev) {
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
             ${organizerBadge}
+            ${friendsBadge}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
             <div class="registration-info">👥 ${vagasLabel}</div>
@@ -271,6 +283,113 @@ function showEventsOnMap(list) {
     if (openPopupId && markerById.has(openPopupId)) {
         markerById.get(openPopupId).togglePopup();
     }
+}
+
+// ---------- Amigos estilo Bump no Mapa ----------
+function getInitials(name) {
+    if (!name) return "?";
+    return name.trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+}
+
+function formatLastSeen(isoDate) {
+    if (!isoDate) return "Agora mesmo";
+    const diffMin = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
+    if (diffMin < 2) return "Online agora";
+    if (diffMin < 60) return `Há ${diffMin} min`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `Há ${diffH}h`;
+    return `Há ${Math.floor(diffH / 24)}d`;
+}
+
+function friendPopupHTML(friend) {
+    const avatarInner = friend.avatar_url
+        ? `<img src="${escapeHTML(friend.avatar_url)}" alt="" onerror="this.remove()">`
+        : escapeHTML(getInitials(friend.full_name));
+
+    const statusLine = `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`;
+    const seenLine = formatLastSeen(friend.last_seen);
+    const directions = `https://www.google.com/maps/dir/?api=1&destination=${friend.last_lat},${friend.last_lng}`;
+
+    let distText = "";
+    if (userPosition && typeof friend.last_lat === "number" && typeof friend.last_lng === "number") {
+        const km = distanceKm(userPosition.lat, userPosition.lng, friend.last_lat, friend.last_lng);
+        distText = km < 0.5 ? " · ⚡ Mesmo ao pé de ti!" : ` · A ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`;
+    }
+
+    return `
+        <div class="friend-popup-card">
+            <div class="friend-popup-header">
+                <div class="avatar-circle lg">${avatarInner}</div>
+                <h4>${escapeHTML(friend.full_name)}</h4>
+                <span class="friend-popup-status">${statusLine}</span>
+            </div>
+            <div class="friend-popup-meta">🟢 ${seenLine}${distText}</div>
+            <div class="friend-bump-actions">
+                <button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Fazer Bump!</button>
+                <button type="button" class="btn-wave" onclick="window.sendBump('${friend.id}', '👋', 'Acenou-te!')">👋 Acenar</button>
+            </div>
+            <a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter com ${escapeHTML(friend.full_name.split(" ")[0])}</a>
+        </div>`;
+}
+
+function showFriendsOnMap(friends) {
+    friendMarkers.forEach(m => m.remove());
+    friendMarkers = [];
+    friendMarkerById.clear();
+
+    friends.forEach(f => {
+        if (f.ghost_mode || typeof f.last_lat !== "number" || typeof f.last_lng !== "number") return;
+
+        const el = document.createElement("div");
+        el.className = "friend-map-pin";
+        const avatarContent = f.avatar_url
+            ? `<img src="${escapeHTML(f.avatar_url)}" alt="" onerror="this.remove()">`
+            : escapeHTML(getInitials(f.full_name));
+
+        const isRecent = f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000;
+        const firstName = f.full_name.trim().split(/\s+/)[0];
+
+        el.innerHTML = `
+            <div class="friend-status-bubble">${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "Online")}</div>
+            <div class="friend-avatar-pin">
+                ${avatarContent}
+                ${isRecent ? '<span class="friend-online-dot"></span>' : ""}
+            </div>
+            <div class="friend-name-tag">${escapeHTML(firstName)}</div>
+        `;
+
+        const popup = new maplibregl.Popup({
+            offset: [0, -42],
+            closeButton: false,
+            focusAfterOpen: false,
+            maxWidth: '280px'
+        }).setHTML(friendPopupHTML(f));
+
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([f.last_lng, f.last_lat])
+            .setPopup(popup)
+            .addTo(map);
+
+        friendMarkers.push(marker);
+        friendMarkerById.set(String(f.id), marker);
+    });
+}
+
+function focusFriendOnMap(friendId) {
+    const marker = friendMarkerById.get(String(friendId));
+    if (!marker) return false;
+
+    map.flyTo({
+        center: marker.getLngLat(),
+        zoom: Math.max(map.getZoom(), 16),
+        pitch: 65,
+        speed: 1.2
+    });
+
+    map.once("moveend", () => {
+        if (!marker.getPopup().isOpen()) marker.togglePopup();
+    });
+    return true;
 }
 
 function highlightMarkerOnMap(id) {
@@ -328,6 +447,10 @@ function locateUser() {
         navigator.geolocation.getCurrentPosition(
             pos => {
                 userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                if (typeof window.syncMyLiveLocation === "function") {
+                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+                }
+
                 if (userMarker) userMarker.remove();
                 
                 const userEl = document.createElement('div');
