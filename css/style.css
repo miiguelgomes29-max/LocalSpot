@@ -220,12 +220,11 @@ nav button, .user-badge { white-space: nowrap; }
 .pin { width: 34px; height: 34px; background: var(--pin, var(--primary)); border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.45); transition: transform 0.2s; }
 .pin.selected { transform: rotate(-45deg) scale(1.22); box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.45); }
 .pin span { transform: rotate(45deg); font-size: 15px; }
-.popup { color: #0f172a; font-size: 13px; line-height: 1.45; min-width: 195px; }
+.popup { color: #0f172a; font-size: 13px; line-height: 1.45; }
 .popup h3 { margin: 4px 0 6px; font-size: 15px; }
 .popup p { margin: 3px 0; }
 .popup-cat { display: inline-block; background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-.popup-links { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; }
-.popup-links a, .popup-links button { background: none; border: none; padding: 0; color: #2563eb; font-weight: 700; font-size: 12.5px; cursor: pointer; text-decoration: none; }
+.popup a { display: inline-block; margin-top: 6px; color: #2563eb; font-weight: 600; text-decoration: none; outline: none; }
 
 /* Modais */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 16px; }
