@@ -850,6 +850,8 @@ async function toggleEnrollment(id) {
     }
 }
 
+window.toggleEnrollment = toggleEnrollment;
+
 // ---------- Filtros & Ordenação ----------
 function isPast(ev) {
     return eventDateTime(ev) < new Date();
@@ -1064,6 +1066,8 @@ function toggleFavorite(id) {
     saveJSON(STORAGE_FAVS, [...favorites]);
     filterEvents();
 }
+
+window.toggleFavorite = toggleFavorite;
 
 async function deleteEvent(id) {
     const ev = events.find(x => String(x.id) === String(id));
