@@ -110,6 +110,25 @@ let editingEventId = null;
 let detailEventId = null;
 let currentList = [];
 
+// Estado Social estilo Bump
+window.friendsList = [];
+let incomingFriendRequests = [];
+let sentFriendRequestIds = new Set();
+let allEnrollmentsMap = new Map(); // event_id -> array of user_ids
+let locationSyncInterval = null;
+let realtimeChannel = null;
+
+const BUMP_STATUSES = [
+    { emoji: "📍", text: "No LocalSpot" },
+    { emoji: "☕", text: "Num café" },
+    { emoji: "🎉", text: "Pronto para sair" },
+    { emoji: "📚", text: "A estudar" },
+    { emoji: "🎧", text: "A ouvir música" },
+    { emoji: "🏃", text: "A treinar" },
+    { emoji: "🍔", text: "A almoçar/jantar" },
+    { emoji: "🏠", text: "Em casa" }
+];
+
 // ---------- Toast Notifications ----------
 let toastTimer;
 function showToast(message, type = "info") {
@@ -130,6 +149,178 @@ function translateAuthError(error) {
     if (msg.includes("password should be at least")) return "A palavra-passe tem de ter pelo menos 6 caracteres.";
     if (msg.includes("rate limit") || msg.includes("too many requests")) return "Muitas tentativas seguidas. Aguarda alguns minutos.";
     return error.message;
+}
+
+// ==========================================
+// INJEÇÃO SEGURA DA UI SOCIAL (BUMP)
+// ==========================================
+function ensureSocialUI() {
+    // 1. Botão Amigos no Header
+    const nav = document.querySelector(".header nav");
+    if (nav && !$("friendsNavBtn")) {
+        const friendsBtn = document.createElement("button");
+        friendsBtn.type = "button";
+        friendsBtn.id = "friendsNavBtn";
+        friendsBtn.className = "btn-friends-nav hidden";
+        friendsBtn.innerHTML = `👊 Amigos <span id="friendsReqBadge" class="friends-req-badge hidden">0</span>`;
+        nav.insertBefore(friendsBtn, notifBtn);
+    }
+
+    // 2. Botão Modo Fantasma nos controlos do mapa
+    const mapCtrls = document.querySelector(".map-floating-controls");
+    if (mapCtrls && !$("ghostModeMapBtn")) {
+        const ghostBtn = document.createElement("button");
+        ghostBtn.type = "button";
+        ghostBtn.id = "ghostModeMapBtn";
+        ghostBtn.className = "map-ctrl-btn hidden";
+        ghostBtn.textContent = "📍 Visível";
+        mapCtrls.appendChild(ghostBtn);
+    }
+
+    // 3. Campos de Foto de Perfil, Estado/Mood e Modo Fantasma no Modal de Perfil
+    const profileForm = $("profileUpdateForm");
+    if (profileForm && !$("profileAvatarBox")) {
+        const avatarSection = document.createElement("div");
+        avatarSection.id = "profileAvatarBox";
+        avatarSection.style.marginBottom = "12px";
+        avatarSection.innerHTML = `
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px;">
+                <div id="profileAvatarPreview" class="avatar-circle lg">?</div>
+                <div style="flex:1;">
+                    <label for="profileAvatarInput" style="margin:0 0 6px;">Foto de Perfil</label>
+                    <input type="file" id="profileAvatarInput" accept="image/*" style="padding:6px; font-size:12px;">
+                </div>
+            </div>
+            <label>Estado atual (visível no mapa para amigos)</label>
+            <div id="statusPillsContainer" class="status-pills-grid">
+                ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
+            </div>
+            <div class="ghost-toggle-bar">
+                <div>
+                    <strong style="font-size:13px; display:block;">👻 Modo Fantasma</strong>
+                    <span style="font-size:11.5px; color:var(--muted);">Oculta a tua localização ao vivo no mapa</span>
+                </div>
+                <input type="checkbox" id="profileGhostCheckbox" style="width:18px; height:18px; margin:0; cursor:pointer;">
+            </div>
+        `;
+        profileForm.insertBefore(avatarSection, profileForm.firstChild);
+    }
+
+    // 4. Modal de Amigos & Social estilo Bump
+    if (!$("friendsModal")) {
+        const fModal = document.createElement("div");
+        fModal.id = "friendsModal";
+        fModal.className = "modal hidden";
+        fModal.setAttribute("aria-hidden", "true");
+        fModal.innerHTML = `
+            <div class="modal-content">
+                <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
+                <h2 style="margin:0 0 4px;">👊 Social & Amigos</h2>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Vê onde estão os teus amigos, envia Bumps e descobre a que eventos vão.</p>
+                
+                <div class="auth-tabs" style="margin-bottom:14px;">
+                    <button type="button" id="tabFriendsList" class="auth-tab active">👥 Amigos (<span id="friendsTabCount">0</span>)</button>
+                    <button type="button" id="tabFriendsAdd" class="auth-tab">➕ Adicionar / Pedidos (<span id="requestsTabCount">0</span>)</button>
+                </div>
+
+                <div id="panelFriendsList">
+                    <div id="friendsContainerList"></div>
+                </div>
+
+                <div id="panelFriendsAdd" class="hidden">
+                    <div id="incomingRequestsSection" style="margin-bottom:16px;"></div>
+                    <label for="friendSearchInput">Procurar utilizadores por nome ou e-mail</label>
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, joao@email.com...">
+                        <button type="button" id="friendSearchBtn" class="btn-primary-sm">Procurar</button>
+                    </div>
+                    <div id="friendSearchResults"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(fModal);
+    }
+
+    bindSocialEvents();
+}
+
+function bindSocialEvents() {
+    const friendsNavBtn = $("friendsNavBtn");
+    const friendsModal = $("friendsModal");
+    if (friendsNavBtn && !friendsNavBtn.dataset.bound) {
+        friendsNavBtn.dataset.bound = "1";
+        friendsNavBtn.addEventListener("click", async () => {
+            openModal(friendsModal);
+            await loadSocialData();
+        });
+    }
+
+    const closeFriendsBtn = $("closeFriendsModal");
+    if (closeFriendsBtn && !closeFriendsBtn.dataset.bound) {
+        closeFriendsBtn.dataset.bound = "1";
+        closeFriendsBtn.addEventListener("click", () => closeModalEl(friendsModal));
+        friendsModal.addEventListener("mousedown", e => { if (e.target === friendsModal) closeModalEl(friendsModal); });
+    }
+
+    const tabList = $("tabFriendsList");
+    const tabAdd = $("tabFriendsAdd");
+    if (tabList && !tabList.dataset.bound) {
+        tabList.dataset.bound = "1";
+        tabList.addEventListener("click", () => {
+            tabList.classList.add("active");
+            tabAdd.classList.remove("active");
+            $("panelFriendsList").classList.remove("hidden");
+            $("panelFriendsAdd").classList.add("hidden");
+        });
+        tabAdd.addEventListener("click", () => {
+            tabAdd.classList.add("active");
+            tabList.classList.remove("active");
+            $("panelFriendsAdd").classList.remove("hidden");
+            $("panelFriendsList").classList.add("hidden");
+        });
+    }
+
+    const searchBtn = $("friendSearchBtn");
+    const searchInp = $("friendSearchInput");
+    if (searchBtn && !searchBtn.dataset.bound) {
+        searchBtn.dataset.bound = "1";
+        searchBtn.addEventListener("click", searchUsersToAdd);
+        searchInp.addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); searchUsersToAdd(); }
+        });
+    }
+
+    const ghostMapBtn = $("ghostModeMapBtn");
+    if (ghostMapBtn && !ghostMapBtn.dataset.bound) {
+        ghostMapBtn.dataset.bound = "1";
+        ghostMapBtn.addEventListener("click", () => toggleGhostMode());
+    }
+
+    const statusContainer = $("statusPillsContainer");
+    if (statusContainer && !statusContainer.dataset.bound) {
+        statusContainer.dataset.bound = "1";
+        statusContainer.addEventListener("click", e => {
+            const btn = e.target.closest(".status-pill-btn");
+            if (!btn) return;
+            statusContainer.querySelectorAll(".status-pill-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            if (currentProfile) {
+                currentProfile.status_emoji = btn.dataset.emoji;
+                currentProfile.status_text = btn.dataset.text;
+            }
+        });
+    }
+
+    const avatarInput = $("profileAvatarInput");
+    if (avatarInput && !avatarInput.dataset.bound) {
+        avatarInput.dataset.bound = "1";
+        avatarInput.addEventListener("change", () => {
+            const file = avatarInput.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            $("profileAvatarPreview").innerHTML = `<img src="${url}" alt="">`;
+        });
+    }
 }
 
 // ==========================================
@@ -270,10 +461,16 @@ registerForm.addEventListener("submit", async e => {
 
 logoutButton.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
+    if (locationSyncInterval) clearInterval(locationSyncInterval);
+    if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
     currentUser = null;
     currentProfile = null;
     myEnrollments.clear();
     myFollowing.clear();
+    window.friendsList = [];
+    if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
+    if ($("friendsNavBtn")) $("friendsNavBtn").classList.add("hidden");
+    if ($("ghostModeMapBtn")) $("ghostModeMapBtn").classList.add("hidden");
     notifBtn.classList.add("hidden");
     userBadge.classList.add("hidden");
     adminPanelBtn.classList.add("hidden");
@@ -316,33 +513,59 @@ async function handleAuthenticatedSession(user) {
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
 
-    await Promise.all([loadMyEnrollments(), loadMyFollowing(), loadNotifications()]);
+    await Promise.all([
+        loadMyEnrollments(),
+        loadAllEnrollmentsSummary(),
+        loadMyFollowing(),
+        loadNotifications(),
+        loadSocialData()
+    ]);
     await loadEventsFromSupabase();
+    startLiveSocialSync();
     checkSharedEventUrl();
+}
+
+function renderAvatarChip(profile, sizeClass = "sm") {
+    if (profile?.avatar_url) {
+        return `<span class="avatar-circle ${sizeClass}"><img src="${escapeHTML(profile.avatar_url)}" alt="" onerror="this.remove()"></span>`;
+    }
+    const initials = (profile?.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+    return `<span class="avatar-circle ${sizeClass}">${escapeHTML(initials)}</span>`;
 }
 
 function applyRoleUI() {
     if (!currentProfile) return;
-    const { role, full_name, business_type } = currentProfile;
+    const { role, full_name, business_type, ghost_mode } = currentProfile;
+
+    if ($("friendsNavBtn")) $("friendsNavBtn").classList.remove("hidden");
+    if ($("ghostModeMapBtn")) {
+        const gBtn = $("ghostModeMapBtn");
+        gBtn.classList.remove("hidden");
+        gBtn.classList.toggle("ghost-on", !!ghost_mode);
+        gBtn.textContent = ghost_mode ? "👻 Modo Fantasma" : "📍 Visível";
+    }
 
     notifBtn.classList.remove("hidden");
     logoutButton.classList.remove("hidden");
     userBadge.classList.remove("hidden");
 
+    const avatarHtml = renderAvatarChip(currentProfile, "sm");
+
     if (role === "admin") {
-        userBadge.textContent = `🛡️ ${full_name}`;
+        userBadge.innerHTML = `${avatarHtml} <span>🛡️ ${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.remove("hidden");
     } else if (role === "business") {
         const tipo = business_type || "Empresa";
-        userBadge.textContent = `🏢 ${tipo} · ${full_name}`;
+        userBadge.innerHTML = `${avatarHtml} <span>🏢 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.add("hidden");
     } else {
-        userBadge.textContent = `👤 ${full_name}`;
+        userBadge.innerHTML = `${avatarHtml} <span>${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.add("hidden");
     }
 }
 
 async function initAuth() {
+    ensureSocialUI();
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
@@ -353,6 +576,389 @@ async function initAuth() {
     } catch (e) {
         authOverlay.classList.remove("hidden");
     }
+}
+
+// ==========================================
+// SISTEMA SOCIAL ESTILO BUMP (AMIGOS, LOCALIZAÇÃO AO VIVO, BUMPS)
+// ==========================================
+async function loadSocialData() {
+    if (!currentUser) return;
+    try {
+        const { data: rows, error } = await supabaseClient
+            .from("friendships")
+            .select("*")
+            .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
+
+        if (error || !rows) return;
+
+        const acceptedIds = new Set();
+        const incomingRows = [];
+        sentFriendRequestIds = new Set();
+
+        rows.forEach(r => {
+            if (r.status === "accepted") {
+                const otherId = r.requester_id === currentUser.id ? r.addressee_id : r.requester_id;
+                acceptedIds.add(otherId);
+            } else if (r.status === "pending") {
+                if (r.addressee_id === currentUser.id) {
+                    incomingRows.push(r);
+                } else {
+                    sentFriendRequestIds.add(r.addressee_id);
+                }
+            }
+        });
+
+        const allNeededIds = [...new Set([...acceptedIds, ...incomingRows.map(r => r.requester_id)])];
+        let profilesById = new Map();
+
+        if (allNeededIds.length > 0) {
+            const { data: profs } = await supabaseClient
+                .from("profiles")
+                .select("*")
+                .in("id", allNeededIds);
+
+            if (profs) {
+                profilesById = new Map(profs.map(p => [p.id, p]));
+            }
+        }
+
+        window.friendsList = [...acceptedIds]
+            .map(id => profilesById.get(id))
+            .filter(Boolean);
+
+        incomingFriendRequests = incomingRows.map(r => ({
+            friendshipId: r.id,
+            user: profilesById.get(r.requester_id) || { id: r.requester_id, full_name: "Utilizador", email: "" }
+        }));
+
+        updateSocialBadges();
+        renderFriendsModalContent();
+        if (typeof showFriendsOnMap === "function") {
+            showFriendsOnMap(window.friendsList);
+        }
+    } catch (e) {}
+}
+
+function updateSocialBadges() {
+    const reqCount = incomingFriendRequests.length;
+    const navBadge = $("friendsReqBadge");
+    if (navBadge) {
+        navBadge.textContent = reqCount;
+        navBadge.classList.toggle("hidden", reqCount === 0);
+    }
+    if ($("friendsTabCount")) $("friendsTabCount").textContent = window.friendsList.length;
+    if ($("requestsTabCount")) $("requestsTabCount").textContent = reqCount;
+}
+
+function renderFriendsModalContent() {
+    const container = $("friendsContainerList");
+    const reqContainer = $("incomingRequestsSection");
+    if (!container || !reqContainer) return;
+
+    if (incomingFriendRequests.length > 0) {
+        reqContainer.innerHTML = `
+            <h4 style="margin:0 0 8px; font-size:13.5px; color:#f9a8d4;">🔔 Pedidos de Amizade (${incomingFriendRequests.length})</h4>
+            ${incomingFriendRequests.map(req => `
+                <div class="friend-row">
+                    <div class="friend-row-left">
+                        ${renderAvatarChip(req.user, "")}
+                        <div class="friend-row-info">
+                            <strong>${escapeHTML(req.user.full_name)}</strong>
+                            <span>${escapeHTML(req.user.email || "")}</span>
+                        </div>
+                    </div>
+                    <div class="friend-row-actions">
+                        <button type="button" class="btn-primary-sm" onclick="window.acceptFriendRequest(${req.friendshipId}, '${req.user.id}')">Aceitar</button>
+                        <button type="button" class="btn-logout" onclick="window.rejectFriendRequest(${req.friendshipId})">Recusar</button>
+                    </div>
+                </div>
+            `).join("")}
+        `;
+    } else {
+        reqContainer.innerHTML = "";
+    }
+
+    if (!window.friendsList.length) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:24px 12px; color:var(--muted);">
+                <p style="font-size:28px; margin:0 0 8px;">👊</p>
+                <p style="margin:0 0 12px; font-size:13.5px;">Ainda não tens amigos adicionados.</p>
+                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos</button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = window.friendsList.map(f => {
+        const hasLocation = !f.ghost_mode && typeof f.last_lat === "number" && typeof f.last_lng === "number";
+        const statusStr = f.ghost_mode
+            ? "👻 Modo Fantasma"
+            : `${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "No LocalSpot")}`;
+
+        return `
+            <div class="friend-row">
+                <div class="friend-row-left">
+                    ${renderAvatarChip(f, "")}
+                    <div class="friend-row-info">
+                        <strong>${escapeHTML(f.full_name)}</strong>
+                        <span>${statusStr}</span>
+                    </div>
+                </div>
+                <div class="friend-row-actions">
+                    <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊 Bump</button>
+                    ${hasLocation ? `<button type="button" class="btn-soft" onclick="window.locateFriendOnMap('${f.id}')" title="Ver no mapa">📍</button>` : ""}
+                    <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover amigo">×</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+async function searchUsersToAdd() {
+    const query = $("friendSearchInput").value.trim();
+    const resultsEl = $("friendSearchResults");
+    if (!query || !currentUser) return;
+
+    resultsEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A procurar...</p>`;
+
+    const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("*")
+        .neq("id", currentUser.id)
+        .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(15);
+
+    if (error || !data || data.length === 0) {
+        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhum utilizador encontrado com "${escapeHTML(query)}".</p>`;
+        return;
+    }
+
+    const friendIds = new Set(window.friendsList.map(f => f.id));
+
+    resultsEl.innerHTML = data.map(u => {
+        let actionBtn = "";
+        if (friendIds.has(u.id)) {
+            actionBtn = `<span class="category">✓ Amigos</span>`;
+        } else if (sentFriendRequestIds.has(u.id)) {
+            actionBtn = `<span class="muted" style="font-size:12px;">Pedido enviado</span>`;
+        } else {
+            actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">+ Adicionar</button>`;
+        }
+
+        return `
+            <div class="friend-row">
+                <div class="friend-row-left">
+                    ${renderAvatarChip(u, "")}
+                    <div class="friend-row-info">
+                        <strong>${escapeHTML(u.full_name)}</strong>
+                        <span>${escapeHTML(u.email)}</span>
+                    </div>
+                </div>
+                <div>${actionBtn}</div>
+            </div>
+        `;
+    }).join("");
+}
+
+window.sendFriendRequest = async (targetId, targetName) => {
+    if (!currentUser || !currentProfile) return;
+    const { error } = await supabaseClient.from("friendships").insert([{
+        requester_id: currentUser.id,
+        addressee_id: targetId,
+        status: "pending"
+    }]);
+
+    if (error) {
+        showToast("Pedido já enviado ou erro de ligação.", "error");
+        return;
+    }
+
+    sentFriendRequestIds.add(targetId);
+    await createNotification(
+        targetId,
+        null,
+        "Novo pedido de amizade 👊",
+        `${currentProfile.full_name} quer adicionar-te aos amigos no LocalSpot!`
+    );
+    showToast(`Pedido enviado a ${targetName}!`, "success");
+    searchUsersToAdd();
+};
+
+window.acceptFriendRequest = async (friendshipId, requesterId) => {
+    const { error } = await supabaseClient
+        .from("friendships")
+        .update({ status: "accepted" })
+        .eq("id", friendshipId);
+
+    if (error) {
+        showToast("Erro ao aceitar pedido.", "error");
+        return;
+    }
+
+    await createNotification(
+        requesterId,
+        null,
+        "Pedido de amizade aceite! 🎉",
+        `${currentProfile.full_name} aceitou o teu pedido. Já podem ver-se no mapa!`
+    );
+    showToast("Novo amigo adicionado!", "success");
+    await loadSocialData();
+    filterEvents();
+};
+
+window.rejectFriendRequest = async friendshipId => {
+    await supabaseClient.from("friendships").delete().eq("id", friendshipId);
+    showToast("Pedido recusado.");
+    await loadSocialData();
+};
+
+window.removeFriend = async (friendId, friendName) => {
+    if (!confirm(`Remover ${friendName} dos teus amigos?`)) return;
+    await supabaseClient
+        .from("friendships")
+        .delete()
+        .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${currentUser.id})`);
+
+    showToast(`${friendName} removido dos amigos.`);
+    await loadSocialData();
+    filterEvents();
+};
+
+window.locateFriendOnMap = friendId => {
+    closeModalEl($("friendsModal"));
+    if (window.innerWidth <= 820) setMobileView("map");
+    if (!focusFriendOnMap(friendId)) {
+        showToast("Localização do amigo indisponível.");
+    }
+};
+
+// Animação e Envio de BUMP!
+function triggerBumpVisual(emoji = "👊", text = "BUMP!") {
+    const existing = document.querySelector(".bump-overlay");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "bump-overlay";
+    overlay.innerHTML = `
+        <div class="bump-burst">${emoji}</div>
+        <div class="bump-banner-text">${escapeHTML(text)}</div>
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.remove(), 1850);
+}
+
+window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
+    if (!currentUser || !currentProfile) return;
+    const friend = window.friendsList.find(f => String(f.id) === String(friendId));
+    const targetName = friend ? friend.full_name : "amigo";
+
+    triggerBumpVisual(emoji, `${emoji} ${label} para ${targetName}!`);
+
+    await createNotification(
+        friendId,
+        null,
+        `${emoji} ${currentProfile.full_name} enviou-te um ${label}`,
+        `Abre o mapa para ver onde ${currentProfile.full_name} está agora!`
+    );
+};
+
+// Sincronização de Localização ao Vivo & Modo Fantasma
+window.syncMyLiveLocation = async (lat, lng) => {
+    if (!currentUser || !currentProfile || currentProfile.ghost_mode) return;
+    try {
+        await supabaseClient.from("profiles").update({
+            last_lat: lat,
+            last_lng: lng,
+            last_seen: new Date().toISOString()
+        }).eq("id", currentUser.id);
+    } catch (e) {}
+};
+
+async function toggleGhostMode(forceValue = null) {
+    if (!currentUser || !currentProfile) return;
+    const nextGhost = forceValue !== null ? forceValue : !currentProfile.ghost_mode;
+
+    const updatePayload = { ghost_mode: nextGhost };
+    if (nextGhost) {
+        updatePayload.last_lat = null;
+        updatePayload.last_lng = null;
+    } else if (userPosition) {
+        updatePayload.last_lat = userPosition.lat;
+        updatePayload.last_lng = userPosition.lng;
+        updatePayload.last_seen = new Date().toISOString();
+    }
+
+    const { error } = await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
+    if (error) {
+        showToast("Erro ao alterar Modo Fantasma.", "error");
+        return;
+    }
+
+    currentProfile.ghost_mode = nextGhost;
+    if ($("profileGhostCheckbox")) $("profileGhostCheckbox").checked = nextGhost;
+    applyRoleUI();
+
+    if (nextGhost) {
+        showToast("👻 Modo Fantasma ativo — estás invisível no mapa.");
+    } else {
+        showToast("📍 Estás visível para os teus amigos!", "success");
+        if (!userPosition) {
+            try { await locateUser(); } catch (e) {}
+        }
+    }
+}
+
+function startLiveSocialSync() {
+    if (locationSyncInterval) clearInterval(locationSyncInterval);
+
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: "geolocation" }).then(res => {
+            if (res.state === "granted" && !currentProfile?.ghost_mode) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+                });
+            }
+        }).catch(() => {});
+    }
+
+    locationSyncInterval = setInterval(async () => {
+        if (!currentUser) return;
+        await loadSocialData();
+        if (userPosition && !currentProfile?.ghost_mode) {
+            await window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+        }
+    }, 30000);
+
+    // Subscrição Realtime para receber Bumps e Pedidos na hora
+    if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = supabaseClient
+        .channel(`social_${currentUser.id}`)
+        .on("postgres_changes", {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${currentUser.id}`
+        }, payload => {
+            const notif = payload.new;
+            if (notif) {
+                notifications.unshift(notif);
+                renderNotifications();
+                if (notif.title && (notif.title.includes("Bump") || notif.title.includes("Acenou"))) {
+                    triggerBumpVisual("👊", notif.title);
+                } else {
+                    showToast(notif.title, "success");
+                }
+            }
+        })
+        .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "friendships"
+        }, () => {
+            loadSocialData();
+        })
+        .subscribe();
 }
 
 // ==========================================
@@ -428,6 +1034,9 @@ notifList.addEventListener("click", async e => {
 
     if (eventId) {
         openEventDetails(eventId);
+    } else if ($("friendsModal")) {
+        openModal($("friendsModal"));
+        await loadSocialData();
     }
 });
 
@@ -492,13 +1101,31 @@ function updateDetailFollowButton(creatorId) {
 }
 
 // ==========================================
-// MODAL DE PERFIL ("A MINHA CONTA")
+// MODAL DE PERFIL ("A MINHA CONTA" + FOTO + ESTADO + MODO FANTASMA)
 // ==========================================
 userBadge.addEventListener("click", () => {
     if (!currentProfile) return;
+    ensureSocialUI();
     $("profileEmailDisplay").textContent = currentProfile.email;
     $("profileNameInput").value = currentProfile.full_name;
     $("profileBioInput").value = currentProfile.bio || "";
+
+    if ($("profileAvatarPreview")) {
+        $("profileAvatarPreview").innerHTML = currentProfile.avatar_url
+            ? `<img src="${escapeHTML(currentProfile.avatar_url)}" alt="">`
+            : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
+    }
+    if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
+    if ($("profileGhostCheckbox")) $("profileGhostCheckbox").checked = !!currentProfile.ghost_mode;
+
+    if ($("statusPillsContainer")) {
+        const curEmoji = currentProfile.status_emoji || "📍";
+        const curText = currentProfile.status_text || "No LocalSpot";
+        $("statusPillsContainer").querySelectorAll(".status-pill-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.emoji === curEmoji && btn.dataset.text === curText);
+        });
+    }
+
     renderProfileLists();
     openModal(profileModal);
 });
@@ -515,15 +1142,57 @@ $("tabMyEnrollments").addEventListener("click", () => switchProfileTab("tabMyEnr
 $("tabMyCreated").addEventListener("click", () => switchProfileTab("tabMyCreated", "profileCreatedList"));
 $("tabMyFollowing").addEventListener("click", () => switchProfileTab("tabMyFollowing", "profileFollowingList"));
 
+async function uploadAvatarImage(file) {
+    const { blob, dataUrl } = await resizeImageToBlob(file, 400);
+    const fileName = `${currentUser.id}/avatar_${Date.now()}.jpg`;
+
+    for (const bucket of ["avatars", "event-images"]) {
+        try {
+            const { error } = await supabaseClient.storage
+                .from(bucket)
+                .upload(fileName, blob, { contentType: "image/jpeg", upsert: true });
+            if (!error) {
+                const { data } = supabaseClient.storage.from(bucket).getPublicUrl(fileName);
+                if (data?.publicUrl) return data.publicUrl;
+            }
+        } catch (e) {}
+    }
+    return dataUrl;
+}
+
 $("profileUpdateForm").addEventListener("submit", async e => {
     e.preventDefault();
     const newName = $("profileNameInput").value.trim();
     const newBio = $("profileBioInput").value.trim();
     if (!newName || !currentProfile) return;
 
+    let avatarUrl = currentProfile.avatar_url || null;
+    const avatarFile = $("profileAvatarInput")?.files?.[0];
+    if (avatarFile) {
+        avatarUrl = await uploadAvatarImage(avatarFile);
+    }
+
+    const ghostMode = $("profileGhostCheckbox") ? $("profileGhostCheckbox").checked : !!currentProfile.ghost_mode;
+    const statusEmoji = currentProfile.status_emoji || "📍";
+    const statusText = currentProfile.status_text || "No LocalSpot";
+
+    const updateObj = {
+        full_name: newName,
+        bio: newBio,
+        avatar_url: avatarUrl,
+        status_emoji: statusEmoji,
+        status_text: statusText,
+        ghost_mode: ghostMode
+    };
+
+    if (ghostMode) {
+        updateObj.last_lat = null;
+        updateObj.last_lng = null;
+    }
+
     const { error } = await supabaseClient
         .from("profiles")
-        .update({ full_name: newName, bio: newBio })
+        .update(updateObj)
         .eq("id", currentProfile.id);
 
     if (error) {
@@ -531,8 +1200,7 @@ $("profileUpdateForm").addEventListener("submit", async e => {
         return;
     }
 
-    currentProfile.full_name = newName;
-    currentProfile.bio = newBio;
+    Object.assign(currentProfile, updateObj);
     applyRoleUI();
     showToast("Perfil atualizado com sucesso!", "success");
 });
@@ -734,6 +1402,29 @@ async function loadMyEnrollments() {
     myEnrollments = new Set(loadJSON(`localspot_enrolled_${currentUser.id}`, []).map(String));
 }
 
+async function loadAllEnrollmentsSummary() {
+    try {
+        const { data, error } = await supabaseClient
+            .from("enrollments")
+            .select("event_id, user_id");
+
+        if (!error && data) {
+            allEnrollmentsMap = new Map();
+            data.forEach(row => {
+                const key = String(row.event_id);
+                if (!allEnrollmentsMap.has(key)) allEnrollmentsMap.set(key, []);
+                allEnrollmentsMap.get(key).push(String(row.user_id));
+            });
+        }
+    } catch (e) {}
+}
+
+window.getFriendsGoingToEvent = eventId => {
+    const enrolledUserIds = new Set(allEnrollmentsMap.get(String(eventId)) || []);
+    if (!enrolledUserIds.size || !window.friendsList.length) return [];
+    return window.friendsList.filter(f => enrolledUserIds.has(String(f.id)));
+};
+
 async function loadEventsFromSupabase() {
     let { data, error } = await supabaseClient.from("events").select("*");
 
@@ -837,6 +1528,7 @@ async function toggleEnrollment(id) {
 
     ev.enrolled = newEnrolledCount;
     saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
+    await loadAllEnrollmentsSummary();
 
     if (isEnrolled) {
         showToast(`Cancelaste a tua inscrição em "${ev.name}".`);
@@ -979,6 +1671,11 @@ function displayEvents(list) {
             organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
         }
 
+        const friendsGoing = window.getFriendsGoingToEvent(ev.id);
+        const friendsBadge = friendsGoing.length
+            ? `<div class="friends-going-badge">👊 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
+            : "";
+
         const ownerBar = canManageEvent(ev)
             ? `<div class="owner-card-bar">
                     <button type="button" class="edit-btn" data-action="edit">✏️ Editar</button>
@@ -1005,6 +1702,7 @@ function displayEvents(list) {
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
             ${organizerBadge}
+            ${friendsBadge}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
             
@@ -1159,7 +1857,6 @@ async function openEventDetails(id) {
     $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
     $("detailOwnerActions").classList.toggle("hidden", !canManageEvent(ev));
 
-    // Secção de avaliações visível se o evento já terminou
     const reviewsSection = $("detailReviewsSection");
     reviewsSection.classList.toggle("hidden", !past);
     $("reviewForm").classList.toggle("hidden", !past || !enrolled);
@@ -1371,7 +2068,7 @@ $("reviewForm").addEventListener("submit", async e => {
     showToast("Avaliação registada!", "success");
 });
 
-// ---------- Inscritos e Comentários ----------
+// ---------- Inscritos e Comentários (com destaque para Amigos) ----------
 async function loadEventAttendees(ev) {
     const listEl = $("detailAttendeesList");
     const countEl = $("detailAttendeesCount");
@@ -1380,7 +2077,7 @@ async function loadEventAttendees(ev) {
 
     const { data, error } = await supabaseClient
         .from("enrollments")
-        .select("user_name")
+        .select("user_id, user_name")
         .eq("event_id", ev.id)
         .order("created_at", { ascending: true });
 
@@ -1391,8 +2088,16 @@ async function loadEventAttendees(ev) {
         return;
     }
 
+    const friendMap = new Map(window.friendsList.map(f => [String(f.id), f]));
     countEl.textContent = Math.max(data.length, ev.enrolled || 0);
-    listEl.innerHTML = data.map(row => `<span class="attendee-pill">👤 ${escapeHTML(row.user_name)}</span>`).join("");
+
+    listEl.innerHTML = data.map(row => {
+        const friendObj = friendMap.get(String(row.user_id));
+        if (friendObj) {
+            return `<span class="attendee-pill friend-attendee">${renderAvatarChip(friendObj, "sm")} 👊 ${escapeHTML(row.user_name)} (Amigo)</span>`;
+        }
+        return `<span class="attendee-pill">👤 ${escapeHTML(row.user_name)}</span>`;
+    }).join("");
 }
 
 async function loadEventComments(eventId) {
@@ -1558,7 +2263,7 @@ locationButton.addEventListener("click", async () => {
         state.sort = "distance";
         sortFilter.value = "distance";
         filterEvents();
-        showToast("Eventos ordenados pela distância a ti.");
+        showToast("Localização atualizada e eventos ordenados por distância.");
     } catch (err) {
         showToast(err.message, "error");
     } finally {
@@ -1652,7 +2357,8 @@ aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) clo
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
+    if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
+    else if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
     else if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
     else if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
     else if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
