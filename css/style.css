@@ -74,10 +74,10 @@ nav button, .user-badge { white-space: nowrap; }
 /* Botão Amigos no Header */
 .btn-friends-nav {
     position: relative;
-    border: 1px solid rgba(236, 72, 153, 0.45);
-    background: rgba(236, 72, 153, 0.14);
+    border: 1px solid rgba(236, 72, 153, 0.5);
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(139, 92, 246, 0.2));
     color: #f9a8d4;
-    padding: 6px 11px;
+    padding: 6px 12px;
     border-radius: 999px;
     font-size: 12.5px;
     font-weight: 700;
@@ -87,7 +87,7 @@ nav button, .user-badge { white-space: nowrap; }
     gap: 6px;
     transition: 0.15s;
 }
-.btn-friends-nav:hover { background: rgba(236, 72, 153, 0.26); border-color: #ec4899; }
+.btn-friends-nav:hover { background: rgba(236, 72, 153, 0.32); border-color: #ec4899; color: #fff; }
 .friends-req-badge {
     background: var(--bump);
     color: #fff;
@@ -104,8 +104,8 @@ nav button, .user-badge { white-space: nowrap; }
 
 /* Avatares */
 .avatar-circle {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -120,7 +120,7 @@ nav button, .user-badge { white-space: nowrap; }
     overflow: hidden;
 }
 .avatar-circle.sm { width: 24px; height: 24px; font-size: 10px; border-width: 1.5px; }
-.avatar-circle.lg { width: 68px; height: 68px; font-size: 24px; border-width: 3px; border-color: var(--primary); }
+.avatar-circle.lg { width: 68px; height: 68px; font-size: 24px; border-width: 3px; border-color: #ec4899; }
 .avatar-circle img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Notificações */
@@ -265,7 +265,34 @@ nav button, .user-badge { white-space: nowrap; }
 .map-floating-controls { position: absolute; top: 14px; left: 14px; z-index: 500; display: flex; flex-wrap: wrap; gap: 8px; max-width: calc(100% - 60px); }
 .map-ctrl-btn { background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(6px); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.35); transition: 0.15s; }
 .map-ctrl-btn:hover { border-color: var(--primary); color: var(--primary); }
-.map-ctrl-btn.ghost-on { border-color: #a855f7; background: rgba(88, 28, 135, 0.85); color: #f3e8ff; }
+.map-ctrl-btn.privacy-blurred { border-color: #f59e0b; background: rgba(120, 53, 15, 0.88); color: #fef3c7; }
+.map-ctrl-btn.privacy-ghost { border-color: #a855f7; background: rgba(88, 28, 135, 0.88); color: #f3e8ff; }
+
+/* Banner de Hangout (Amigos Juntos) no Mapa */
+.hangout-banner {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 500;
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.95), rgba(245, 158, 11, 0.95));
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 800;
+    box-shadow: 0 10px 25px rgba(236, 72, 153, 0.45);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    animation: pulseHangout 2s infinite;
+}
+@keyframes pulseHangout {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.04); }
+}
 
 .pick-banner {
     position: absolute;
@@ -300,26 +327,26 @@ nav button, .user-badge { white-space: nowrap; }
     cursor: pointer;
     transition: transform 0.2s;
 }
-.friend-map-pin:hover { transform: scale(1.1); z-index: 20; }
+.friend-map-pin:hover { transform: scale(1.1); z-index: 25; }
 .friend-status-bubble {
-    background: rgba(15, 23, 42, 0.92);
+    background: rgba(15, 23, 42, 0.94);
     color: #f8fafc;
-    border: 1px solid rgba(236, 72, 153, 0.6);
+    border: 1px solid rgba(236, 72, 153, 0.65);
     font-size: 11px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 999px;
     margin-bottom: 4px;
     white-space: nowrap;
-    max-width: 140px;
+    max-width: 155px;
     overflow: hidden;
     text-overflow: ellipsis;
     box-shadow: 0 4px 10px rgba(0,0,0,0.45);
 }
 .friend-avatar-pin {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     border: 3px solid #ec4899;
     background: linear-gradient(135deg, #3b82f6, #ec4899);
@@ -330,27 +357,51 @@ nav button, .user-badge { white-space: nowrap; }
     align-items: center;
     justify-content: center;
     box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.28), 0 6px 16px rgba(0,0,0,0.55);
-    overflow: hidden;
 }
-.friend-avatar-pin img { width: 100%; height: 100%; object-fit: cover; }
+.friend-avatar-pin.hangout-glow {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.45), 0 6px 20px rgba(236, 72, 153, 0.7);
+}
+.friend-avatar-pin.blurred-pin {
+    border-style: dashed;
+    border-color: #f59e0b;
+    opacity: 0.9;
+}
+.friend-avatar-pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .friend-online-dot {
     position: absolute;
-    bottom: 0;
-    right: 0;
+    bottom: -1px;
+    right: -1px;
     width: 12px;
     height: 12px;
     border-radius: 50%;
     background: #22c55e;
     border: 2px solid #0f172a;
 }
+.friend-battery-pill {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid var(--border);
+    font-size: 9.5px;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 999px;
+}
+.friend-battery-pill.low { color: #fca5a5; border-color: #ef4444; }
 .friend-name-tag {
     margin-top: 3px;
-    background: rgba(15, 23, 42, 0.88);
+    background: rgba(15, 23, 42, 0.9);
     color: #fff;
     font-size: 10.5px;
     font-weight: 700;
     padding: 1px 7px;
     border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* Cartão Popup do Mapa */
@@ -360,7 +411,7 @@ nav button, .user-badge { white-space: nowrap; }
     border: 1px solid var(--border) !important;
     border-radius: 12px !important;
     padding: 12px !important;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.75) !important;
 }
 .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--bg) !important; }
 .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--bg) !important; }
@@ -394,13 +445,30 @@ nav button, .user-badge { white-space: nowrap; }
 }
 .popup-dir-btn:hover { border-color: var(--primary); color: var(--primary); }
 
-/* Popup de Amigo no Mapa */
-.friend-popup-card { width: 245px; text-align: center; }
-.friend-popup-header { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
+/* Popup de Amigo no Mapa estilo Bump */
+.friend-popup-card { width: 265px; text-align: center; }
+.friend-popup-header { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 8px; }
 .friend-popup-header h4 { margin: 0; font-size: 16px; }
 .friend-popup-status { background: var(--surface); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: #f9a8d4; font-weight: 600; }
-.friend-popup-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
-.friend-bump-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.friend-telemetry-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.telemetry-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+}
+.telemetry-chip.bump-streak { border-color: rgba(236, 72, 153, 0.5); color: #f9a8d4; }
+.friend-popup-meta { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
+.friend-bump-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
 .btn-bump {
     border: none;
     background: linear-gradient(135deg, #ec4899, #8b5cf6);
@@ -425,7 +493,7 @@ nav button, .user-badge { white-space: nowrap; }
 }
 .btn-wave:hover { border-color: #ec4899; color: #f9a8d4; }
 
-/* Animação Visual de BUMP! */
+/* Animação Visual de BUMP & Emoji Bombs Voadores */
 .bump-overlay {
     position: fixed;
     inset: 0;
@@ -439,7 +507,7 @@ nav button, .user-badge { white-space: nowrap; }
     animation: bumpFade 1.8s ease forwards;
 }
 .bump-burst {
-    font-size: 64px;
+    font-size: 68px;
     animation: bumpShake 0.55s ease;
     filter: drop-shadow(0 10px 25px rgba(236, 72, 153, 0.8));
 }
@@ -447,12 +515,24 @@ nav button, .user-badge { white-space: nowrap; }
     margin-top: 10px;
     background: linear-gradient(135deg, #ec4899, #3b82f6);
     color: #fff;
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 900;
     padding: 10px 24px;
     border-radius: 999px;
     box-shadow: 0 12px 30px rgba(0,0,0,0.5);
-    letter-spacing: 0.5px;
+}
+.flying-emoji-bomb {
+    position: fixed;
+    bottom: -40px;
+    font-size: 36px;
+    z-index: 7500;
+    pointer-events: none;
+    animation: flyUpEmoji 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes flyUpEmoji {
+    0% { transform: translateY(0) scale(0.5) rotate(0deg); opacity: 1; }
+    80% { opacity: 1; }
+    100% { transform: translateY(-92vh) scale(1.4) rotate(25deg); opacity: 0; }
 }
 @keyframes bumpShake {
     0% { transform: scale(0.3) rotate(-15deg); }
@@ -467,7 +547,7 @@ nav button, .user-badge { white-space: nowrap; }
     100% { opacity: 0; }
 }
 
-/* Modal Social / Amigos */
+/* Modal Social / Amigos & Chat Direto */
 .friend-row {
     display: flex;
     align-items: center;
@@ -483,9 +563,66 @@ nav button, .user-badge { white-space: nowrap; }
 .friend-row-info { min-width: 0; }
 .friend-row-info strong { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .friend-row-info span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.friend-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.friend-row-actions { display: flex; gap: 5px; flex-shrink: 0; }
 
-.status-pills-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.chat-messages-box {
+    height: 250px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.chat-bubble {
+    max-width: 78%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+.chat-bubble.mine {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #3b82f6, #ec4899);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+.chat-bubble.theirs {
+    align-self: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+}
+.chat-bubble small {
+    display: block;
+    font-size: 10px;
+    opacity: 0.75;
+    margin-top: 3px;
+}
+.emoji-bomb-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.emoji-bomb-btn {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 6px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: transform 0.12s;
+}
+.emoji-bomb-btn:hover { transform: scale(1.12); border-color: #ec4899; }
+
+.status-pills-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
 .status-pill-btn {
     border: 1px solid var(--border);
     background: var(--surface);
@@ -497,16 +634,24 @@ nav button, .user-badge { white-space: nowrap; }
 }
 .status-pill-btn.active, .status-pill-btn:hover { border-color: #ec4899; background: rgba(236, 72, 153, 0.18); color: #f9a8d4; }
 
-.ghost-toggle-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 10px 12px;
-    border-radius: 10px;
+.privacy-selector-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
     margin-bottom: 12px;
 }
+.privacy-opt-btn {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 8px 6px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+}
+.privacy-opt-btn.active { border-color: #ec4899; background: rgba(236, 72, 153, 0.18); color: #f9a8d4; }
 
 /* Modais */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 16px; }
