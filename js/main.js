@@ -66,6 +66,7 @@ const reportModal = $("reportModal");
 const pickBanner = $("pickBanner");
 
 const STORAGE_FAVS = "localspot_favorites";
+const STORAGE_WELCOME_SEEN = "localspot_welcome_seen";
 
 function loadJSON(key, fallback) {
     try {
@@ -112,7 +113,7 @@ let currentList = [];
 
 // Estado Social Completo estilo Bump
 window.friendsList = [];
-let friendshipRecords = new Map(); // friend_id -> friendship row (id, bump_count)
+let friendshipRecords = new Map();
 let incomingFriendRequests = [];
 let sentFriendRequestIds = new Set();
 let allEnrollmentsMap = new Map();
@@ -121,6 +122,19 @@ let unreadMessagesBySender = new Map();
 let locationSyncInterval = null;
 let geoWatchId = null;
 let realtimeChannel = null;
+
+// Estado do Onboarding
+let onboardingStep = 1;
+const onboardingData = {
+    fullName: "",
+    bio: "",
+    birthDate: "",
+    avatarFile: null,
+    avatarPreviewUrl: null,
+    statusEmoji: "📍",
+    statusText: "No LocalSpot",
+    privacyMode: "precise"
+};
 
 const BUMP_STATUSES = [
     { emoji: "📍", text: "No LocalSpot" },
@@ -153,6 +167,334 @@ function translateAuthError(error) {
     if (msg.includes("password should be at least")) return "A palavra-passe tem de ter pelo menos 6 caracteres.";
     if (msg.includes("rate limit") || msg.includes("too many requests")) return "Muitas tentativas seguidas. Aguarda alguns minutos.";
     return error.message;
+}
+
+// ==========================================
+// ECRÃ DE BOAS-VINDAS & QUESTIONÁRIO ANIMADO (ONBOARDING)
+// ==========================================
+function getAgeAndZodiac(dateStr) {
+    if (!dateStr) return null;
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length !== 3) return null;
+    const [year, month, day] = parts;
+    const dob = new Date(year, month - 1, day);
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const mDiff = now.getMonth() - dob.getMonth();
+    if (mDiff < 0 || (mDiff === 0 && now.getDate() < dob.getDate())) age--;
+
+    if (age < 0 || age > 120) return null;
+
+    const signs = [
+        { name: "Capricórnio", emoji: "♑", endDay: 19 },
+        { name: "Aquário", emoji: "♒", endDay: 18 },
+        { name: "Peixes", emoji: "♓", endDay: 20 },
+        { name: "Carneiro", emoji: "♈", endDay: 19 },
+        { name: "Touro", emoji: "♉", endDay: 20 },
+        { name: "Gémeos", emoji: "♊", endDay: 20 },
+        { name: "Caranguejo", emoji: "♋", endDay: 22 },
+        { name: "Leão", emoji: "♌", endDay: 22 },
+        { name: "Virgem", emoji: "♍", endDay: 22 },
+        { name: "Balança", emoji: "♎", endDay: 22 },
+        { name: "Escorpião", emoji: "♏", endDay: 21 },
+        { name: "Sagitário", emoji: "♐", endDay: 21 },
+        { name: "Capricórnio", emoji: "♑", endDay: 31 }
+    ];
+    const sign = day <= signs[month - 1].endDay ? signs[month - 1] : signs[month];
+    return { age, sign };
+}
+
+function showWelcomeSplash() {
+    let splash = $("welcomeSplash");
+    if (!splash) {
+        splash = document.createElement("div");
+        splash.id = "welcomeSplash";
+        splash.className = "welcome-splash";
+        splash.innerHTML = `
+            <div class="welcome-orb orb-1"></div>
+            <div class="welcome-orb orb-2"></div>
+            <div class="welcome-orb orb-3"></div>
+            <div class="welcome-content">
+                <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
+                <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
+                <h1 class="welcome-title">Bem-vindo!</h1>
+                <p class="welcome-desc">
+                    Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
+                </p>
+                <div class="welcome-feature-pills">
+                    <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
+                    <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
+                    <span class="welcome-feat-chip">🎉 Eventos locais</span>
+                </div>
+                <button type="button" id="welcomeStartBtn" class="welcome-start-btn">
+                    Começar agora 🚀
+                </button>
+            </div>
+        `;
+        document.body.appendChild(splash);
+    }
+
+    splash.classList.remove("hidden", "leaving");
+
+    const startBtn = $("welcomeStartBtn");
+    startBtn.onclick = () => {
+        localStorage.setItem(STORAGE_WELCOME_SEEN, "1");
+        splash.classList.add("leaving");
+        setTimeout(() => {
+            splash.classList.add("hidden");
+            if (currentUser && currentProfile && !currentProfile.onboarding_completed) {
+                startOnboardingWizard();
+            }
+        }, 520);
+    };
+}
+
+function startOnboardingWizard() {
+    onboardingStep = 1;
+    onboardingData.fullName = currentProfile?.full_name || "";
+    onboardingData.bio = currentProfile?.bio || "";
+    onboardingData.birthDate = currentProfile?.birth_date || "";
+    onboardingData.avatarFile = null;
+    onboardingData.avatarPreviewUrl = currentProfile?.avatar_url || null;
+    onboardingData.statusEmoji = currentProfile?.status_emoji || "📍";
+    onboardingData.statusText = currentProfile?.status_text || "No LocalSpot";
+    onboardingData.privacyMode = currentProfile?.privacy_mode || "precise";
+
+    let overlay = $("onboardingOverlay");
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "onboardingOverlay";
+        overlay.className = "onboarding-overlay";
+        overlay.innerHTML = `<div id="onboardingCard" class="onboarding-card"></div>`;
+        document.body.appendChild(overlay);
+    }
+    overlay.classList.remove("hidden");
+    renderOnboardingStep();
+}
+
+function renderOnboardingStep() {
+    const card = $("onboardingCard");
+    if (!card) return;
+    const totalSteps = 4;
+    const pct = Math.round((onboardingStep / totalSteps) * 100);
+
+    let stepBody = "";
+
+    if (onboardingStep === 1) {
+        stepBody = `
+            <div class="onboarding-step-panel">
+                <div class="onboarding-step-emoji">✨</div>
+                <h2>Como queres ser chamado?</h2>
+                <p class="ob-sub">Este é o nome que os teus amigos vão ver no mapa e nos eventos.</p>
+                <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome ou Alcunha *</label>
+                <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Rodrigo Silva" maxlength="40" required>
+                <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Bio rápida (opcional)</label>
+                <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Sempre pronto para um café ou concerto 🎸" maxlength="80">
+                <div class="onboarding-nav-row">
+                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                </div>
+            </div>
+        `;
+    } else if (onboardingStep === 2) {
+        const info = getAgeAndZodiac(onboardingData.birthDate);
+        const maxDate = new Date().toISOString().slice(0, 10);
+        stepBody = `
+            <div class="onboarding-step-panel">
+                <div class="onboarding-step-emoji">🎂</div>
+                <h2>Quando fazes anos?</h2>
+                <p class="ob-sub">Usamos a tua data de nascimento para personalizar o teu perfil.</p>
+                <input type="date" id="obBirthInput" value="${escapeHTML(onboardingData.birthDate)}" max="${maxDate}">
+                <div id="obZodiacWrap">
+                    ${info ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>` : ""}
+                </div>
+                <div class="onboarding-nav-row">
+                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                </div>
+            </div>
+        `;
+    } else if (onboardingStep === 3) {
+        const initials = (onboardingData.fullName || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+        const avatarInner = onboardingData.avatarPreviewUrl
+            ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
+            : escapeHTML(initials);
+
+        stepBody = `
+            <div class="onboarding-step-panel">
+                <div class="onboarding-step-emoji">📸</div>
+                <h2>Escolhe a tua foto & vibe</h2>
+                <p class="ob-sub">Toca no círculo para carregar uma foto de perfil e escolhe o teu estado inicial.</p>
+                <div class="ob-avatar-picker">
+                    <label for="obAvatarFile" class="ob-avatar-circle" id="obAvatarCircle" title="Escolher foto">${avatarInner}</label>
+                    <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
+                    <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">📷 Escolher Foto</button>
+                </div>
+                <div id="obStatusPills" class="status-pills-grid" style="justify-content:center;">
+                    ${BUMP_STATUSES.map(s => `
+                        <button type="button" class="status-pill-btn${onboardingData.statusEmoji === s.emoji && onboardingData.statusText === s.text ? " active" : ""}" data-emoji="${s.emoji}" data-text="${s.text}">
+                            ${s.emoji} ${s.text}
+                        </button>
+                    `).join("")}
+                </div>
+                <div class="onboarding-nav-row">
+                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                </div>
+            </div>
+        `;
+    } else if (onboardingStep === 4) {
+        stepBody = `
+            <div class="onboarding-step-panel">
+                <div class="onboarding-step-emoji">🛰️</div>
+                <h2>Privacidade no Mapa</h2>
+                <p class="ob-sub">Tu controlas sempre quem vê a tua localização. Podes mudar isto a qualquer momento.</p>
+                <div id="obPrivacyGrid" class="privacy-selector-grid">
+                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">📍 Precisa</button>
+                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "blurred" ? " active" : ""}" data-mode="blurred">🌫️ Borrão</button>
+                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">👻 Fantasma</button>
+                </div>
+                <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
+                    💡 <strong>Dica:</strong> No modo <strong>Precisa</strong>, os teus amigos veem a tua bateria, velocidade e distância exata para fazerem Bump!
+                </div>
+                <div class="onboarding-nav-row">
+                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                    <button type="button" id="obFinishBtn" class="ob-btn-next">Entrar no Mapa 🎉</button>
+                </div>
+            </div>
+        `;
+    }
+
+    card.innerHTML = `
+        <div class="onboarding-top-bar">
+            <div class="onboarding-progress-track">
+                <div class="onboarding-progress-fill" style="width:${pct}%;"></div>
+            </div>
+            <span class="onboarding-step-counter">Passo ${onboardingStep} de ${totalSteps}</span>
+        </div>
+        ${stepBody}
+    `;
+
+    // Bindings específicos de cada passo
+    if ($("obBackBtn")) {
+        $("obBackBtn").onclick = () => {
+            onboardingStep = Math.max(1, onboardingStep - 1);
+            renderOnboardingStep();
+        };
+    }
+
+    if (onboardingStep === 1) {
+        const nameInp = $("obNameInput");
+        setTimeout(() => nameInp.focus(), 60);
+        $("obNextBtn").onclick = () => {
+            const val = nameInp.value.trim();
+            if (!val) {
+                showToast("Escreve o teu nome para continuar!", "error");
+                nameInp.focus();
+                return;
+            }
+            onboardingData.fullName = val;
+            onboardingData.bio = $("obBioInput").value.trim();
+            onboardingStep = 2;
+            renderOnboardingStep();
+        };
+    } else if (onboardingStep === 2) {
+        const birthInp = $("obBirthInput");
+        birthInp.onchange = () => {
+            onboardingData.birthDate = birthInp.value;
+            const info = getAgeAndZodiac(birthInp.value);
+            $("obZodiacWrap").innerHTML = info
+                ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>`
+                : "";
+        };
+        $("obNextBtn").onclick = () => {
+            if (!birthInp.value) {
+                showToast("Seleciona a tua data de nascimento!", "error");
+                birthInp.focus();
+                return;
+            }
+            onboardingData.birthDate = birthInp.value;
+            onboardingStep = 3;
+            renderOnboardingStep();
+        };
+    } else if (onboardingStep === 3) {
+        $("obAvatarFile").onchange = e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            onboardingData.avatarFile = file;
+            onboardingData.avatarPreviewUrl = URL.createObjectURL(file);
+            $("obAvatarCircle").innerHTML = `<img src="${onboardingData.avatarPreviewUrl}" alt="">`;
+        };
+        $("obStatusPills").onclick = e => {
+            const btn = e.target.closest(".status-pill-btn");
+            if (!btn) return;
+            $("obStatusPills").querySelectorAll(".status-pill-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            onboardingData.statusEmoji = btn.dataset.emoji;
+            onboardingData.statusText = btn.dataset.text;
+        };
+        $("obNextBtn").onclick = () => {
+            onboardingStep = 4;
+            renderOnboardingStep();
+        };
+    } else if (onboardingStep === 4) {
+        $("obPrivacyGrid").onclick = e => {
+            const btn = e.target.closest(".privacy-opt-btn");
+            if (!btn) return;
+            $("obPrivacyGrid").querySelectorAll(".privacy-opt-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            onboardingData.privacyMode = btn.dataset.mode;
+        };
+        $("obFinishBtn").onclick = finishOnboardingWizard;
+    }
+}
+
+async function finishOnboardingWizard() {
+    const btn = $("obFinishBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "A preparar o teu mapa...";
+    }
+
+    try {
+        let avatarUrl = currentProfile?.avatar_url || null;
+        if (onboardingData.avatarFile) {
+            avatarUrl = await uploadAvatarImage(onboardingData.avatarFile);
+        }
+
+        const isGhost = onboardingData.privacyMode === "ghost";
+        const updatePayload = {
+            full_name: onboardingData.fullName || currentProfile.full_name,
+            bio: onboardingData.bio,
+            birth_date: onboardingData.birthDate || null,
+            avatar_url: avatarUrl,
+            status_emoji: onboardingData.statusEmoji,
+            status_text: onboardingData.statusText,
+            privacy_mode: onboardingData.privacyMode,
+            ghost_mode: isGhost,
+            onboarding_completed: true
+        };
+
+        await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
+        Object.assign(currentProfile, updatePayload);
+        applyRoleUI();
+
+        const overlay = $("onboardingOverlay");
+        if (overlay) overlay.classList.add("hidden");
+
+        triggerBumpVisual("🎉", `Tudo pronto, ${currentProfile.full_name}!`);
+        launchEmojiBombAnimation("🚀");
+
+        if (!isGhost) {
+            try { await locateUser(); } catch (e) {}
+        }
+    } catch (err) {
+        showToast("Erro ao guardar perfil inicial.", "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Entrar no Mapa 🎉";
+        }
+    }
 }
 
 // ==========================================
@@ -199,7 +541,7 @@ function ensureSocialUI() {
         mapContainer.appendChild(hBanner);
     }
 
-    // 4. Campos Bump no Modal de Perfil (Foto + Estado Personalizado + Privacidade 3 modos)
+    // 4. Campos Bump no Modal de Perfil (Foto + Data Nascimento + Estado + Privacidade)
     const profileForm = $("profileUpdateForm");
     if (profileForm && !$("profileAvatarBox")) {
         const avatarSection = document.createElement("div");
@@ -213,6 +555,8 @@ function ensureSocialUI() {
                     <input type="file" id="profileAvatarInput" accept="image/*" style="padding:6px; font-size:12px;">
                 </div>
             </div>
+            <label for="profileBirthDateInput">Data de Nascimento</label>
+            <input type="date" id="profileBirthDateInput" style="margin-bottom:10px;">
             <label>Estado / Vibe atual (visível no mapa)</label>
             <div id="statusPillsContainer" class="status-pills-grid">
                 ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
@@ -226,6 +570,9 @@ function ensureSocialUI() {
                 <button type="button" class="privacy-opt-btn" data-mode="precise">📍 Precisa</button>
                 <button type="button" class="privacy-opt-btn" data-mode="blurred">🌫️ Borrão (~400m)</button>
                 <button type="button" class="privacy-opt-btn" data-mode="ghost">👻 Fantasma</button>
+            </div>
+            <div style="text-align:right; margin-bottom:8px;">
+                <button type="button" id="replayOnboardingBtn" class="btn-link small">✨ Repetir introdução e questionário</button>
             </div>
         `;
         profileForm.insertBefore(avatarSection, profileForm.firstChild);
@@ -435,6 +782,16 @@ function bindSocialEvents() {
             $("profileAvatarPreview").innerHTML = `<img src="${url}" alt="">`;
         });
     }
+
+    const replayBtn = $("replayOnboardingBtn");
+    if (replayBtn && !replayBtn.dataset.bound) {
+        replayBtn.dataset.bound = "1";
+        replayBtn.addEventListener("click", () => {
+            closeModalEl(profileModal);
+            if (currentProfile) currentProfile.onboarding_completed = false;
+            showWelcomeSplash();
+        });
+    }
 }
 
 // ==========================================
@@ -558,11 +915,11 @@ registerForm.addEventListener("submit", async e => {
                 email,
                 full_name: fullName,
                 role,
-                business_type: businessType
+                business_type: businessType,
+                onboarding_completed: false
             });
 
-            await handleAuthenticatedSession(data.user);
-            showToast(`Bem-vindo ao LocalSpot, ${fullName}!`, "success");
+            await handleAuthenticatedSession(data.user, { isNewSignup: true });
         }
     } catch (err) {
         errEl.textContent = "Falha de ligação ao criar conta.";
@@ -596,7 +953,7 @@ logoutButton.addEventListener("click", async () => {
     showToast("Sessão terminada.");
 });
 
-async function handleAuthenticatedSession(user) {
+async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
     currentUser = user;
     const meta = user.user_metadata || {};
     let profile = null;
@@ -610,7 +967,8 @@ async function handleAuthenticatedSession(user) {
                 email: user.email,
                 full_name: meta.full_name || user.email.split("@")[0],
                 role: meta.role || "user",
-                business_type: meta.business_type || null
+                business_type: meta.business_type || null,
+                onboarding_completed: !isNewSignup
             };
             const { data: inserted } = await supabaseClient.from("profiles").upsert(newProfile).select().maybeSingle();
             profile = inserted || newProfile;
@@ -621,7 +979,8 @@ async function handleAuthenticatedSession(user) {
             email: user.email,
             full_name: meta.full_name || user.email.split("@")[0],
             role: meta.role || "user",
-            business_type: meta.business_type || null
+            business_type: meta.business_type || null,
+            onboarding_completed: !isNewSignup
         };
     }
 
@@ -633,6 +992,11 @@ async function handleAuthenticatedSession(user) {
     applyRoleUI();
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
+
+    // Se ainda não completou o questionário inicial, abre o wizard animado
+    if (isNewSignup || currentProfile.onboarding_completed === false) {
+        startOnboardingWizard();
+    }
 
     await Promise.all([
         loadMyEnrollments(),
@@ -696,6 +1060,12 @@ function applyRoleUI() {
 
 async function initAuth() {
     ensureSocialUI();
+
+    // Mostra o ecrã animado "Bem-vindo 👋" na primeira abertura da app
+    if (!localStorage.getItem(STORAGE_WELCOME_SEEN)) {
+        showWelcomeSplash();
+    }
+
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
@@ -1046,7 +1416,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     const targetName = friend ? friend.full_name : "amigo";
 
-    // Incrementar contador de Bumps
     const fRow = friendshipRecords.get(String(friendId));
     const nextCount = (fRow?.bump_count || 0) + 1;
     if (fRow) {
@@ -1102,7 +1471,6 @@ async function loadChatHistory(friendId) {
         return;
     }
 
-    // Marcar como lidas
     await supabaseClient
         .from("friend_messages")
         .update({ is_read: true })
@@ -1174,7 +1542,6 @@ async function getDeviceBatteryTelemetry() {
 
 function applyPrivacyOffset(lat, lng, mode) {
     if (mode !== "blurred") return { lat, lng };
-    // Desvio determinístico ~380m para ocultar morada exata no modo Borrão
     const seed = currentUser ? currentUser.id.charCodeAt(0) : 7;
     const angle = (seed % 360) * (Math.PI / 180);
     const offsetDeg = 0.0035;
@@ -1247,7 +1614,6 @@ async function doQuickCheckin() {
         try { await locateUser(); } catch (e) {}
     }
 
-    // Sugerir evento próximo se existir a menos de 500m
     let suggestedName = currentProfile.current_place || "";
     if (userPosition && events.length > 0) {
         const nearby = events.find(ev => distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude) <= 0.5);
@@ -1308,7 +1674,6 @@ function startLiveSocialSync() {
         }
     }, 25000);
 
-    // Subscrição Realtime para Bumps, Mensagens, Emoji Bombs e Amigos
     if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
     realtimeChannel = supabaseClient
         .channel(`bump_live_${currentUser.id}`)
@@ -1510,6 +1875,7 @@ userBadge.addEventListener("click", () => {
     $("profileEmailDisplay").textContent = currentProfile.email;
     $("profileNameInput").value = currentProfile.full_name;
     $("profileBioInput").value = currentProfile.bio || "";
+    if ($("profileBirthDateInput")) $("profileBirthDateInput").value = currentProfile.birth_date || "";
 
     if ($("profileAvatarPreview")) {
         $("profileAvatarPreview").innerHTML = currentProfile.avatar_url
@@ -1574,6 +1940,7 @@ $("profileUpdateForm").addEventListener("submit", async e => {
     e.preventDefault();
     const newName = $("profileNameInput").value.trim();
     const newBio = $("profileBioInput").value.trim();
+    const newBirth = $("profileBirthDateInput")?.value || null;
     if (!newName || !currentProfile) return;
 
     let avatarUrl = currentProfile.avatar_url || null;
@@ -1590,6 +1957,7 @@ $("profileUpdateForm").addEventListener("submit", async e => {
     const updateObj = {
         full_name: newName,
         bio: newBio,
+        birth_date: newBirth,
         avatar_url: avatarUrl,
         status_emoji: statusEmoji,
         status_text: statusText,
