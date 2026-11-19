@@ -66,7 +66,6 @@ const reportModal = $("reportModal");
 const pickBanner = $("pickBanner");
 
 const STORAGE_FAVS = "localspot_favorites";
-const STORAGE_WELCOME_SEEN = "localspot_welcome_seen";
 
 function loadJSON(key, fallback) {
     try {
@@ -123,7 +122,8 @@ let locationSyncInterval = null;
 let geoWatchId = null;
 let realtimeChannel = null;
 
-// Estado do Onboarding
+// Estado do Welcome Splash & Onboarding
+let welcomeSplashTimer = null;
 let onboardingStep = 1;
 const onboardingData = {
     fullName: "",
@@ -170,7 +170,7 @@ function translateAuthError(error) {
 }
 
 // ==========================================
-// ECRÃ DE BOAS-VINDAS & QUESTIONÁRIO ANIMADO (ONBOARDING)
+// ECRÃ DE BOAS-VINDAS AUTOMÁTICO (3 SEGUNDOS) & QUESTIONÁRIO ANIMADO
 // ==========================================
 function getAgeAndZodiac(dateStr) {
     if (!dateStr) return null;
@@ -206,47 +206,44 @@ function getAgeAndZodiac(dateStr) {
 
 function showWelcomeSplash() {
     let splash = $("welcomeSplash");
-    if (!splash) {
-        splash = document.createElement("div");
-        splash.id = "welcomeSplash";
-        splash.className = "welcome-splash";
-        splash.innerHTML = `
-            <div class="welcome-orb orb-1"></div>
-            <div class="welcome-orb orb-2"></div>
-            <div class="welcome-orb orb-3"></div>
-            <div class="welcome-content">
-                <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
-                <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
-                <h1 class="welcome-title">Bem-vindo!</h1>
-                <p class="welcome-desc">
-                    Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
-                </p>
-                <div class="welcome-feature-pills">
-                    <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
-                    <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
-                    <span class="welcome-feat-chip">🎉 Eventos locais</span>
-                </div>
-                <button type="button" id="welcomeStartBtn" class="welcome-start-btn">
-                    Começar agora 🚀
-                </button>
+    if (splash) splash.remove();
+
+    splash = document.createElement("div");
+    splash.id = "welcomeSplash";
+    splash.className = "welcome-splash";
+    splash.innerHTML = `
+        <div class="welcome-orb orb-1"></div>
+        <div class="welcome-orb orb-2"></div>
+        <div class="welcome-orb orb-3"></div>
+        <div class="welcome-content">
+            <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
+            <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
+            <h1 class="welcome-title">Bem-vindo!</h1>
+            <p class="welcome-desc">
+                Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
+            </p>
+            <div class="welcome-feature-pills">
+                <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
+                <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
+                <span class="welcome-feat-chip">🎉 Eventos locais</span>
             </div>
-        `;
-        document.body.appendChild(splash);
-    }
+            <div class="welcome-loader-track">
+                <div class="welcome-loader-fill"></div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(splash);
 
-    splash.classList.remove("hidden", "leaving");
-
-    const startBtn = $("welcomeStartBtn");
-    startBtn.onclick = () => {
-        localStorage.setItem(STORAGE_WELCOME_SEEN, "1");
+    clearTimeout(welcomeSplashTimer);
+    welcomeSplashTimer = setTimeout(() => {
         splash.classList.add("leaving");
         setTimeout(() => {
-            splash.classList.add("hidden");
-            if (currentUser && currentProfile && !currentProfile.onboarding_completed) {
+            splash.remove();
+            if (currentUser && currentProfile && currentProfile.onboarding_completed === false) {
                 startOnboardingWizard();
             }
-        }, 520);
-    };
+        }, 550);
+    }, 3000);
 }
 
 function startOnboardingWizard() {
@@ -374,7 +371,6 @@ function renderOnboardingStep() {
         ${stepBody}
     `;
 
-    // Bindings específicos de cada passo
     if ($("obBackBtn")) {
         $("obBackBtn").onclick = () => {
             onboardingStep = Math.max(1, onboardingStep - 1);
@@ -993,7 +989,6 @@ async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
 
-    // Se ainda não completou o questionário inicial, abre o wizard animado
     if (isNewSignup || currentProfile.onboarding_completed === false) {
         startOnboardingWizard();
     }
@@ -1060,11 +1055,7 @@ function applyRoleUI() {
 
 async function initAuth() {
     ensureSocialUI();
-
-    // Mostra o ecrã animado "Bem-vindo 👋" na primeira abertura da app
-    if (!localStorage.getItem(STORAGE_WELCOME_SEEN)) {
-        showWelcomeSplash();
-    }
+    showWelcomeSplash();
 
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
