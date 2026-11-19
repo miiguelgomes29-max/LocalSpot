@@ -176,7 +176,7 @@ function popupHTML(ev) {
     
     const enrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
-    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos`;
+    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
     const icon = ev.creatorType === "Utilizador" ? "👤" : "🏢";
     const organizerHtml = ev.creatorName
         ? `<p style="color:#2563eb;font-weight:600;">${icon} ${escapeHTML(ev.creatorName)}</p>`
@@ -187,13 +187,11 @@ function popupHTML(ev) {
             <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
             <h3>${escapeHTML(ev.name)}</h3>
             ${organizerHtml}
+            ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
             <p>📍 ${escapeHTML(ev.location)}</p>
-            <p>👥 <strong>${vagasText}</strong> · 🎟️ ${escapeHTML(ev.price || "Gratuito")}</p>
-            <div class="popup-links">
-                <button type="button" onclick="window.openEventDetails('${ev.id}')">Ver detalhes</button>
-                <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
-            </div>
+            <p>👥 <strong>${vagasText}</strong></p>
+            <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
         </div>`;
 }
 
@@ -206,7 +204,7 @@ function showEventsOnMap(list) {
         if (typeof ev.latitude !== "number" || typeof ev.longitude !== "number") return;
         
         const el = createCustomMarkerElement(ev.category);
-        const popup = new maplibregl.Popup({ offset: [0, -38], closeButton: false }).setHTML(popupHTML(ev));
+        const popup = new maplibregl.Popup({ offset: [0, -38], closeButton: false, focusAfterOpen: false }).setHTML(popupHTML(ev));
         
         const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([ev.longitude, ev.latitude])
@@ -291,7 +289,7 @@ function locateUser() {
 
                 userMarker = new maplibregl.Marker({ element: userEl })
                     .setLngLat([userPosition.lng, userPosition.lat])
-                    .setPopup(new maplibregl.Popup({ offset: 10 }).setText("📍 Estás aqui"))
+                    .setPopup(new maplibregl.Popup({ offset: 10, focusAfterOpen: false }).setText("📍 Estás aqui"))
                     .addTo(map);
 
                 map.flyTo({ center: [userPosition.lng, userPosition.lat], zoom: 15, pitch: 65 });
@@ -322,7 +320,7 @@ function setTempMarker(latlng) {
     const el = createCustomMarkerElement("comunidade");
     tempMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([latlng.lng, latlng.lat])
-        .setPopup(new maplibregl.Popup({ offset: [0, -38] }).setText("📍 Local do novo evento"))
+        .setPopup(new maplibregl.Popup({ offset: [0, -38], focusAfterOpen: false }).setText("📍 Local do novo evento"))
         .addTo(map);
     tempMarker.togglePopup();
 }
