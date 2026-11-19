@@ -23,6 +23,313 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 button, input, select, textarea { font: inherit; }
 
+/* ==========================================
+   ECRÃ DE BOAS-VINDAS ANIMADO (PRIMEIRA ABERTURA)
+   ========================================== */
+.welcome-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 6500;
+    background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 55%, #020617 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: hidden;
+    transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.welcome-splash.leaving {
+    opacity: 0;
+    transform: scale(1.06);
+    pointer-events: none;
+}
+.welcome-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(70px);
+    opacity: 0.45;
+    pointer-events: none;
+    animation: orbFloat 8s ease-in-out infinite alternate;
+}
+.welcome-orb.orb-1 { width: 320px; height: 320px; background: #3b82f6; top: -60px; left: -60px; }
+.welcome-orb.orb-2 { width: 300px; height: 300px; background: #ec4899; bottom: -80px; right: -40px; animation-delay: -3s; }
+.welcome-orb.orb-3 { width: 220px; height: 220px; background: #8b5cf6; top: 45%; left: 55%; animation-delay: -5s; }
+
+@keyframes orbFloat {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(28px, -24px) scale(1.12); }
+}
+
+.welcome-content {
+    position: relative;
+    z-index: 2;
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+}
+.welcome-logo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    backdrop-filter: blur(10px);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #93c5fd;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: staggerUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
+}
+.welcome-wave-wrap {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 12px;
+    opacity: 0;
+    animation: staggerUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.22s forwards;
+}
+.welcome-wave-emoji {
+    display: inline-block;
+    transform-origin: 70% 70%;
+    animation: waveHand 1.8s ease-in-out 0.6s infinite;
+}
+@keyframes waveHand {
+    0%, 100% { transform: rotate(0deg); }
+    15% { transform: rotate(18deg); }
+    30% { transform: rotate(-10deg); }
+    45% { transform: rotate(16deg); }
+    60% { transform: rotate(-6deg); }
+    75% { transform: rotate(10deg); }
+}
+.welcome-title {
+    font-size: 40px;
+    font-weight: 900;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #ffffff 20%, #93c5fd 60%, #f472b6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0;
+    animation: staggerUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+}
+.welcome-desc {
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: #cbd5e1;
+    margin: 0 0 24px;
+    opacity: 0;
+    animation: staggerUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.48s forwards;
+}
+.welcome-feature-pills {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 30px;
+    opacity: 0;
+    animation: staggerUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.6s forwards;
+}
+.welcome-feat-chip {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+.welcome-start-btn {
+    width: 100%;
+    padding: 15px 24px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #3b82f6 0%, #ec4899 100%);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 14px 35px rgba(236, 72, 153, 0.38);
+    transition: transform 0.2s, box-shadow 0.2s;
+    opacity: 0;
+    animation: staggerUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.72s forwards;
+}
+.welcome-start-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 18px 40px rgba(236, 72, 153, 0.52);
+}
+
+@keyframes staggerUp {
+    0% { opacity: 0; transform: translateY(24px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ==========================================
+   QUESTIONÁRIO ANIMADO DE ONBOARDING (PASSOS)
+   ========================================== */
+.onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6200;
+    background: rgba(2, 6, 23, 0.88);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+}
+.onboarding-card {
+    width: 450px;
+    max-width: 100%;
+    background: var(--surface);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 22px;
+    padding: 26px;
+    box-shadow: 0 28px 60px rgba(0, 0, 0, 0.65);
+    position: relative;
+    overflow: hidden;
+}
+.onboarding-top-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+.onboarding-progress-track {
+    flex: 1;
+    height: 7px;
+    background: var(--bg);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.onboarding-progress-fill {
+    height: 100%;
+    width: 25%;
+    background: linear-gradient(90deg, #3b82f6, #ec4899);
+    border-radius: 999px;
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.onboarding-step-counter {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.onboarding-step-panel {
+    animation: stepSlideIn 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes stepSlideIn {
+    0% { opacity: 0; transform: translateX(26px) scale(0.98); }
+    100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+.onboarding-step-emoji {
+    font-size: 44px;
+    margin-bottom: 8px;
+    display: inline-block;
+    animation: bouncePop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes bouncePop {
+    0% { transform: scale(0.4); }
+    70% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+.onboarding-card h2 {
+    margin: 0 0 6px;
+    font-size: 23px;
+    font-weight: 800;
+}
+.onboarding-card p.ob-sub {
+    margin: 0 0 18px;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+.onboarding-card input[type="text"],
+.onboarding-card input[type="date"] {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+    margin-bottom: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.onboarding-card input:focus {
+    border-color: #ec4899;
+    box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.2);
+}
+.zodiac-preview-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(236, 72, 153, 0.16);
+    border: 1px solid rgba(236, 72, 153, 0.4);
+    color: #f9a8d4;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    animation: bouncePop 0.4s ease;
+}
+.ob-avatar-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.ob-avatar-circle {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #ec4899);
+    border: 4px solid rgba(236, 72, 153, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 900;
+    color: #fff;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    transition: transform 0.2s;
+}
+.ob-avatar-circle:hover { transform: scale(1.05); }
+.ob-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+.onboarding-nav-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+.ob-btn-back {
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.ob-btn-next {
+    flex: 1;
+    padding: 13px 18px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6, #ec4899);
+    color: #fff;
+    font-weight: 800;
+    font-size: 14.5px;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+.ob-btn-next:hover { transform: translateY(-1px); }
+
 /* Ecrã de Autenticação */
 .auth-overlay {
     position: fixed;
@@ -752,13 +1059,14 @@ nav button, .user-badge { white-space: nowrap; }
 }
 
 /* Toast */
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--text); color: var(--bg); padding: 12px 20px; border-radius: 8px; font-weight: bold; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 6000; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--text); color: var(--bg); padding: 12px 20px; border-radius: 8px; font-weight: bold; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 8000; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.success { background: var(--success); color: #fff; }
 .toast.error { background: var(--danger); color: #fff; }
 
 /* Responsividade Telemóvel */
 @media (max-width: 820px) {
+    .welcome-title { font-size: 32px; }
     .logo h1 { font-size: 17px; }
     .user-badge { max-width: 110px; }
     #locationButton span { display: none; }
