@@ -422,7 +422,6 @@ function showFriendsOnMap(friends) {
         typeof f.last_lng === "number"
     );
 
-    // Detetar Hangouts (amigos a menos de 150m entre si)
     const hangoutIds = new Set();
     const hangoutNames = [];
     for (let i = 0; i < visibleFriends.length; i++) {
