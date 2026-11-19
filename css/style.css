@@ -24,7 +24,7 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 button, input, select, textarea { font: inherit; }
 
 /* ==========================================
-   ECRÃ DE BOAS-VINDAS ANIMADO (PRIMEIRA ABERTURA)
+   ECRÃ DE BOAS-VINDAS ANIMADO (3 SEGUNDOS)
    ========================================== */
 .welcome-splash {
     position: fixed;
@@ -140,24 +140,26 @@ button, input, select, textarea { font: inherit; }
     font-weight: 600;
     color: #e2e8f0;
 }
-.welcome-start-btn {
-    width: 100%;
-    padding: 15px 24px;
-    border: none;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #3b82f6 0%, #ec4899 100%);
-    color: #fff;
-    font-size: 16px;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 14px 35px rgba(236, 72, 153, 0.38);
-    transition: transform 0.2s, box-shadow 0.2s;
+.welcome-loader-track {
+    width: 180px;
+    height: 5px;
+    background: rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    margin: 0 auto;
+    overflow: hidden;
     opacity: 0;
-    animation: staggerUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.72s forwards;
+    animation: staggerUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.55s forwards;
 }
-.welcome-start-btn:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 18px 40px rgba(236, 72, 153, 0.52);
+.welcome-loader-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #ec4899);
+    border-radius: 999px;
+    animation: welcomeFillBar 2.45s cubic-bezier(0.4, 0, 0.2, 1) 0.55s forwards;
+}
+@keyframes welcomeFillBar {
+    0% { width: 0%; }
+    100% { width: 100%; }
 }
 
 @keyframes staggerUp {
