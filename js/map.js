@@ -173,29 +173,71 @@ function createCustomMarkerElement(category) {
 function popupHTML(ev) {
     const cat = CATEGORIES[ev.category];
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
-    
-    const enrolled = ev.enrolled || 0;
+    const fav = typeof favorites !== "undefined" && favorites.has(String(ev.id));
+    const enrolled = typeof myEnrollments !== "undefined" && myEnrollments.has(String(ev.id));
+    const past = typeof isPast === "function" ? isPast(ev) : (eventDateTime(ev) < new Date());
+
+    const currentEnrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
-    const vagasText = max ? `${enrolled}/${max} vagas` : `${enrolled} inscritos (sem limite)`;
-    const icon = ev.creatorType === "Utilizador" ? "👤" : "🏢";
-    const organizerHtml = ev.creatorName
-        ? `<p style="color:#2563eb;font-weight:600;">${icon} ${escapeHTML(ev.creatorName)}</p>`
-        : "";
+    const isFull = max && currentEnrolled >= max;
+
+    let vagasLabel = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
+    if (isFull) vagasLabel += " (Esgotado)";
+
+    let enrollBtnHtml = "";
+    if (!past) {
+        if (enrolled) {
+            enrollBtnHtml = `<button type="button" class="register-btn registered" onclick="window.toggleEnrollment('${ev.id}')">✓ Inscrito</button>`;
+        } else if (isFull) {
+            enrollBtnHtml = `<button type="button" class="register-btn" disabled>Esgotado</button>`;
+        } else {
+            enrollBtnHtml = `<button type="button" class="register-btn" onclick="window.toggleEnrollment('${ev.id}')">✋ Inscrever-me</button>`;
+        }
+    } else {
+        enrollBtnHtml = `<button type="button" class="register-btn" disabled>Terminado</button>`;
+    }
+
+    let organizerBadge = "";
+    if (ev.creatorName) {
+        const isNormalUser = ev.creatorType === "Utilizador";
+        const badgeIcon = isNormalUser ? "👤" : "🏢";
+        const prefix = !isNormalUser && ev.creatorType ? `${ev.creatorType} · ` : "";
+        organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
+    }
 
     return `
-        <div class="popup">
-            <span class="popup-cat">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
-            <h3>${escapeHTML(ev.name)}</h3>
-            ${organizerHtml}
-            ${ev.description ? `<p>${escapeHTML(ev.description)}</p>` : ""}
+        <div class="popup-card">
+            <div class="event-image-wrap">
+                <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="" class="event-image"
+                     onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
+                ${past ? '<span class="badge-past">Terminado</span>' : ""}
+                <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
+                <button type="button" class="fav-btn${fav ? " on" : ""}" onclick="window.toggleFavorite('${ev.id}')" title="Favorito">${fav ? "★" : "☆"}</button>
+            </div>
+            <div class="event-meta">
+                <span class="category">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
+            </div>
+            <h4>${escapeHTML(ev.name)}</h4>
+            ${organizerBadge}
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
-            <p>📍 ${escapeHTML(ev.location)}</p>
-            <p>👥 <strong>${vagasText}</strong></p>
-            <a href="${directions}" target="_blank" rel="noopener">Como chegar →</a>
+            <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
+            <div class="registration-info">👥 ${vagasLabel}</div>
+            <div class="popup-actions-grid">
+                ${enrollBtnHtml}
+                <button type="button" class="details-btn" onclick="window.openEventDetails('${ev.id}')">Detalhes</button>
+                <a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" title="Como chegar">🧭</a>
+            </div>
         </div>`;
 }
 
 function showEventsOnMap(list) {
+    let openPopupId = null;
+    markerById.forEach((marker, key) => {
+        if (marker.getPopup() && marker.getPopup().isOpen()) {
+            openPopupId = key;
+        }
+    });
+
     markers.forEach(m => m.remove());
     markers = [];
     markerById.clear();
@@ -204,7 +246,12 @@ function showEventsOnMap(list) {
         if (typeof ev.latitude !== "number" || typeof ev.longitude !== "number") return;
         
         const el = createCustomMarkerElement(ev.category);
-        const popup = new maplibregl.Popup({ offset: [0, -38], closeButton: false, focusAfterOpen: false }).setHTML(popupHTML(ev));
+        const popup = new maplibregl.Popup({
+            offset: [0, -38],
+            closeButton: false,
+            focusAfterOpen: false,
+            maxWidth: '300px'
+        }).setHTML(popupHTML(ev));
         
         const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([ev.longitude, ev.latitude])
@@ -220,6 +267,10 @@ function showEventsOnMap(list) {
         markers.push(marker);
         markerById.set(String(ev.id), marker);
     });
+
+    if (openPopupId && markerById.has(openPopupId)) {
+        markerById.get(openPopupId).togglePopup();
+    }
 }
 
 function highlightMarkerOnMap(id) {
