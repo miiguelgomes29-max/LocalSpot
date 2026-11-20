@@ -24,6 +24,68 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 button, input, select, textarea { font: inherit; }
 
 /* ==========================================
+   SELO DE VERIFICAÇÃO & BADGES DE CLASSE
+   ========================================== */
+.verified-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+    vertical-align: middle;
+    margin-left: 4px;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
+    flex-shrink: 0;
+}
+.verified-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(14, 165, 233, 0.16);
+    border: 1px solid rgba(14, 165, 233, 0.45);
+    color: #7dd3fc;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+}
+.unverified-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #fcd34d;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+}
+
+.profile-stats-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 14px;
+}
+.profile-stat-pill {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+/* ==========================================
    ECRÃ DE BOAS-VINDAS ANIMADO (3 SEGUNDOS)
    ========================================== */
 .welcome-splash {
@@ -458,7 +520,7 @@ nav button, .user-badge { white-space: nowrap; }
 .btn-primary-sm { border: none; background: var(--primary); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
 .btn-primary-sm:hover { background: var(--primary-hover); }
 
-/* Botão Amigos no Header */
+/* Botão Amigos (Utilizadores) & Rede Institucional (Entidades) no Header */
 .btn-friends-nav {
     position: relative;
     border: 1px solid rgba(236, 72, 153, 0.5);
@@ -475,6 +537,22 @@ nav button, .user-badge { white-space: nowrap; }
     transition: 0.15s;
 }
 .btn-friends-nav:hover { background: rgba(236, 72, 153, 0.32); border-color: #ec4899; color: #fff; }
+.btn-entity-nav {
+    position: relative;
+    border: 1px solid rgba(245, 158, 11, 0.55);
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.22), rgba(245, 158, 11, 0.2));
+    color: #fde68a;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: 0.15s;
+}
+.btn-entity-nav:hover { background: rgba(245, 158, 11, 0.32); border-color: #f59e0b; color: #fff; }
 .friends-req-badge {
     background: var(--bump);
     color: #fff;
@@ -513,6 +591,10 @@ nav button, .user-badge { white-space: nowrap; }
     background: linear-gradient(135deg, #0284c7, #d97706);
     border-color: #f59e0b;
 }
+.avatar-circle.admin-avatar {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    border-color: #fbbf24;
+}
 .avatar-circle img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Notificações */
@@ -537,20 +619,25 @@ nav button, .user-badge { white-space: nowrap; }
     font-size: 12px;
     font-weight: 600;
     color: var(--text);
-    max-width: 215px;
+    max-width: 225px;
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
     transition: 0.15s;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
 }
 .user-badge:hover { border-color: var(--primary); color: var(--primary); }
 .user-badge.business-badge {
     border-color: rgba(245, 158, 11, 0.55);
     background: rgba(245, 158, 11, 0.08);
     color: #fde68a;
+}
+.user-badge.admin-badge {
+    border-color: rgba(251, 191, 36, 0.7);
+    background: rgba(245, 158, 11, 0.16);
+    color: #fef08a;
 }
 
 .btn-admin {
@@ -621,8 +708,9 @@ nav button, .user-badge { white-space: nowrap; }
 .category { background: var(--primary-soft); color: var(--primary); padding: 3px 9px; border-radius: 12px; font-weight: 600; font-size: 12px; }
 .event-card h4 { margin: 0 0 6px 0; font-size: 15.5px; }
 .event-card p { margin: 4px 0; font-size: 13px; color: var(--muted); }
-.organizer-tag { display: inline-block; font-size: 11px; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 3px 8px; border-radius: 6px; margin-bottom: 4px; font-weight: 600; }
+.organizer-tag { display: inline-flex; align-items: center; font-size: 11px; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 3px 8px; border-radius: 6px; margin-bottom: 4px; font-weight: 600; }
 .organizer-tag.user-tag { color: #a5b4fc; background: rgba(165, 180, 252, 0.12); }
+.organizer-tag.admin-tag { color: #fde047; background: rgba(245, 158, 11, 0.16); }
 
 .friends-going-badge {
     display: inline-flex;
@@ -735,7 +823,7 @@ nav button, .user-badge { white-space: nowrap; }
     border-radius: 999px;
     margin-bottom: 4px;
     white-space: nowrap;
-    max-width: 165px;
+    max-width: 175px;
     overflow: hidden;
     text-overflow: ellipsis;
     box-shadow: 0 4px 10px rgba(0,0,0,0.45);
@@ -809,7 +897,7 @@ nav button, .user-badge { white-space: nowrap; }
     border-radius: 6px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
 }
 
 /* Cartão Popup do Mapa */
@@ -856,7 +944,7 @@ nav button, .user-badge { white-space: nowrap; }
 /* Popup de Amigo/Entidade no Mapa */
 .friend-popup-card { width: 265px; text-align: center; }
 .friend-popup-header { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 8px; }
-.friend-popup-header h4 { margin: 0; font-size: 16px; }
+.friend-popup-header h4 { margin: 0; font-size: 16px; display: inline-flex; align-items: center; gap: 4px; }
 .friend-popup-status { background: var(--surface); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: #f9a8d4; font-weight: 600; }
 .friend-popup-status.business-status { color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.35); }
 .friend-telemetry-row {
@@ -956,7 +1044,7 @@ nav button, .user-badge { white-space: nowrap; }
     100% { opacity: 0; }
 }
 
-/* Modal Social / Amigos & Chat Direto */
+/* Modal Social / Amigos & Rede Institucional */
 .friend-row {
     display: flex;
     align-items: center;
@@ -970,7 +1058,7 @@ nav button, .user-badge { white-space: nowrap; }
 }
 .friend-row-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .friend-row-info { min-width: 0; }
-.friend-row-info strong { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend-row-info strong { display: flex; align-items: center; gap: 4px; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .friend-row-info span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .friend-row-actions { display: flex; gap: 5px; flex-shrink: 0; }
 
@@ -1086,8 +1174,12 @@ nav button, .user-badge { white-space: nowrap; }
 .detail-header-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .price-badge { background: rgba(34, 197, 94, 0.15); color: #4ade80; padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 700; }
 .rating-badge { background: rgba(250, 204, 21, 0.15); color: #facc15; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
-.follow-btn { border: 1px solid #38bdf8; background: none; color: #38bdf8; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.follow-btn { border: 1px solid #38bdf8; background: none; color: #38bdf8; padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: 0.15s; }
+.follow-btn:hover { background: rgba(56, 189, 248, 0.15); }
 .follow-btn.following { background: #38bdf8; color: #0f172a; }
+.follow-btn.friend-action { border-color: #ec4899; color: #f9a8d4; }
+.follow-btn.friend-action:hover { background: rgba(236, 72, 153, 0.18); }
+.follow-btn.friend-action.following { background: #ec4899; color: #fff; }
 .detail-desc { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 8px 0 14px; }
 .detail-meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: var(--bg); padding: 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 12px; }
 .detail-meta-item small { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
@@ -1132,19 +1224,45 @@ nav button, .user-badge { white-space: nowrap; }
 .profile-edit-box { background: var(--bg); padding: 14px; border-radius: 10px; border: 1px solid var(--border); }
 .profile-events-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
 .profile-event-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; border-radius: 8px; }
-.profile-event-item strong { display: block; font-size: 13.5px; }
+.profile-event-item strong { display: flex; align-items: center; gap: 4px; font-size: 13.5px; }
 .profile-event-item span { font-size: 12px; color: var(--muted); }
 
-/* Painel Admin */
+/* Painel Admin & Verificação de Entidades */
 .admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
 .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
 .stat-box span { display: block; font-size: 20px; font-weight: 700; color: var(--primary); }
 .stat-box small { font-size: 11px; color: var(--muted); }
-.admin-users-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+.admin-users-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
 .admin-user-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; border-radius: 8px; }
-.admin-user-info strong { display: block; font-size: 13px; }
-.admin-user-info span { font-size: 12px; color: var(--muted); }
-.admin-user-row select { width: auto; padding: 6px 10px; font-size: 12px; margin: 0; }
+.admin-user-info { min-width: 0; flex: 1; }
+.admin-user-info strong { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.admin-user-info span { font-size: 12px; color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; }
+.admin-row-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.admin-user-row select { width: auto; padding: 6px 8px; font-size: 12px; margin: 0; }
+.btn-verify {
+    border: 1px solid #0ea5e9;
+    background: rgba(14, 165, 233, 0.16);
+    color: #7dd3fc;
+    padding: 5px 9px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-verify:hover { background: #0ea5e9; color: #fff; }
+.btn-unverify {
+    border: 1px solid rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.16);
+    color: #86efac;
+    padding: 5px 9px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-unverify:hover { border-color: var(--danger); background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
 
 /* Botão Mobile */
 .mobile-view-toggle {
@@ -1186,5 +1304,6 @@ nav button, .user-badge { white-space: nowrap; }
     .sidebar-footer { padding-right: 135px; }
     .detail-meta-grid { grid-template-columns: 1fr; }
     .admin-stats { grid-template-columns: repeat(2, 1fr); }
+    .admin-user-row { flex-direction: column; align-items: flex-start; }
     .form-row, .business-sector-grid { grid-template-columns: 1fr; gap: 6px; }
 }
