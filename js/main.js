@@ -129,6 +129,7 @@ const onboardingData = {
     fullName: "",
     bio: "",
     birthDate: "",
+    businessType: "Empresa / Comércio",
     avatarFile: null,
     avatarPreviewUrl: null,
     statusEmoji: "📍",
@@ -146,6 +147,21 @@ const BUMP_STATUSES = [
     { emoji: "🍔", text: "A comer" },
     { emoji: "🏠", text: "Em casa" }
 ];
+
+const BUSINESS_SECTORS = [
+    { emoji: "🏛️", label: "Câmara Municipal / Junta" },
+    { emoji: "🤝", label: "Associação / Coletividade" },
+    { emoji: "🍽️", label: "Restauração / Café" },
+    { emoji: "🎭", label: "Cultura / Espetáculos" },
+    { emoji: "🏟️", label: "Desporto / Ginásio" },
+    { emoji: "🏢", label: "Empresa / Comércio" },
+    { emoji: "🎓", label: "Educação / Universidade" },
+    { emoji: "💼", label: "Serviços / Instituição" }
+];
+
+function isBusinessAccount() {
+    return currentProfile?.role === "business";
+}
 
 // ---------- Toast Notifications ----------
 let toastTimer;
@@ -204,34 +220,60 @@ function getAgeAndZodiac(dateStr) {
     return { age, sign };
 }
 
-function showWelcomeSplash() {
+function showWelcomeSplash(isBusiness = false) {
     let splash = $("welcomeSplash");
     if (splash) splash.remove();
 
     splash = document.createElement("div");
     splash.id = "welcomeSplash";
-    splash.className = "welcome-splash";
-    splash.innerHTML = `
-        <div class="welcome-orb orb-1"></div>
-        <div class="welcome-orb orb-2"></div>
-        <div class="welcome-orb orb-3"></div>
-        <div class="welcome-content">
-            <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
-            <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
-            <h1 class="welcome-title">Bem-vindo!</h1>
-            <p class="welcome-desc">
-                Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
-            </p>
-            <div class="welcome-feature-pills">
-                <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
-                <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
-                <span class="welcome-feat-chip">🎉 Eventos locais</span>
+    splash.className = `welcome-splash${isBusiness ? " business-theme" : ""}`;
+
+    if (isBusiness) {
+        splash.innerHTML = `
+            <div class="welcome-orb orb-1"></div>
+            <div class="welcome-orb orb-2"></div>
+            <div class="welcome-orb orb-3"></div>
+            <div class="welcome-content">
+                <div class="welcome-logo-pill">🏛️ LocalSpot · Empresas & Domínio Público</div>
+                <div class="welcome-wave-wrap"><span class="welcome-suit-emoji">👔</span></div>
+                <h1 class="welcome-title">Bem-vindo!</h1>
+                <p class="welcome-desc">
+                    Divulgue iniciativas oficiais, alcance a comunidade local em tempo real e gira a presença institucional no mapa.
+                </p>
+                <div class="welcome-feature-pills">
+                    <span class="welcome-feat-chip">🏛️ Perfil Institucional</span>
+                    <span class="welcome-feat-chip">📅 Gestão de Eventos</span>
+                    <span class="welcome-feat-chip">📊 Alcance Local</span>
+                </div>
+                <div class="welcome-loader-track">
+                    <div class="welcome-loader-fill"></div>
+                </div>
             </div>
-            <div class="welcome-loader-track">
-                <div class="welcome-loader-fill"></div>
+        `;
+    } else {
+        splash.innerHTML = `
+            <div class="welcome-orb orb-1"></div>
+            <div class="welcome-orb orb-2"></div>
+            <div class="welcome-orb orb-3"></div>
+            <div class="welcome-content">
+                <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
+                <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
+                <h1 class="welcome-title">Bem-vindo!</h1>
+                <p class="welcome-desc">
+                    Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
+                </p>
+                <div class="welcome-feature-pills">
+                    <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
+                    <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
+                    <span class="welcome-feat-chip">🎉 Eventos locais</span>
+                </div>
+                <div class="welcome-loader-track">
+                    <div class="welcome-loader-fill"></div>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    }
+
     document.body.appendChild(splash);
 
     clearTimeout(welcomeSplashTimer);
@@ -247,15 +289,17 @@ function showWelcomeSplash() {
 }
 
 function startOnboardingWizard() {
+    const isBiz = isBusinessAccount();
     onboardingStep = 1;
     onboardingData.fullName = currentProfile?.full_name || "";
     onboardingData.bio = currentProfile?.bio || "";
     onboardingData.birthDate = currentProfile?.birth_date || "";
+    onboardingData.businessType = currentProfile?.business_type || "Empresa / Comércio";
     onboardingData.avatarFile = null;
     onboardingData.avatarPreviewUrl = currentProfile?.avatar_url || null;
-    onboardingData.statusEmoji = currentProfile?.status_emoji || "📍";
-    onboardingData.statusText = currentProfile?.status_text || "No LocalSpot";
-    onboardingData.privacyMode = currentProfile?.privacy_mode || "precise";
+    onboardingData.statusEmoji = isBiz ? "🏢" : (currentProfile?.status_emoji || "📍");
+    onboardingData.statusText = isBiz ? (currentProfile?.business_type || "Entidade Oficial") : (currentProfile?.status_text || "No LocalSpot");
+    onboardingData.privacyMode = currentProfile?.privacy_mode || (isBiz ? "ghost" : "precise");
 
     let overlay = $("onboardingOverlay");
     if (!overlay) {
@@ -265,6 +309,10 @@ function startOnboardingWizard() {
         overlay.innerHTML = `<div id="onboardingCard" class="onboarding-card"></div>`;
         document.body.appendChild(overlay);
     }
+
+    const card = $("onboardingCard");
+    if (card) card.classList.toggle("business-card", isBiz);
+
     overlay.classList.remove("hidden");
     renderOnboardingStep();
 }
@@ -272,93 +320,179 @@ function startOnboardingWizard() {
 function renderOnboardingStep() {
     const card = $("onboardingCard");
     if (!card) return;
+    const isBiz = isBusinessAccount();
     const totalSteps = 4;
     const pct = Math.round((onboardingStep / totalSteps) * 100);
 
     let stepBody = "";
 
-    if (onboardingStep === 1) {
-        stepBody = `
-            <div class="onboarding-step-panel">
-                <div class="onboarding-step-emoji">✨</div>
-                <h2>Como queres ser chamado?</h2>
-                <p class="ob-sub">Este é o nome que os teus amigos vão ver no mapa e nos eventos.</p>
-                <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome ou Alcunha *</label>
-                <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Rodrigo Silva" maxlength="40" required>
-                <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Bio rápida (opcional)</label>
-                <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Sempre pronto para um café ou concerto 🎸" maxlength="80">
-                <div class="onboarding-nav-row">
-                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+    if (isBiz) {
+        // ==========================================
+        // FLUXO EXECUTIVO: EMPRESAS & DOMÍNIOS PÚBLICOS
+        // ==========================================
+        if (onboardingStep === 1) {
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">👔</div>
+                    <h2>Identidade Institucional</h2>
+                    <p class="ob-sub">Configure o nome oficial da empresa ou organismo público que aparecerá como promotor dos eventos.</p>
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome Oficial da Entidade / Empresa *</label>
+                    <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Câmara Municipal / Teatro Municipal" maxlength="60" required>
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Apresentação ou Missão Institucional (opcional)</label>
+                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Programação cultural, desportiva e comunitária" maxlength="110">
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-            </div>
-        `;
-    } else if (onboardingStep === 2) {
-        const info = getAgeAndZodiac(onboardingData.birthDate);
-        const maxDate = new Date().toISOString().slice(0, 10);
-        stepBody = `
-            <div class="onboarding-step-panel">
-                <div class="onboarding-step-emoji">🎂</div>
-                <h2>Quando fazes anos?</h2>
-                <p class="ob-sub">Usamos a tua data de nascimento para personalizar o teu perfil.</p>
-                <input type="date" id="obBirthInput" value="${escapeHTML(onboardingData.birthDate)}" max="${maxDate}">
-                <div id="obZodiacWrap">
-                    ${info ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>` : ""}
+            `;
+        } else if (onboardingStep === 2) {
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">💼</div>
+                    <h2>Setor de Atividade</h2>
+                    <p class="ob-sub">Selecione a categoria que melhor representa a sua organização ou domínio público.</p>
+                    <div id="obBusinessSectorGrid" class="business-sector-grid">
+                        ${BUSINESS_SECTORS.map(s => `
+                            <button type="button" class="sector-opt-btn${onboardingData.businessType === s.label ? " active" : ""}" data-sector="${escapeHTML(s.label)}">
+                                ${s.emoji} ${escapeHTML(s.label)}
+                            </button>
+                        `).join("")}
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-                <div class="onboarding-nav-row">
-                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
-                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
-                </div>
-            </div>
-        `;
-    } else if (onboardingStep === 3) {
-        const initials = (onboardingData.fullName || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
-        const avatarInner = onboardingData.avatarPreviewUrl
-            ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
-            : escapeHTML(initials);
+            `;
+        } else if (onboardingStep === 3) {
+            const initials = (onboardingData.fullName || "E").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+            const avatarInner = onboardingData.avatarPreviewUrl
+                ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
+                : escapeHTML(initials);
 
-        stepBody = `
-            <div class="onboarding-step-panel">
-                <div class="onboarding-step-emoji">📸</div>
-                <h2>Escolhe a tua foto & vibe</h2>
-                <p class="ob-sub">Toca no círculo para carregar uma foto de perfil e escolhe o teu estado inicial.</p>
-                <div class="ob-avatar-picker">
-                    <label for="obAvatarFile" class="ob-avatar-circle" id="obAvatarCircle" title="Escolher foto">${avatarInner}</label>
-                    <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
-                    <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">📷 Escolher Foto</button>
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">🏛️</div>
+                    <h2>Logótipo Oficial</h2>
+                    <p class="ob-sub">Carregue o logótipo ou imagem representativa da entidade para destacar os seus eventos.</p>
+                    <div class="ob-avatar-picker">
+                        <label for="obAvatarFile" class="ob-avatar-circle business-logo-shape" id="obAvatarCircle" title="Carregar logótipo">${avatarInner}</label>
+                        <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
+                        <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">🏢 Carregar Logótipo</button>
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-                <div id="obStatusPills" class="status-pills-grid" style="justify-content:center;">
-                    ${BUMP_STATUSES.map(s => `
-                        <button type="button" class="status-pill-btn${onboardingData.statusEmoji === s.emoji && onboardingData.statusText === s.text ? " active" : ""}" data-emoji="${s.emoji}" data-text="${s.text}">
-                            ${s.emoji} ${s.text}
-                        </button>
-                    `).join("")}
+            `;
+        } else if (onboardingStep === 4) {
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">📊</div>
+                    <h2>Presença no Mapa</h2>
+                    <p class="ob-sub">Defina como pretende que a sua entidade seja apresentada no mapa interativo.</p>
+                    <div id="obPrivacyGrid" class="privacy-selector-grid two-cols">
+                        <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">🏢 Sede Visível no Mapa</button>
+                        <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">📅 Apenas Eventos Públicos</button>
+                    </div>
+                    <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
+                        💼 <strong>Nota Institucional:</strong> Independentemente desta escolha, todos os eventos que publicar ficarão visíveis para toda a comunidade.
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obFinishBtn" class="ob-btn-next">Concluir Configuração 🏛️</button>
+                    </div>
                 </div>
-                <div class="onboarding-nav-row">
-                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
-                    <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+            `;
+        }
+    } else {
+        // ==========================================
+        // FLUXO PESSOAL: UTILIZADOR NORMAL
+        // ==========================================
+        if (onboardingStep === 1) {
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">✨</div>
+                    <h2>Como queres ser chamado?</h2>
+                    <p class="ob-sub">Este é o nome que os teus amigos vão ver no mapa e nos eventos.</p>
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome ou Alcunha *</label>
+                    <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Rodrigo Silva" maxlength="40" required>
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Bio rápida (opcional)</label>
+                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Sempre pronto para um café ou concerto 🎸" maxlength="80">
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-            </div>
-        `;
-    } else if (onboardingStep === 4) {
-        stepBody = `
-            <div class="onboarding-step-panel">
-                <div class="onboarding-step-emoji">🛰️</div>
-                <h2>Privacidade no Mapa</h2>
-                <p class="ob-sub">Tu controlas sempre quem vê a tua localização. Podes mudar isto a qualquer momento.</p>
-                <div id="obPrivacyGrid" class="privacy-selector-grid">
-                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">📍 Precisa</button>
-                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "blurred" ? " active" : ""}" data-mode="blurred">🌫️ Borrão</button>
-                    <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">👻 Fantasma</button>
+            `;
+        } else if (onboardingStep === 2) {
+            const info = getAgeAndZodiac(onboardingData.birthDate);
+            const maxDate = new Date().toISOString().slice(0, 10);
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">🎂</div>
+                    <h2>Quando fazes anos?</h2>
+                    <p class="ob-sub">Usamos a tua data de nascimento para personalizar o teu perfil.</p>
+                    <input type="date" id="obBirthInput" value="${escapeHTML(onboardingData.birthDate)}" max="${maxDate}">
+                    <div id="obZodiacWrap">
+                        ${info ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>` : ""}
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-                <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
-                    💡 <strong>Dica:</strong> No modo <strong>Precisa</strong>, os teus amigos veem a tua bateria, velocidade e distância exata para fazerem Bump!
+            `;
+        } else if (onboardingStep === 3) {
+            const initials = (onboardingData.fullName || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+            const avatarInner = onboardingData.avatarPreviewUrl
+                ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
+                : escapeHTML(initials);
+
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">📸</div>
+                    <h2>Escolhe a tua foto & vibe</h2>
+                    <p class="ob-sub">Toca no círculo para carregar uma foto de perfil e escolhe o teu estado inicial.</p>
+                    <div class="ob-avatar-picker">
+                        <label for="obAvatarFile" class="ob-avatar-circle" id="obAvatarCircle" title="Escolher foto">${avatarInner}</label>
+                        <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
+                        <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">📷 Escolher Foto</button>
+                    </div>
+                    <div id="obStatusPills" class="status-pills-grid" style="justify-content:center;">
+                        ${BUMP_STATUSES.map(s => `
+                            <button type="button" class="status-pill-btn${onboardingData.statusEmoji === s.emoji && onboardingData.statusText === s.text ? " active" : ""}" data-emoji="${s.emoji}" data-text="${s.text}">
+                                ${s.emoji} ${s.text}
+                            </button>
+                        `).join("")}
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
+                    </div>
                 </div>
-                <div class="onboarding-nav-row">
-                    <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
-                    <button type="button" id="obFinishBtn" class="ob-btn-next">Entrar no Mapa 🎉</button>
+            `;
+        } else if (onboardingStep === 4) {
+            stepBody = `
+                <div class="onboarding-step-panel">
+                    <div class="onboarding-step-emoji">🛰️</div>
+                    <h2>Privacidade no Mapa</h2>
+                    <p class="ob-sub">Tu controlas sempre quem vê a tua localização. Podes mudar isto a qualquer momento.</p>
+                    <div id="obPrivacyGrid" class="privacy-selector-grid">
+                        <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">📍 Precisa</button>
+                        <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "blurred" ? " active" : ""}" data-mode="blurred">🌫️ Borrão</button>
+                        <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">👻 Fantasma</button>
+                    </div>
+                    <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
+                        💡 <strong>Dica:</strong> No modo <strong>Precisa</strong>, os teus amigos veem a tua bateria, velocidade e distância exata para fazerem Bump!
+                    </div>
+                    <div class="onboarding-nav-row">
+                        <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
+                        <button type="button" id="obFinishBtn" class="ob-btn-next">Entrar no Mapa 🎉</button>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     }
 
     card.innerHTML = `
@@ -371,6 +505,7 @@ function renderOnboardingStep() {
         ${stepBody}
     `;
 
+    // Bindings comuns
     if ($("obBackBtn")) {
         $("obBackBtn").onclick = () => {
             onboardingStep = Math.max(1, onboardingStep - 1);
@@ -384,7 +519,7 @@ function renderOnboardingStep() {
         $("obNextBtn").onclick = () => {
             const val = nameInp.value.trim();
             if (!val) {
-                showToast("Escreve o teu nome para continuar!", "error");
+                showToast(isBiz ? "Indique o nome oficial da entidade!" : "Escreve o teu nome para continuar!", "error");
                 nameInp.focus();
                 return;
             }
@@ -394,24 +529,38 @@ function renderOnboardingStep() {
             renderOnboardingStep();
         };
     } else if (onboardingStep === 2) {
-        const birthInp = $("obBirthInput");
-        birthInp.onchange = () => {
-            onboardingData.birthDate = birthInp.value;
-            const info = getAgeAndZodiac(birthInp.value);
-            $("obZodiacWrap").innerHTML = info
-                ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>`
-                : "";
-        };
-        $("obNextBtn").onclick = () => {
-            if (!birthInp.value) {
-                showToast("Seleciona a tua data de nascimento!", "error");
-                birthInp.focus();
-                return;
-            }
-            onboardingData.birthDate = birthInp.value;
-            onboardingStep = 3;
-            renderOnboardingStep();
-        };
+        if (isBiz) {
+            $("obBusinessSectorGrid").onclick = e => {
+                const btn = e.target.closest(".sector-opt-btn");
+                if (!btn) return;
+                $("obBusinessSectorGrid").querySelectorAll(".sector-opt-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                onboardingData.businessType = btn.dataset.sector;
+            };
+            $("obNextBtn").onclick = () => {
+                onboardingStep = 3;
+                renderOnboardingStep();
+            };
+        } else {
+            const birthInp = $("obBirthInput");
+            birthInp.onchange = () => {
+                onboardingData.birthDate = birthInp.value;
+                const info = getAgeAndZodiac(birthInp.value);
+                $("obZodiacWrap").innerHTML = info
+                    ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>`
+                    : "";
+            };
+            $("obNextBtn").onclick = () => {
+                if (!birthInp.value) {
+                    showToast("Seleciona a tua data de nascimento!", "error");
+                    birthInp.focus();
+                    return;
+                }
+                onboardingData.birthDate = birthInp.value;
+                onboardingStep = 3;
+                renderOnboardingStep();
+            };
+        }
     } else if (onboardingStep === 3) {
         $("obAvatarFile").onchange = e => {
             const file = e.target.files[0];
@@ -420,14 +569,16 @@ function renderOnboardingStep() {
             onboardingData.avatarPreviewUrl = URL.createObjectURL(file);
             $("obAvatarCircle").innerHTML = `<img src="${onboardingData.avatarPreviewUrl}" alt="">`;
         };
-        $("obStatusPills").onclick = e => {
-            const btn = e.target.closest(".status-pill-btn");
-            if (!btn) return;
-            $("obStatusPills").querySelectorAll(".status-pill-btn").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            onboardingData.statusEmoji = btn.dataset.emoji;
-            onboardingData.statusText = btn.dataset.text;
-        };
+        if (!isBiz && $("obStatusPills")) {
+            $("obStatusPills").onclick = e => {
+                const btn = e.target.closest(".status-pill-btn");
+                if (!btn) return;
+                $("obStatusPills").querySelectorAll(".status-pill-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                onboardingData.statusEmoji = btn.dataset.emoji;
+                onboardingData.statusText = btn.dataset.text;
+            };
+        }
         $("obNextBtn").onclick = () => {
             onboardingStep = 4;
             renderOnboardingStep();
@@ -446,9 +597,10 @@ function renderOnboardingStep() {
 
 async function finishOnboardingWizard() {
     const btn = $("obFinishBtn");
+    const isBiz = isBusinessAccount();
     if (btn) {
         btn.disabled = true;
-        btn.textContent = "A preparar o teu mapa...";
+        btn.textContent = isBiz ? "A guardar perfil institucional..." : "A preparar o teu mapa...";
     }
 
     try {
@@ -461,10 +613,11 @@ async function finishOnboardingWizard() {
         const updatePayload = {
             full_name: onboardingData.fullName || currentProfile.full_name,
             bio: onboardingData.bio,
-            birth_date: onboardingData.birthDate || null,
+            birth_date: isBiz ? null : (onboardingData.birthDate || null),
+            business_type: isBiz ? onboardingData.businessType : currentProfile.business_type,
             avatar_url: avatarUrl,
-            status_emoji: onboardingData.statusEmoji,
-            status_text: onboardingData.statusText,
+            status_emoji: isBiz ? "🏢" : onboardingData.statusEmoji,
+            status_text: isBiz ? onboardingData.businessType : onboardingData.statusText,
             privacy_mode: onboardingData.privacyMode,
             ghost_mode: isGhost,
             onboarding_completed: true
@@ -477,8 +630,12 @@ async function finishOnboardingWizard() {
         const overlay = $("onboardingOverlay");
         if (overlay) overlay.classList.add("hidden");
 
-        triggerBumpVisual("🎉", `Tudo pronto, ${currentProfile.full_name}!`);
-        launchEmojiBombAnimation("🚀");
+        if (isBiz) {
+            triggerBumpVisual("🏛️", `Perfil Institucional ativo: ${currentProfile.full_name}`);
+        } else {
+            triggerBumpVisual("🎉", `Tudo pronto, ${currentProfile.full_name}!`);
+            launchEmojiBombAnimation("🚀");
+        }
 
         if (!isGhost) {
             try { await locateUser(); } catch (e) {}
@@ -488,7 +645,7 @@ async function finishOnboardingWizard() {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = "Entrar no Mapa 🎉";
+            btn.textContent = isBiz ? "Concluir Configuração 🏛️" : "Entrar no Mapa 🎉";
         }
     }
 }
@@ -508,7 +665,7 @@ function ensureSocialUI() {
         nav.insertBefore(friendsBtn, notifBtn);
     }
 
-    // 2. Controlos Sociais no Mapa (Privacidade 3 modos + Check-in rápido)
+    // 2. Controlos Sociais no Mapa (Privacidade + Check-in rápido)
     const mapCtrls = document.querySelector(".map-floating-controls");
     if (mapCtrls && !$("privacyMapBtn")) {
         const privacyBtn = document.createElement("button");
@@ -516,7 +673,7 @@ function ensureSocialUI() {
         privacyBtn.id = "privacyMapBtn";
         privacyBtn.className = "map-ctrl-btn hidden";
         privacyBtn.textContent = "📍 Precisa";
-        privacyBtn.title = "Alternar privacidade: Precisa / Borrão / Fantasma";
+        privacyBtn.title = "Alternar privacidade no mapa";
         mapCtrls.appendChild(privacyBtn);
 
         const checkinBtn = document.createElement("button");
@@ -537,7 +694,7 @@ function ensureSocialUI() {
         mapContainer.appendChild(hBanner);
     }
 
-    // 4. Campos Bump no Modal de Perfil (Foto + Data Nascimento + Estado + Privacidade)
+    // 4. Campos no Modal de Perfil (Separados: Utilizador vs Empresa/Domínio Público)
     const profileForm = $("profileUpdateForm");
     if (profileForm && !$("profileAvatarBox")) {
         const avatarSection = document.createElement("div");
@@ -547,26 +704,44 @@ function ensureSocialUI() {
             <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px;">
                 <div id="profileAvatarPreview" class="avatar-circle lg">?</div>
                 <div style="flex:1;">
-                    <label for="profileAvatarInput" style="margin:0 0 6px;">Foto de Perfil</label>
+                    <label id="profileAvatarLabel" for="profileAvatarInput" style="margin:0 0 6px;">Foto de Perfil</label>
                     <input type="file" id="profileAvatarInput" accept="image/*" style="padding:6px; font-size:12px;">
                 </div>
             </div>
-            <label for="profileBirthDateInput">Data de Nascimento</label>
-            <input type="date" id="profileBirthDateInput" style="margin-bottom:10px;">
-            <label>Estado / Vibe atual (visível no mapa)</label>
-            <div id="statusPillsContainer" class="status-pills-grid">
-                ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
+
+            <!-- Secção exclusiva para Empresas / Domínios Públicos -->
+            <div id="businessOnlyProfileFields" class="hidden">
+                <label for="profileBusinessTypeSelect">Setor / Tipologia da Entidade</label>
+                <select id="profileBusinessTypeSelect" style="margin-bottom:12px;">
+                    ${BUSINESS_SECTORS.map(s => `<option value="${escapeHTML(s.label)}">${s.emoji} ${escapeHTML(s.label)}</option>`).join("")}
+                </select>
+                <label>Visibilidade da Sede no Mapa</label>
+                <div id="businessPrivacyGrid" class="privacy-selector-grid two-cols">
+                    <button type="button" class="privacy-opt-btn business-opt" data-mode="precise">🏢 Sede Visível</button>
+                    <button type="button" class="privacy-opt-btn business-opt" data-mode="ghost">📅 Apenas Eventos</button>
+                </div>
             </div>
-            <div style="display:grid; grid-template-columns: 64px 1fr; gap:8px; margin-bottom:12px;">
-                <input type="text" id="profileCustomEmoji" maxlength="4" placeholder="📍" style="text-align:center;">
-                <input type="text" id="profileCustomStatus" maxlength="40" placeholder="Escreve o teu estado personalizado...">
+
+            <!-- Secção exclusiva para Utilizadores Normais -->
+            <div id="userOnlyProfileFields">
+                <label for="profileBirthDateInput">Data de Nascimento</label>
+                <input type="date" id="profileBirthDateInput" style="margin-bottom:10px;">
+                <label>Estado / Vibe atual (visível no mapa)</label>
+                <div id="statusPillsContainer" class="status-pills-grid">
+                    ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
+                </div>
+                <div style="display:grid; grid-template-columns: 64px 1fr; gap:8px; margin-bottom:12px;">
+                    <input type="text" id="profileCustomEmoji" maxlength="4" placeholder="📍" style="text-align:center;">
+                    <input type="text" id="profileCustomStatus" maxlength="40" placeholder="Escreve o teu estado personalizado...">
+                </div>
+                <label>Privacidade da localização no mapa</label>
+                <div id="privacySelectorGrid" class="privacy-selector-grid">
+                    <button type="button" class="privacy-opt-btn" data-mode="precise">📍 Precisa</button>
+                    <button type="button" class="privacy-opt-btn" data-mode="blurred">🌫️ Borrão (~400m)</button>
+                    <button type="button" class="privacy-opt-btn" data-mode="ghost">👻 Fantasma</button>
+                </div>
             </div>
-            <label>Privacidade da localização no mapa</label>
-            <div id="privacySelectorGrid" class="privacy-selector-grid">
-                <button type="button" class="privacy-opt-btn" data-mode="precise">📍 Precisa</button>
-                <button type="button" class="privacy-opt-btn" data-mode="blurred">🌫️ Borrão (~400m)</button>
-                <button type="button" class="privacy-opt-btn" data-mode="ghost">👻 Fantasma</button>
-            </div>
+
             <div style="text-align:right; margin-bottom:8px;">
                 <button type="button" id="replayOnboardingBtn" class="btn-link small">✨ Repetir introdução e questionário</button>
             </div>
@@ -768,6 +943,18 @@ function bindSocialEvents() {
         });
     }
 
+    const bizPrivacyGrid = $("businessPrivacyGrid");
+    if (bizPrivacyGrid && !bizPrivacyGrid.dataset.bound) {
+        bizPrivacyGrid.dataset.bound = "1";
+        bizPrivacyGrid.addEventListener("click", e => {
+            const btn = e.target.closest(".privacy-opt-btn");
+            if (!btn) return;
+            bizPrivacyGrid.querySelectorAll(".privacy-opt-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            if (currentProfile) currentProfile.privacy_mode = btn.dataset.mode;
+        });
+    }
+
     const avatarInput = $("profileAvatarInput");
     if (avatarInput && !avatarInput.dataset.bound) {
         avatarInput.dataset.bound = "1";
@@ -785,7 +972,7 @@ function bindSocialEvents() {
         replayBtn.addEventListener("click", () => {
             closeModalEl(profileModal);
             if (currentProfile) currentProfile.onboarding_completed = false;
-            showWelcomeSplash();
+            showWelcomeSplash(isBusinessAccount());
         });
     }
 }
@@ -838,7 +1025,7 @@ regAccountType.addEventListener("change", () => {
     const isBusiness = regAccountType.value === "business";
     businessTypeGroup.classList.toggle("hidden", !isBusiness);
     regNameLabel.textContent = isBusiness ? "Nome da Empresa / Estabelecimento *" : "Nome completo *";
-    regNameInput.placeholder = isBusiness ? "Ex: Café Central / Ginásio Fit" : "Ex: João Silva";
+    regNameInput.placeholder = isBusiness ? "Ex: Café Central / Câmara Municipal" : "Ex: João Silva";
 });
 
 loginForm.addEventListener("submit", async e => {
@@ -860,7 +1047,7 @@ loginForm.addEventListener("submit", async e => {
             return;
         }
         if (data?.user) {
-            await handleAuthenticatedSession(data.user);
+            await handleAuthenticatedSession(data.user, { showSplash: true });
             showToast("Sessão iniciada com sucesso!", "success");
         }
     } catch (err) {
@@ -912,10 +1099,12 @@ registerForm.addEventListener("submit", async e => {
                 full_name: fullName,
                 role,
                 business_type: businessType,
+                status_emoji: role === "business" ? "🏢" : "📍",
+                status_text: role === "business" ? (businessType || "Entidade Oficial") : "No LocalSpot",
                 onboarding_completed: false
             });
 
-            await handleAuthenticatedSession(data.user, { isNewSignup: true });
+            await handleAuthenticatedSession(data.user, { isNewSignup: true, showSplash: true });
         }
     } catch (err) {
         errEl.textContent = "Falha de ligação ao criar conta.";
@@ -943,13 +1132,14 @@ logoutButton.addEventListener("click", async () => {
     if ($("hangoutBanner")) $("hangoutBanner").classList.add("hidden");
     notifBtn.classList.add("hidden");
     userBadge.classList.add("hidden");
+    userBadge.classList.remove("business-badge");
     adminPanelBtn.classList.add("hidden");
     logoutButton.classList.add("hidden");
     authOverlay.classList.remove("hidden");
     showToast("Sessão terminada.");
 });
 
-async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
+async function handleAuthenticatedSession(user, { isNewSignup = false, showSplash = false } = {}) {
     currentUser = user;
     const meta = user.user_metadata || {};
     let profile = null;
@@ -958,23 +1148,27 @@ async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
         const { data } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
         profile = data;
         if (!profile) {
+            const roleVal = meta.role || "user";
             const newProfile = {
                 id: user.id,
                 email: user.email,
                 full_name: meta.full_name || user.email.split("@")[0],
-                role: meta.role || "user",
+                role: roleVal,
                 business_type: meta.business_type || null,
+                status_emoji: roleVal === "business" ? "🏢" : "📍",
+                status_text: roleVal === "business" ? (meta.business_type || "Entidade Oficial") : "No LocalSpot",
                 onboarding_completed: !isNewSignup
             };
             const { data: inserted } = await supabaseClient.from("profiles").upsert(newProfile).select().maybeSingle();
             profile = inserted || newProfile;
         }
     } catch (e) {
+        const roleVal = meta.role || "user";
         profile = {
             id: user.id,
             email: user.email,
             full_name: meta.full_name || user.email.split("@")[0],
-            role: meta.role || "user",
+            role: roleVal,
             business_type: meta.business_type || null,
             onboarding_completed: !isNewSignup
         };
@@ -985,13 +1179,15 @@ async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
         currentProfile.privacy_mode = currentProfile.ghost_mode ? "ghost" : "precise";
     }
 
+    if (showSplash) {
+        showWelcomeSplash(isBusinessAccount());
+    } else if (isNewSignup || currentProfile.onboarding_completed === false) {
+        startOnboardingWizard();
+    }
+
     applyRoleUI();
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
-
-    if (isNewSignup || currentProfile.onboarding_completed === false) {
-        startOnboardingWizard();
-    }
 
     await Promise.all([
         loadMyEnrollments(),
@@ -1007,45 +1203,59 @@ async function handleAuthenticatedSession(user, { isNewSignup = false } = {}) {
 }
 
 function renderAvatarChip(profile, sizeClass = "sm") {
+    const isBiz = profile?.role === "business";
+    const extraClass = isBiz ? " business-avatar" : "";
     if (profile?.avatar_url) {
-        return `<span class="avatar-circle ${sizeClass}"><img src="${escapeHTML(profile.avatar_url)}" alt="" onerror="this.remove()"></span>`;
+        return `<span class="avatar-circle ${sizeClass}${extraClass}"><img src="${escapeHTML(profile.avatar_url)}" alt="" onerror="this.remove()"></span>`;
     }
     const initials = (profile?.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
-    return `<span class="avatar-circle ${sizeClass}">${escapeHTML(initials)}</span>`;
+    return `<span class="avatar-circle ${sizeClass}${extraClass}">${escapeHTML(initials)}</span>`;
 }
 
 function applyRoleUI() {
     if (!currentProfile) return;
     const { role, full_name, business_type, privacy_mode } = currentProfile;
+    const isBiz = role === "business";
 
-    if ($("friendsNavBtn")) $("friendsNavBtn").classList.remove("hidden");
-    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.remove("hidden");
+    if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", isBiz);
+    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.toggle("hidden", isBiz);
+
     if ($("privacyMapBtn")) {
         const pBtn = $("privacyMapBtn");
         pBtn.classList.remove("hidden", "privacy-blurred", "privacy-ghost");
-        if (privacy_mode === "ghost") {
-            pBtn.classList.add("privacy-ghost");
-            pBtn.textContent = "👻 Fantasma";
-        } else if (privacy_mode === "blurred") {
-            pBtn.classList.add("privacy-blurred");
-            pBtn.textContent = "🌫️ Borrão";
+        if (isBiz) {
+            if (privacy_mode === "ghost") {
+                pBtn.classList.add("privacy-ghost");
+                pBtn.textContent = "📅 Apenas Eventos";
+            } else {
+                pBtn.textContent = "🏢 Sede Visível";
+            }
         } else {
-            pBtn.textContent = "📍 Precisa";
+            if (privacy_mode === "ghost") {
+                pBtn.classList.add("privacy-ghost");
+                pBtn.textContent = "👻 Fantasma";
+            } else if (privacy_mode === "blurred") {
+                pBtn.classList.add("privacy-blurred");
+                pBtn.textContent = "🌫️ Borrão";
+            } else {
+                pBtn.textContent = "📍 Precisa";
+            }
         }
     }
 
     notifBtn.classList.remove("hidden");
     logoutButton.classList.remove("hidden");
     userBadge.classList.remove("hidden");
+    userBadge.classList.toggle("business-badge", isBiz);
 
     const avatarHtml = renderAvatarChip(currentProfile, "sm");
 
     if (role === "admin") {
         userBadge.innerHTML = `${avatarHtml} <span>🛡️ ${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.remove("hidden");
-    } else if (role === "business") {
-        const tipo = business_type || "Empresa";
-        userBadge.innerHTML = `${avatarHtml} <span>🏢 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>`;
+    } else if (isBiz) {
+        const tipo = business_type || "Entidade";
+        userBadge.innerHTML = `${avatarHtml} <span>👔 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.add("hidden");
     } else {
         userBadge.innerHTML = `${avatarHtml} <span>${escapeHTML(full_name)}</span>`;
@@ -1055,16 +1265,17 @@ function applyRoleUI() {
 
 async function initAuth() {
     ensureSocialUI();
-    showWelcomeSplash();
 
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
-            await handleAuthenticatedSession(session.user);
+            await handleAuthenticatedSession(session.user, { showSplash: true });
         } else {
+            showWelcomeSplash(false);
             authOverlay.classList.remove("hidden");
         }
     } catch (e) {
+        showWelcomeSplash(false);
         authOverlay.classList.remove("hidden");
     }
 }
@@ -1225,12 +1436,15 @@ function renderFriendsModalContent() {
     }
 
     container.innerHTML = window.friendsList.map(f => {
+        const isBiz = f.role === "business";
         const isGhost = f.ghost_mode || f.privacy_mode === "ghost";
         const hasLocation = !isGhost && typeof f.last_lat === "number" && typeof f.last_lng === "number";
-        const batStr = typeof f.battery_level === "number" ? ` · ${f.is_charging ? "⚡" : "🔋"}${f.battery_level}%` : "";
-        const statusStr = isGhost
-            ? "👻 Modo Fantasma"
-            : `${f.current_place ? "📍 " + escapeHTML(f.current_place) : (f.status_emoji || "📍") + " " + escapeHTML(f.status_text || "Online")}${batStr}`;
+        const batStr = !isBiz && typeof f.battery_level === "number" ? ` · ${f.is_charging ? "⚡" : "🔋"}${f.battery_level}%` : "";
+        const statusStr = isBiz
+            ? `🏛️ ${escapeHTML(f.business_type || "Entidade Oficial")}`
+            : (isGhost
+                ? "👻 Modo Fantasma"
+                : `${f.current_place ? "📍 " + escapeHTML(f.current_place) : (f.status_emoji || "📍") + " " + escapeHTML(f.status_text || "Online")}${batStr}`);
         const unread = unreadMessagesBySender.get(String(f.id)) || 0;
 
         return `
@@ -1238,15 +1452,15 @@ function renderFriendsModalContent() {
                 <div class="friend-row-left">
                     ${renderAvatarChip(f, "")}
                     <div class="friend-row-info">
-                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0}</small></strong>
+                        <strong>${escapeHTML(f.full_name)} ${!isBiz ? `<small style="color:#f9a8d4;">👊${f.bump_count || 0}</small>` : ""}</strong>
                         <span>${statusStr}</span>
                     </div>
                 </div>
                 <div class="friend-row-actions">
-                    <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>
-                    <button type="button" class="btn-soft" onclick="window.openFriendChat('${f.id}')" title="Chat & Emoji Bombs">💬${unread > 0 ? ` (${unread})` : ""}</button>
+                    ${!isBiz ? `<button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>` : ""}
+                    <button type="button" class="btn-soft" onclick="window.openFriendChat('${f.id}')" title="Chat">💬${unread > 0 ? ` (${unread})` : ""}</button>
                     ${hasLocation ? `<button type="button" class="btn-soft" onclick="window.locateFriendOnMap('${f.id}')" title="Ver no mapa">📍</button>` : ""}
-                    <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover amigo">×</button>
+                    <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover">×</button>
                 </div>
             </div>
         `;
@@ -1277,7 +1491,7 @@ async function searchUsersToAdd() {
     resultsEl.innerHTML = data.map(u => {
         let actionBtn = "";
         if (friendIds.has(u.id)) {
-            actionBtn = `<span class="category">✓ Amigos</span>`;
+            actionBtn = `<span class="category">✓ Adicionado</span>`;
         } else if (sentFriendRequestIds.has(u.id)) {
             actionBtn = `<span class="muted" style="font-size:12px;">Pedido enviado</span>`;
         } else {
@@ -1290,7 +1504,7 @@ async function searchUsersToAdd() {
                     ${renderAvatarChip(u, "")}
                     <div class="friend-row-info">
                         <strong>${escapeHTML(u.full_name)}</strong>
-                        <span>${escapeHTML(u.email)}</span>
+                        <span>${u.role === "business" ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : escapeHTML(u.email)}</span>
                     </div>
                 </div>
                 <div>${actionBtn}</div>
@@ -1367,7 +1581,7 @@ window.locateFriendOnMap = friendId => {
     closeModalEl($("friendsModal"));
     if (window.innerWidth <= 820) setMobileView("map");
     if (!focusFriendOnMap(friendId)) {
-        showToast("Localização do amigo indisponível.");
+        showToast("Localização indisponível.");
     }
 };
 
@@ -1430,6 +1644,7 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
 window.openFriendChat = async friendId => {
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     if (!friend) return;
+    const isBiz = friend.role === "business";
 
     activeChatFriendId = String(friend.id);
     closeModalEl($("friendsModal"));
@@ -1438,9 +1653,14 @@ window.openFriendChat = async friendId => {
         ${renderAvatarChip(friend, "")}
         <div>
             <strong style="display:block; font-size:15px;">${escapeHTML(friend.full_name)}</strong>
-            <span style="font-size:12px; color:#f9a8d4;">👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}</span>
+            <span style="font-size:12px; color:${isBiz ? "#fcd34d" : "#f9a8d4"};">
+                ${isBiz ? `🏛️ ${escapeHTML(friend.business_type || "Entidade Oficial")}` : `👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}`}
+            </span>
         </div>
     `;
+
+    const bombBar = document.querySelector(".emoji-bomb-bar");
+    if (bombBar) bombBar.classList.toggle("hidden", isBiz);
 
     openModal($("friendChatModal"));
     await loadChatHistory(activeChatFriendId);
@@ -1474,7 +1694,7 @@ async function loadChatHistory(friendId) {
     renderFriendsModalContent();
 
     if (!data || data.length === 0) {
-        box.innerHTML = `<p class="muted" style="font-size:12.5px; text-align:center; margin-top:80px;">Envia uma mensagem ou dispara um Emoji Bomb acima! 🚀</p>`;
+        box.innerHTML = `<p class="muted" style="font-size:12.5px; text-align:center; margin-top:80px;">Envia a primeira mensagem! 💬</p>`;
         return;
     }
 
@@ -1506,7 +1726,7 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
     }]);
 
     if (error) {
-        showToast("Erro ao enviar mensagem (verifica o SQL no Supabase).", "error");
+        showToast("Erro ao enviar mensagem.", "error");
         return;
     }
 
@@ -1516,10 +1736,10 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
 }
 
 // ==========================================
-// TELEMETRIA BUMP: BATERIA, VELOCIDADE, PRIVACIDADE & CHECK-IN
+// TELEMETRIA: BATERIA, VELOCIDADE, PRIVACIDADE & CHECK-IN
 // ==========================================
 async function getDeviceBatteryTelemetry() {
-    if (!navigator.getBattery) return {};
+    if (!navigator.getBattery || isBusinessAccount()) return {};
     try {
         const bat = await navigator.getBattery();
         return {
@@ -1554,7 +1774,7 @@ window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
         await supabaseClient.from("profiles").update({
             last_lat: coords.lat,
             last_lng: coords.lng,
-            speed_kmh: speedKmh,
+            speed_kmh: isBusinessAccount() ? 0 : speedKmh,
             last_seen: new Date().toISOString(),
             ...batInfo
         }).eq("id", currentUser.id);
@@ -1563,7 +1783,8 @@ window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
 
 async function cyclePrivacyMode() {
     if (!currentUser || !currentProfile) return;
-    const order = ["precise", "blurred", "ghost"];
+    const isBiz = isBusinessAccount();
+    const order = isBiz ? ["precise", "ghost"] : ["precise", "blurred", "ghost"];
     const current = currentProfile.privacy_mode || "precise";
     const next = order[(order.indexOf(current) + 1) % order.length];
 
@@ -1582,25 +1803,35 @@ async function cyclePrivacyMode() {
 
     const { error } = await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
     if (error) {
-        showToast("Erro ao atualizar modo de privacidade.", "error");
+        showToast("Erro ao atualizar visibilidade no mapa.", "error");
         return;
     }
 
     Object.assign(currentProfile, updatePayload);
     applyRoleUI();
 
-    if (next === "ghost") showToast("👻 Modo Fantasma — estás invisível no mapa.");
-    else if (next === "blurred") showToast("🌫️ Modo Borrão — os amigos veem apenas a tua zona aproximada.");
-    else {
-        showToast("📍 Localização Precisa ativa!", "success");
-        if (!userPosition) {
-            try { await locateUser(); } catch (e) {}
+    if (isBiz) {
+        if (next === "ghost") showToast("📅 Apenas Eventos Públicos visíveis no mapa.");
+        else {
+            showToast("🏢 Sede Institucional visível no mapa!", "success");
+            if (!userPosition) {
+                try { await locateUser(); } catch (e) {}
+            }
+        }
+    } else {
+        if (next === "ghost") showToast("👻 Modo Fantasma — estás invisível no mapa.");
+        else if (next === "blurred") showToast("🌫️ Modo Borrão — os amigos veem apenas a tua zona aproximada.");
+        else {
+            showToast("📍 Localização Precisa ativa!", "success");
+            if (!userPosition) {
+                try { await locateUser(); } catch (e) {}
+            }
         }
     }
 }
 
 async function doQuickCheckin() {
-    if (!currentUser || !currentProfile) return;
+    if (!currentUser || !currentProfile || isBusinessAccount()) return;
     if (!userPosition) {
         try { await locateUser(); } catch (e) {}
     }
@@ -1645,7 +1876,7 @@ function startLiveSocialSync() {
     if (locationSyncInterval) clearInterval(locationSyncInterval);
     if (geoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
 
-    if (navigator.permissions && navigator.permissions.query) {
+    if (!isBusinessAccount() && navigator.permissions && navigator.permissions.query) {
         navigator.permissions.query({ name: "geolocation" }).then(res => {
             if (res.state === "granted" && navigator.geolocation) {
                 geoWatchId = navigator.geolocation.watchPosition(pos => {
@@ -1705,7 +1936,7 @@ function startLiveSocialSync() {
                 updateSocialBadges();
                 renderFriendsModalContent();
                 const sender = window.friendsList.find(f => String(f.id) === senderId);
-                showToast(`💬 ${sender ? sender.full_name : "Amigo"}: ${msg.content}`, "success");
+                showToast(`💬 ${sender ? sender.full_name : "Mensagem"}: ${msg.content}`, "success");
             }
         })
         .on("postgres_changes", {
@@ -1791,7 +2022,7 @@ notifList.addEventListener("click", async e => {
 
     if (eventId) {
         openEventDetails(eventId);
-    } else if ($("friendsModal")) {
+    } else if ($("friendsModal") && !isBusinessAccount()) {
         openModal($("friendsModal"));
         await loadSocialData();
     }
@@ -1858,39 +2089,72 @@ function updateDetailFollowButton(creatorId) {
 }
 
 // ==========================================
-// MODAL DE PERFIL ("A MINHA CONTA" + FOTO + ESTADO + PRIVACIDADE)
+// MODAL DE PERFIL ("A MINHA CONTA" — SEPARADO PARA EMPRESAS VS UTILIZADORES)
 // ==========================================
 userBadge.addEventListener("click", () => {
     if (!currentProfile) return;
     ensureSocialUI();
+    const isBiz = isBusinessAccount();
+
     $("profileEmailDisplay").textContent = currentProfile.email;
     $("profileNameInput").value = currentProfile.full_name;
     $("profileBioInput").value = currentProfile.bio || "";
-    if ($("profileBirthDateInput")) $("profileBirthDateInput").value = currentProfile.birth_date || "";
 
-    if ($("profileAvatarPreview")) {
-        $("profileAvatarPreview").innerHTML = currentProfile.avatar_url
+    // Alterna entre campos institucionais e campos de utilizador normal (sem "a ouvir música" nas empresas)
+    $("businessOnlyProfileFields").classList.toggle("hidden", !isBiz);
+    $("userOnlyProfileFields").classList.toggle("hidden", isBiz);
+
+    if ($("profileAvatarLabel")) {
+        $("profileAvatarLabel").textContent = isBiz ? "Logótipo Oficial da Entidade / Empresa" : "Foto de Perfil";
+    }
+
+    const previewEl = $("profileAvatarPreview");
+    if (previewEl) {
+        previewEl.classList.toggle("business-avatar", isBiz);
+        previewEl.innerHTML = currentProfile.avatar_url
             ? `<img src="${escapeHTML(currentProfile.avatar_url)}" alt="">`
             : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
     }
     if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
 
-    const curEmoji = currentProfile.status_emoji || "📍";
-    const curText = currentProfile.status_text || "No LocalSpot";
-    if ($("profileCustomEmoji")) $("profileCustomEmoji").value = curEmoji;
-    if ($("profileCustomStatus")) $("profileCustomStatus").value = curText;
-
-    if ($("statusPillsContainer")) {
-        $("statusPillsContainer").querySelectorAll(".status-pill-btn").forEach(btn => {
-            btn.classList.toggle("active", btn.dataset.emoji === curEmoji && btn.dataset.text === curText);
-        });
-    }
-
     const curMode = currentProfile.privacy_mode || (currentProfile.ghost_mode ? "ghost" : "precise");
-    if ($("privacySelectorGrid")) {
-        $("privacySelectorGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
-            btn.classList.toggle("active", btn.dataset.mode === curMode);
-        });
+
+    if (isBiz) {
+        const bizSelect = $("profileBusinessTypeSelect");
+        if (bizSelect) {
+            const curSector = currentProfile.business_type || "Empresa / Comércio";
+            if (![...bizSelect.options].some(o => o.value === curSector)) {
+                const opt = document.createElement("option");
+                opt.value = curSector;
+                opt.textContent = `🏛️ ${curSector}`;
+                bizSelect.appendChild(opt);
+            }
+            bizSelect.value = curSector;
+        }
+        if ($("businessPrivacyGrid")) {
+            $("businessPrivacyGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
+                btn.classList.toggle("active", btn.dataset.mode === (curMode === "ghost" ? "ghost" : "precise"));
+            });
+        }
+    } else {
+        if ($("profileBirthDateInput")) $("profileBirthDateInput").value = currentProfile.birth_date || "";
+
+        const curEmoji = currentProfile.status_emoji || "📍";
+        const curText = currentProfile.status_text || "No LocalSpot";
+        if ($("profileCustomEmoji")) $("profileCustomEmoji").value = curEmoji;
+        if ($("profileCustomStatus")) $("profileCustomStatus").value = curText;
+
+        if ($("statusPillsContainer")) {
+            $("statusPillsContainer").querySelectorAll(".status-pill-btn").forEach(btn => {
+                btn.classList.toggle("active", btn.dataset.emoji === curEmoji && btn.dataset.text === curText);
+            });
+        }
+
+        if ($("privacySelectorGrid")) {
+            $("privacySelectorGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
+                btn.classList.toggle("active", btn.dataset.mode === curMode);
+            });
+        }
     }
 
     renderProfileLists();
@@ -1931,9 +2195,9 @@ $("profileUpdateForm").addEventListener("submit", async e => {
     e.preventDefault();
     const newName = $("profileNameInput").value.trim();
     const newBio = $("profileBioInput").value.trim();
-    const newBirth = $("profileBirthDateInput")?.value || null;
     if (!newName || !currentProfile) return;
 
+    const isBiz = isBusinessAccount();
     let avatarUrl = currentProfile.avatar_url || null;
     const avatarFile = $("profileAvatarInput")?.files?.[0];
     if (avatarFile) {
@@ -1942,19 +2206,26 @@ $("profileUpdateForm").addEventListener("submit", async e => {
 
     const privacyMode = currentProfile.privacy_mode || "precise";
     const ghostMode = privacyMode === "ghost";
-    const statusEmoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
-    const statusText = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
 
     const updateObj = {
         full_name: newName,
         bio: newBio,
-        birth_date: newBirth,
         avatar_url: avatarUrl,
-        status_emoji: statusEmoji,
-        status_text: statusText,
         privacy_mode: privacyMode,
         ghost_mode: ghostMode
     };
+
+    if (isBiz) {
+        const selectedSector = $("profileBusinessTypeSelect")?.value || currentProfile.business_type || "Entidade Oficial";
+        updateObj.business_type = selectedSector;
+        updateObj.birth_date = null;
+        updateObj.status_emoji = "🏢";
+        updateObj.status_text = selectedSector;
+    } else {
+        updateObj.birth_date = $("profileBirthDateInput")?.value || null;
+        updateObj.status_emoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
+        updateObj.status_text = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
+    }
 
     if (ghostMode) {
         updateObj.last_lat = null;
@@ -1978,7 +2249,7 @@ $("profileUpdateForm").addEventListener("submit", async e => {
 
     Object.assign(currentProfile, updateObj);
     applyRoleUI();
-    showToast("Perfil atualizado com sucesso!", "success");
+    showToast(isBiz ? "Perfil institucional atualizado!" : "Perfil atualizado com sucesso!", "success");
 });
 
 function renderProfileLists() {
@@ -2800,19 +3071,18 @@ async function loadEventReviews(eventId) {
 
     if (error || !data || data.length === 0) {
         ratingBadge.classList.add("hidden");
-        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem avaliações.</p>`;
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem avaliações para este evento.</p>`;
         return;
     }
 
-    const avg = (data.reduce((s, r) => s + r.rating, 0) / data.length).toFixed(1);
+    const avg = (data.reduce((acc, r) => acc + r.rating, 0) / data.length).toFixed(1);
     ratingBadge.textContent = `⭐ ${avg} (${data.length})`;
     ratingBadge.classList.remove("hidden");
 
     listEl.innerHTML = data.map(r => `
         <div class="comment-item">
             <div class="comment-head">
-                <strong>${escapeHTML(r.user_name)}</strong>
-                <span>${"⭐".repeat(r.rating)}</span>
+                <strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong>
             </div>
             ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
         </div>
@@ -2824,7 +3094,7 @@ $("reviewForm").addEventListener("submit", async e => {
     if (!currentUser || !currentProfile || !detailEventId) return;
 
     const rating = Number($("reviewRating").value);
-    const comment = $("reviewText").value.trim();
+    const comment = $("reviewCommentInput").value.trim();
 
     const { error } = await supabaseClient.from("reviews").upsert({
         event_id: detailEventId,
@@ -2839,17 +3109,16 @@ $("reviewForm").addEventListener("submit", async e => {
         return;
     }
 
-    $("reviewText").value = "";
-    await loadEventReviews(detailEventId);
+    $("reviewCommentInput").value = "";
     showToast("Avaliação registada!", "success");
+    await loadEventReviews(detailEventId);
 });
 
-// ---------- Inscritos e Comentários (com destaque para Amigos) ----------
+// ---------- Lista de Participantes ----------
 async function loadEventAttendees(ev) {
-    const listEl = $("detailAttendeesList");
-    const countEl = $("detailAttendeesCount");
-    countEl.textContent = ev.enrolled || 0;
-    listEl.innerHTML = `<span class="muted" style="font-size:12px;">A carregar inscritos...</span>`;
+    const box = $("detailAttendeesList");
+    const exportBtn = $("exportCsvBtn");
+    box.innerHTML = `<span class="muted" style="font-size:12.5px;">A carregar inscritos...</span>`;
 
     const { data, error } = await supabaseClient
         .from("enrollments")
@@ -2858,47 +3127,69 @@ async function loadEventAttendees(ev) {
         .order("created_at", { ascending: true });
 
     if (error || !data || data.length === 0) {
-        listEl.innerHTML = (ev.enrolled || 0) > 0
-            ? `<span class="attendee-pill">👥 ${ev.enrolled} participantes confirmados</span>`
-            : `<span class="muted" style="font-size:12.5px;">Sê o primeiro a inscrever-te neste evento.</span>`;
+        box.innerHTML = `<span class="muted" style="font-size:12.5px;">Ainda ninguém se inscreveu. Sê o primeiro!</span>`;
+        exportBtn.classList.add("hidden");
         return;
     }
 
-    const friendMap = new Map(window.friendsList.map(f => [String(f.id), f]));
-    countEl.textContent = Math.max(data.length, ev.enrolled || 0);
+    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
+    const attendeeIds = data.map(r => r.user_id).filter(Boolean);
+    let avatarMap = new Map();
+    if (attendeeIds.length > 0) {
+        const { data: profs } = await supabaseClient
+            .from("profiles")
+            .select("id, avatar_url, full_name, role")
+            .in("id", attendeeIds);
+        if (profs) avatarMap = new Map(profs.map(p => [String(p.id), p]));
+    }
 
-    listEl.innerHTML = data.map(row => {
-        const friendObj = friendMap.get(String(row.user_id));
-        if (friendObj) {
-            return `<span class="attendee-pill friend-attendee">${renderAvatarChip(friendObj, "sm")} 👊 ${escapeHTML(row.user_name)} (Amigo)</span>`;
-        }
-        return `<span class="attendee-pill">👤 ${escapeHTML(row.user_name)}</span>`;
+    box.innerHTML = data.map(r => {
+        const isFriend = friendIds.has(String(r.user_id));
+        const prof = avatarMap.get(String(r.user_id)) || { full_name: r.user_name };
+        const miniAvatar = renderAvatarChip(prof, "sm");
+        return `<span class="attendee-pill${isFriend ? " friend-attendee" : ""}">${miniAvatar} ${escapeHTML(r.user_name)}${isFriend ? " (Amigo)" : ""}</span>`;
     }).join("");
+
+    if (canManageEvent(ev)) {
+        exportBtn.classList.remove("hidden");
+        exportBtn.onclick = () => exportAttendeesCSV(ev, data);
+    } else {
+        exportBtn.classList.add("hidden");
+    }
 }
 
+function exportAttendeesCSV(ev, rows) {
+    const csv = "Nome do Participante\n" + rows.map(r => `"${r.user_name.replace(/"/g, '""')}"`).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `inscritos_${normalizeText(ev.name).replace(/\s+/g, "_")}.csv`;
+    link.click();
+}
+
+// ---------- Comentários & Perguntas ----------
 async function loadEventComments(eventId) {
     const listEl = $("detailCommentsList");
-    listEl.innerHTML = `<p class="muted" style="font-size:12px;">A carregar comentários...</p>`;
+    listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A carregar comentários...</p>`;
 
     const { data, error } = await supabaseClient
         .from("comments")
         .select("*")
         .eq("event_id", eventId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
 
     if (error || !data || data.length === 0) {
-        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda ninguém comentou. Deixa a primeira mensagem!</p>`;
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem comentários.</p>`;
         return;
     }
 
     listEl.innerHTML = data.map(c => {
         const canDel = currentProfile && (currentProfile.role === "admin" || c.user_id === currentProfile.id);
-        const dateStr = new Date(c.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
         return `
             <div class="comment-item">
                 <div class="comment-head">
                     <strong>${escapeHTML(c.user_name)}</strong>
-                    <span class="muted">${dateStr} ${canDel ? `<button type="button" class="delete-btn" style="margin:0 0 0 6px;" onclick="window.deleteComment(${c.id})">×</button>` : ""}</span>
+                    ${canDel ? `<button type="button" class="delete-btn" onclick="window.deleteComment(${c.id})">Apagar</button>` : ""}
                 </div>
                 <p>${escapeHTML(c.content)}</p>
             </div>
@@ -2909,6 +3200,7 @@ async function loadEventComments(eventId) {
 $("commentForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!currentUser || !currentProfile || !detailEventId) return;
+
     const input = $("commentInput");
     const content = input.value.trim();
     if (!content) return;
@@ -2917,7 +3209,6 @@ $("commentForm").addEventListener("submit", async e => {
         event_id: detailEventId,
         user_id: currentUser.id,
         user_name: currentProfile.full_name,
-        user_role: currentProfile.role,
         content
     }]);
 
@@ -2931,316 +3222,255 @@ $("commentForm").addEventListener("submit", async e => {
         await createNotification(
             ev.creatorId,
             ev.id,
-            `Novo comentário em "${ev.name}"`,
-            `${currentProfile.full_name}: ${content}`
+            "Novo comentário no teu evento",
+            `${currentProfile.full_name} comentou em "${ev.name}": "${content.slice(0, 50)}"`
         );
     }
 
     input.value = "";
     await loadEventComments(detailEventId);
-    showToast("Comentário publicado!", "success");
 });
 
 window.deleteComment = async commentId => {
-    const { error } = await supabaseClient.from("comments").delete().eq("id", commentId);
-    if (!error && detailEventId) {
-        await loadEventComments(detailEventId);
-        showToast("Comentário removido.");
-    }
+    await supabaseClient.from("comments").delete().eq("id", commentId);
+    if (detailEventId) await loadEventComments(detailEventId);
 };
 
-// ---------- Event Listeners de Filtros ----------
-let searchTimer;
+// ---------- Controlos de Pesquisa & Filtros ----------
+let searchDebounce;
 searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { state.search = searchInput.value; filterEvents(); }, 150);
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { state.search = searchInput.value; filterEvents(); }, 180);
 });
 
 categoryChips.addEventListener("click", e => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
+    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
     state.category = chip.dataset.category;
-    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c === chip));
-    filterEvents({ fit: true });
+    filterEvents();
 });
 
-districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents({ fit: true }); });
-periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents({ fit: true }); });
+districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents(); });
+periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents(); });
 
 radiusSlider.addEventListener("input", async () => {
-    const val = Number(radiusSlider.value);
-    state.radius = val;
-    radiusValue.textContent = val >= 100 ? "Sem limite" : `${val} km`;
+    state.radius = Number(radiusSlider.value);
+    radiusValue.textContent = state.radius >= 100 ? "Sem limite" : `${state.radius} km`;
 
-    if (val < 100 && !userPosition) {
-        try { await locateUser(); } catch (err) { showToast("Ativa a localização para usar o raio.", "error"); }
-    }
-    filterEvents({ fit: true });
-});
-
-sortFilter.addEventListener("change", async () => {
-    state.sort = sortFilter.value;
-    if (state.sort === "distance" && !userPosition) {
+    if (state.radius < 100 && !userPosition) {
         try {
             await locateUser();
-        } catch (err) {
-            showToast(err.message, "error");
-            state.sort = "date";
-            sortFilter.value = "date";
-        }
+            enableDistanceSort();
+        } catch (e) {}
     }
     filterEvents();
 });
 
+sortFilter.addEventListener("change", () => { state.sort = sortFilter.value; filterEvents(); });
+
 favoritesToggle.addEventListener("click", () => {
     state.onlyFavorites = !state.onlyFavorites;
-    favoritesToggle.setAttribute("aria-pressed", state.onlyFavorites);
     favoritesToggle.classList.toggle("on", state.onlyFavorites);
-    favoritesToggle.textContent = state.onlyFavorites ? "★ Favoritos" : "☆ Favoritos";
-    filterEvents({ fit: true });
+    favoritesToggle.setAttribute("aria-pressed", String(state.onlyFavorites));
+    filterEvents();
 });
 
 freeOnlyToggle.addEventListener("click", () => {
     state.onlyFree = !state.onlyFree;
-    freeOnlyToggle.setAttribute("aria-pressed", state.onlyFree);
     freeOnlyToggle.classList.toggle("on", state.onlyFree);
-    filterEvents({ fit: true });
+    freeOnlyToggle.setAttribute("aria-pressed", String(state.onlyFree));
+    filterEvents();
 });
 
 followingOnlyToggle.addEventListener("click", () => {
     state.onlyFollowing = !state.onlyFollowing;
-    followingOnlyToggle.setAttribute("aria-pressed", state.onlyFollowing);
     followingOnlyToggle.classList.toggle("on", state.onlyFollowing);
-    filterEvents({ fit: true });
+    followingOnlyToggle.setAttribute("aria-pressed", String(state.onlyFollowing));
+    filterEvents();
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    Object.assign(state, {
-        search: "", category: "all", district: "all", period: "all",
-        radius: 100, onlyFavorites: false, onlyFree: false, onlyFollowing: false
-    });
-    searchInput.value = "";
-    districtFilter.value = "all";
-    periodFilter.value = "all";
-    radiusSlider.value = 100;
-    radiusValue.textContent = "Sem limite";
+    state.search = ""; state.category = "all"; state.district = "all";
+    state.period = "all"; state.radius = 100; state.onlyFavorites = false;
+    state.onlyFree = false; state.onlyFollowing = false;
+
+    searchInput.value = ""; districtFilter.value = "all"; periodFilter.value = "all";
+    radiusSlider.value = 100; radiusValue.textContent = "Sem limite";
     favoritesToggle.classList.remove("on");
-    favoritesToggle.textContent = "☆ Favoritos";
     freeOnlyToggle.classList.remove("on");
     followingOnlyToggle.classList.remove("on");
     categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.category === "all"));
     filterEvents({ fit: true });
 });
 
+function enableDistanceSort() {
+    const opt = sortFilter.querySelector('option[value="distance"]');
+    if (opt) opt.disabled = false;
+}
+
 locationButton.addEventListener("click", async () => {
     locationButton.disabled = true;
+    locationButton.textContent = "A localizar...";
     try {
         await locateUser();
-        state.sort = "distance";
-        sortFilter.value = "distance";
+        enableDistanceSort();
+        if (window.innerWidth <= 820) setMobileView("map");
+        showToast("Localização encontrada!");
         filterEvents();
-        showToast("Localização atualizada e eventos ordenados por distância.");
     } catch (err) {
         showToast(err.message, "error");
     } finally {
         locationButton.disabled = false;
+        locationButton.textContent = "📍 Perto de mim";
     }
 });
 
 // ==========================================
-// MODAIS, CRIAÇÃO, EDIÇÃO E DUPLICAÇÃO DE EVENTOS
+// ESCOLHA DE LOCAL NO MAPA, CRIAÇÃO, EDIÇÃO E DUPLICAÇÃO
 // ==========================================
-function openModal(el) {
-    el.classList.remove("hidden");
-    el.setAttribute("aria-hidden", "false");
-    const focusable = el.querySelector("input, select, textarea, button");
-    if (focusable) setTimeout(() => focusable.focus(), 50);
-}
-
-function closeModalEl(el) {
-    el.classList.add("hidden");
-    el.setAttribute("aria-hidden", "true");
-}
-
-function closeEventModal() {
+function beginPickOnMap() {
     closeModalEl(modal);
+    pickBanner.classList.remove("hidden");
+    $("pickSearchInput").value = "";
+    if (window.innerWidth <= 820) setMobileView("map");
+
+    pickLocation(latlng => {
+        pickBanner.classList.add("hidden");
+        setPickedLocation(latlng);
+        openModal(modal);
+    });
 }
 
-function resetEventForm() {
-    eventForm.reset();
-    editingEventId = null;
-    $("eventModalTitle").textContent = "Adicionar evento";
-    $("eventSubmitBtn").textContent = "Publicar evento";
-    imagePreview.classList.add("hidden");
-    imagePreview.removeAttribute("src");
-    formError.classList.add("hidden");
-    pendingLocation = null;
-    clearTempMarker();
-    coordsText.textContent = "📍 Nenhuma localização selecionada no mapa";
-    coordsText.classList.remove("ok");
-}
-
-function populateEventForm(ev, isEdit) {
-    editingEventId = isEdit ? ev.id : null;
-    $("eventModalTitle").textContent = isEdit ? "Editar evento" : "Duplicar evento";
-    $("eventSubmitBtn").textContent = isEdit ? "Guardar alterações" : "Publicar novo evento";
-
-    $("eventName").value = ev.name;
-    $("eventDescription").value = ev.description || "";
-    $("eventCategory").value = ev.category;
-    $("eventPrice").value = ev.price || "Gratuito";
-    $("eventDate").value = isEdit ? ev.date : "";
-    $("eventTime").value = ev.time;
-    $("eventLocation").value = ev.location;
-    $("eventFormDistrict").value = ev.distrito;
-    $("eventLimit").value = ev.maxParticipants || "";
-    $("eventExternalUrl").value = ev.externalUrl || "";
-
-    pendingLocation = { lat: ev.latitude, lng: ev.longitude };
-    setTempMarker(pendingLocation);
-    coordsText.textContent = `📍 Local (${ev.latitude.toFixed(4)}, ${ev.longitude.toFixed(4)})`;
-    coordsText.classList.add("ok");
-
-    if (ev.image && ev.image !== DEFAULT_IMAGE) {
-        imagePreview.src = ev.image;
-        imagePreview.classList.remove("hidden");
-    } else {
-        imagePreview.classList.add("hidden");
-    }
-
-    formError.classList.add("hidden");
-    openModal(modal);
-}
-
-function startEditEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (ev && canManageEvent(ev)) populateEventForm(ev, true);
-}
-
-function startDuplicateEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (ev) populateEventForm(ev, false);
-}
-
-window.startEditEvent = startEditEvent;
-
-closeModal.addEventListener("click", () => { closeEventModal(); resetEventForm(); });
-modal.addEventListener("mousedown", e => { if (e.target === modal) { closeEventModal(); resetEventForm(); } });
-
-$("aboutButton").addEventListener("click", () => openModal(aboutModal));
-$("closeAbout").addEventListener("click", () => closeModalEl(aboutModal));
-aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) closeModalEl(aboutModal); });
-
-document.addEventListener("keydown", e => {
-    if (e.key !== "Escape") return;
-    if ($("friendChatModal") && !$("friendChatModal").classList.contains("hidden")) { activeChatFriendId = null; closeModalEl($("friendChatModal")); }
-    else if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
-    else if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
-    else if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
-    else if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
-    else if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
-    else if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
-    else if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
-    else if (!adminModal.classList.contains("hidden")) closeModalEl(adminModal);
-    else if (!pickBanner.classList.contains("hidden")) stopPicking();
+$("cancelPickBtn").addEventListener("click", () => {
+    cancelPick();
+    pickBanner.classList.add("hidden");
 });
 
-// Pesquisa de morada durante escolha no mapa
-async function searchAddressOnMap() {
-    const query = $("pickAddressInput").value.trim();
-    if (!query) return;
+$("pickSearchBtn").addEventListener("click", searchPlaceForPick);
+$("pickSearchInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        searchPlaceForPick();
+    }
+});
 
-    const btn = $("pickAddressBtn");
+async function searchPlaceForPick() {
+    const q = $("pickSearchInput").value.trim();
+    if (!q) return;
+    const btn = $("pickSearchBtn");
     btn.disabled = true;
     btn.textContent = "...";
-
     try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(query)}`);
-        const results = await res.json();
-        if (results && results.length > 0) {
-            flyToCoordinates(parseFloat(results[0].lon), parseFloat(results[0].lat), 16);
-            showToast("Local encontrado! Clica no ponto exato do mapa.");
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q + ", Portugal")}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lng = parseFloat(data[0].lon);
+            flyToCoordinates(lng, lat, 15);
+            showToast(`Mapa centrado em: ${data[0].display_name.split(",")[0]}`);
         } else {
-            showToast("Morada não encontrada em Portugal.", "error");
+            showToast("Local não encontrado.", "error");
         }
     } catch (e) {
-        showToast("Erro ao pesquisar morada.", "error");
+        showToast("Erro ao pesquisar local.", "error");
     } finally {
         btn.disabled = false;
         btn.textContent = "Ir";
     }
 }
 
-$("pickAddressBtn").addEventListener("click", searchAddressOnMap);
-$("pickAddressInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); searchAddressOnMap(); }
-});
-
-function startPicking() {
-    closeEventModal();
-    if (window.innerWidth <= 820) setMobileView("map");
-    pickBanner.classList.remove("hidden");
-    $("pickAddressInput").focus();
-
-    pickLocation(latlng => {
-        pickBanner.classList.add("hidden");
-        pendingLocation = { lat: latlng.lat, lng: latlng.lng };
-        setTempMarker(latlng);
-        coordsText.textContent = `📍 Local escolhido (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`;
-        coordsText.classList.add("ok");
-        const district = $("eventFormDistrict");
-        if (!district.value) district.value = nearestDistrict(latlng.lat, latlng.lng);
-        openModal(modal);
-    });
-}
-
-function stopPicking() {
-    cancelPick();
-    pickBanner.classList.add("hidden");
-}
-
 addEventButton.addEventListener("click", () => {
-    if (!currentProfile) return;
-    resetEventForm();
-    startPicking();
+    editingEventId = null;
+    $("eventModalTitle").textContent = "Adicionar Novo Evento";
+    $("eventSubmitBtn").textContent = "Publicar Evento";
+    eventForm.reset();
+    imagePreview.classList.add("hidden");
+    imagePreview.removeAttribute("src");
+    formError.classList.add("hidden");
+    beginPickOnMap();
 });
 
-changeLocationButton.addEventListener("click", startPicking);
-$("cancelPick").addEventListener("click", () => {
-    stopPicking();
-    if (pendingLocation || editingEventId) openModal(modal);
-});
+changeLocationButton.addEventListener("click", beginPickOnMap);
+
+function startEditEvent(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
+
+    editingEventId = ev.id;
+    $("eventModalTitle").textContent = "Editar Evento";
+    $("eventSubmitBtn").textContent = "Guardar Alterações";
+    fillEventFormFromObject(ev);
+    openModal(modal);
+}
+
+function startDuplicateEvent(id) {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
+
+    editingEventId = null;
+    $("eventModalTitle").textContent = "Duplicar Evento";
+    $("eventSubmitBtn").textContent = "Publicar Cópia";
+    fillEventFormFromObject(ev, true);
+    openModal(modal);
+}
+
+function fillEventFormFromObject(ev, isDuplicate = false) {
+    $("eventName").value = isDuplicate ? `${ev.name} (Cópia)` : ev.name;
+    $("eventCategory").value = ev.category;
+    $("eventDate").value = ev.date;
+    $("eventTime").value = ev.time;
+    $("eventLocation").value = ev.location;
+    $("eventFormDistrict").value = ev.distrito;
+    $("eventMaxParticipants").value = ev.maxParticipants || "";
+    $("eventPrice").value = ev.price || "Gratuito";
+    $("eventExternalUrl").value = ev.externalUrl || "";
+    $("eventDescription").value = ev.description || "";
+    eventImageInput.value = "";
+    formError.classList.add("hidden");
+
+    if (ev.image) {
+        imagePreview.src = ev.image;
+        imagePreview.classList.remove("hidden");
+    } else {
+        imagePreview.classList.add("hidden");
+    }
+
+    setPickedLocation({ lat: ev.latitude, lng: ev.longitude });
+}
+
+window.startEditEvent = startEditEvent;
+
+function setPickedLocation(latlng) {
+    pendingLocation = latlng;
+    setTempMarker(latlng);
+    coordsText.textContent = `📍 ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+    coordsText.classList.add("ok");
+}
+
+function closeEventModal() {
+    closeModalEl(modal);
+    clearTempMarker();
+    pendingLocation = null;
+    editingEventId = null;
+}
+
+closeModal.addEventListener("click", closeEventModal);
+modal.addEventListener("mousedown", e => { if (e.target === modal) closeEventModal(); });
 
 eventImageInput.addEventListener("change", () => {
     const file = eventImageInput.files[0];
-    if (!file) { imagePreview.classList.add("hidden"); return; }
-    imagePreview.src = URL.createObjectURL(file);
-    imagePreview.classList.remove("hidden");
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        imagePreview.src = reader.result;
+        imagePreview.classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
 });
 
-function resizeImageToBlob(file, maxSize = 900) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
-        reader.onload = () => {
-            const img = new Image();
-            img.onerror = () => reject(new Error("Ficheiro de imagem inválido."));
-            img.onload = () => {
-                const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-                const canvas = document.createElement("canvas");
-                canvas.width = Math.round(img.width * scale);
-                canvas.height = Math.round(img.height * scale);
-                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-                canvas.toBlob(blob => resolve({ blob, dataUrl }), "image/jpeg", 0.8);
-            };
-            img.src = reader.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
-async function uploadOrEncodeEventImage(file) {
+async function uploadEventImage(file) {
     const { blob, dataUrl } = await resizeImageToBlob(file);
     try {
         const fileName = `${currentUser.id}/${Date.now()}.jpg`;
@@ -3256,25 +3486,56 @@ async function uploadOrEncodeEventImage(file) {
     return dataUrl;
 }
 
-function showFormError(message) {
-    formError.textContent = message;
-    formError.classList.remove("hidden");
+function resizeImageToBlob(file, maxWidth = 900) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error("Ficheiro inválido."));
+            img.onload = () => {
+                const scale = Math.min(1, maxWidth / img.width);
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+                canvas.toBlob(blob => resolve({ blob, dataUrl }), "image/jpeg", 0.8);
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 eventForm.addEventListener("submit", async e => {
     e.preventDefault();
     formError.classList.add("hidden");
 
-    if (!currentProfile) {
-        showFormError("Inicia sessão para publicar eventos.");
-        return;
-    }
-    if (!pendingLocation) {
-        showFormError("Escolhe primeiro a localização no mapa.");
-        return;
-    }
-    if (!eventForm.checkValidity()) {
-        eventForm.reportValidity();
+    const name = $("eventName").value.trim();
+    const category = $("eventCategory").value;
+    const date = $("eventDate").value;
+    const time = $("eventTime").value;
+    const location = $("eventLocation").value.trim();
+    const distrito = $("eventFormDistrict").value;
+    const description = $("eventDescription").value.trim();
+    const rawMax = $("eventMaxParticipants").value;
+    const maxParticipants = rawMax ? parseInt(rawMax, 10) : null;
+    const price = $("eventPrice").value.trim() || "Gratuito";
+    const externalUrl = sanitizeUrl($("eventExternalUrl").value);
+
+    const errors = [];
+    if (!name) errors.push("Indica o nome do evento.");
+    if (!category) errors.push("Escolhe uma categoria.");
+    if (!date) errors.push("Indica a data.");
+    if (!time) errors.push("Indica a hora.");
+    if (!location) errors.push("Indica a morada ou local.");
+    if (!distrito) errors.push("Escolhe um distrito.");
+    if (!pendingLocation) errors.push("Escolhe a localização no mapa.");
+
+    if (errors.length) {
+        formError.textContent = errors.join(" ");
+        formError.classList.remove("hidden");
         return;
     }
 
@@ -3283,101 +3544,133 @@ eventForm.addEventListener("submit", async e => {
     submitBtn.textContent = "A guardar...";
 
     try {
-        const existingEvent = editingEventId
-            ? events.find(x => String(x.id) === String(editingEventId))
-            : null;
+        const existingEv = editingEventId ? events.find(x => String(x.id) === String(editingEventId)) : null;
+        let image = existingEv ? existingEv.image : DEFAULT_IMAGE;
 
-        let image = existingEvent ? existingEvent.image : DEFAULT_IMAGE;
         const file = eventImageInput.files[0];
         if (file) {
-            image = await uploadOrEncodeEventImage(file);
+            image = await uploadEventImage(file);
         }
 
-        const maxPInput = $("eventLimit").value;
-        const maxParticipants = maxPInput ? parseInt(maxPInput, 10) : null;
-        const priceVal = $("eventPrice").value.trim() || "Gratuito";
-        const extUrlVal = sanitizeUrl($("eventExternalUrl").value);
-
-        if (editingEventId) {
-            const updatedData = {
-                name: $("eventName").value.trim(),
-                description: $("eventDescription").value.trim(),
-                category: $("eventCategory").value,
-                date: $("eventDate").value,
-                time: $("eventTime").value,
-                location: $("eventLocation").value.trim(),
-                distrito: $("eventFormDistrict").value,
-                latitude: pendingLocation.lat,
-                longitude: pendingLocation.lng,
-                image,
-                max_participants: maxParticipants,
-                price: priceVal,
-                external_url: extUrlVal
-            };
-
-            const { error } = await supabaseClient.from("events").update(updatedData).eq("id", editingEventId);
-            if (error) {
-                showFormError("Erro ao guardar alterações do evento.");
-                return;
-            }
-
-            const editedId = editingEventId;
-            closeEventModal();
-            resetEventForm();
-            await loadEventsFromSupabase();
-            setActive(editedId);
-            focusEvent(editedId);
-            showToast("Evento atualizado com sucesso!", "success");
-            return;
-        }
-
-        const creatorType = currentProfile.role === "admin"
-            ? "Admin"
-            : (currentProfile.role === "business" ? (currentProfile.business_type || "Empresa") : "Utilizador");
-
-        const newEventData = {
-            name: $("eventName").value.trim(),
-            description: $("eventDescription").value.trim(),
-            category: $("eventCategory").value,
-            date: $("eventDate").value,
-            time: $("eventTime").value,
-            location: $("eventLocation").value.trim(),
-            distrito: $("eventFormDistrict").value,
+        const payload = {
+            name,
+            category,
+            date,
+            time,
+            location,
+            distrito,
+            description,
+            image,
             latitude: pendingLocation.lat,
             longitude: pendingLocation.lng,
-            image,
             max_participants: maxParticipants,
-            enrolled: 0,
-            price: priceVal,
-            external_url: extUrlVal,
-            creator_id: currentProfile.id,
-            creator_name: currentProfile.full_name,
-            creator_type: creatorType
+            price,
+            external_url: externalUrl
         };
 
-        const { data, error } = await supabaseClient.from("events").insert([newEventData]).select();
-        if (error) {
-            showFormError("Erro ao publicar o evento na base de dados.");
-            return;
-        }
+        if (editingEventId) {
+            const { data, error } = await supabaseClient
+                .from("events")
+                .update(payload)
+                .eq("id", editingEventId)
+                .select()
+                .single();
 
-        closeEventModal();
-        resetEventForm();
-        await loadEventsFromSupabase();
+            if (error) throw error;
+            const idx = events.findIndex(x => String(x.id) === String(editingEventId));
+            if (idx !== -1) events[idx] = mapDbEvent(data);
 
-        if (data && data[0]) {
-            setActive(data[0].id);
-            focusEvent(data[0].id);
+            closeEventModal();
+            filterEvents();
+            showToast("Evento atualizado com sucesso!", "success");
+        } else {
+            payload.enrolled = 0;
+            payload.creator_id = currentProfile ? currentProfile.id : null;
+            payload.creator_name = currentProfile ? currentProfile.full_name : null;
+            payload.creator_type = currentProfile
+                ? (currentProfile.role === "business" ? (currentProfile.business_type || "Domínio Público") : "Utilizador")
+                : null;
+
+            const { data, error } = await supabaseClient
+                .from("events")
+                .insert([payload])
+                .select()
+                .single();
+
+            if (error) throw error;
+            const created = mapDbEvent(data);
+            events.push(created);
+
+            if (currentProfile) {
+                const { data: followers } = await supabaseClient
+                    .from("follows")
+                    .select("follower_id")
+                    .eq("following_id", currentProfile.id);
+
+                if (followers && followers.length > 0) {
+                    const notifs = followers.map(f => ({
+                        user_id: f.follower_id,
+                        event_id: created.id,
+                        title: `Novo evento de ${currentProfile.full_name}`,
+                        message: `${created.name} · ${formatEventDate(created)}`
+                    }));
+                    await supabaseClient.from("notifications").insert(notifs);
+                }
+            }
+
+            closeEventModal();
+            filterEvents();
+            openEventOnMap(created.id);
+            showToast("Evento publicado no mapa!", "success");
         }
-        showToast("Evento publicado com sucesso!", "success");
     } catch (err) {
-        showFormError(err.message || "Erro inesperado ao processar o evento.");
+        formError.textContent = err.message || "Erro ao guardar evento.";
+        formError.classList.remove("hidden");
     } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = editingEventId ? "Guardar alterações" : "Publicar evento";
+        submitBtn.textContent = editingEventId ? "Guardar Alterações" : "Publicar Evento";
     }
 });
 
-// Arranque
+// ---------- Controlo de Modais e Acertos de Início ----------
+let lastFocused = null;
+function openModal(el) {
+    lastFocused = document.activeElement;
+    el.classList.remove("hidden");
+    el.setAttribute("aria-hidden", "false");
+    const first = el.querySelector("input, select, textarea, button");
+    if (first) first.focus();
+}
+
+function closeModalEl(el) {
+    el.classList.add("hidden");
+    el.setAttribute("aria-hidden", "true");
+    if (lastFocused) lastFocused.focus();
+}
+
+$("aboutButton").addEventListener("click", () => openModal(aboutModal));
+$("closeAbout").addEventListener("click", () => closeModalEl(aboutModal));
+aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) closeModalEl(aboutModal); });
+
+document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!modal.classList.contains("hidden")) closeEventModal();
+    if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
+    if (!adminModal.classList.contains("hidden")) closeModalEl(adminModal);
+    if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
+    if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
+    if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
+    if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
+    if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
+    if ($("friendChatModal") && !$("friendChatModal").classList.contains("hidden")) {
+        activeChatFriendId = null;
+        closeModalEl($("friendChatModal"));
+    }
+    if (!pickBanner.classList.contains("hidden")) {
+        cancelPick();
+        pickBanner.classList.add("hidden");
+    }
+});
+
 setupControls();
 initAuth();
