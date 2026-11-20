@@ -1,5 +1,5 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios + Amigos Bump)
+// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios + Amigos & Entidades)
 // ==========================================
 
 window.onEventMarkerClick = null;
@@ -333,7 +333,7 @@ function showEventsOnMap(list) {
     }
 }
 
-// ---------- Amigos estilo Bump no Mapa ----------
+// ---------- Amigos e Entidades no Mapa ----------
 function getInitials(name) {
     if (!name) return "?";
     return name.trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
@@ -364,18 +364,21 @@ function formatSpeed(speedKmh) {
 }
 
 function friendPopupHTML(friend) {
+    const isBiz = friend.role === "business";
     const avatarInner = friend.avatar_url
         ? `<img src="${escapeHTML(friend.avatar_url)}" alt="" onerror="this.remove()">`
         : escapeHTML(getInitials(friend.full_name));
 
-    const placeOrStatus = friend.current_place
-        ? `📍 ${escapeHTML(friend.current_place)}`
-        : `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`;
+    const placeOrStatus = isBiz
+        ? `🏛️ ${escapeHTML(friend.business_type || "Entidade Oficial")}`
+        : (friend.current_place
+            ? `📍 ${escapeHTML(friend.current_place)}`
+            : `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`);
 
     const seenLine = formatLastSeen(friend.last_seen);
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${friend.last_lat},${friend.last_lng}`;
-    const batLabel = formatBattery(friend.battery_level, friend.is_charging);
-    const spdLabel = formatSpeed(friend.speed_kmh);
+    const batLabel = !isBiz ? formatBattery(friend.battery_level, friend.is_charging) : null;
+    const spdLabel = !isBiz ? formatSpeed(friend.speed_kmh) : null;
     const bumps = friend.bump_count || 0;
 
     let distText = "";
@@ -387,26 +390,28 @@ function friendPopupHTML(friend) {
             : ` · A ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km (~${walkMins} min)`;
     }
 
-    const privacyHint = friend.privacy_mode === "blurred" ? " (Zona aprox.)" : "";
+    const privacyHint = !isBiz && friend.privacy_mode === "blurred" ? " (Zona aprox.)" : "";
 
     return `
         <div class="friend-popup-card">
             <div class="friend-popup-header">
-                <div class="avatar-circle lg">${avatarInner}</div>
+                <div class="avatar-circle lg${isBiz ? " business-avatar" : ""}">${avatarInner}</div>
                 <h4>${escapeHTML(friend.full_name)}</h4>
-                <span class="friend-popup-status">${placeOrStatus}${privacyHint}</span>
+                <span class="friend-popup-status${isBiz ? " business-status" : ""}">${placeOrStatus}${privacyHint}</span>
             </div>
-            <div class="friend-telemetry-row">
-                ${batLabel ? `<span class="telemetry-chip">${batLabel}</span>` : ""}
-                <span class="telemetry-chip">${spdLabel}</span>
-                <span class="telemetry-chip bump-streak">👊 ${bumps} Bumps</span>
-            </div>
-            <div class="friend-popup-meta">🟢 ${seenLine}${distText}</div>
+            ${!isBiz ? `
+                <div class="friend-telemetry-row">
+                    ${batLabel ? `<span class="telemetry-chip">${batLabel}</span>` : ""}
+                    <span class="telemetry-chip">${spdLabel}</span>
+                    <span class="telemetry-chip bump-streak">👊 ${bumps} Bumps</span>
+                </div>
+            ` : (friend.bio ? `<p style="font-size:12px; color:var(--muted); margin:4px 0 8px;">${escapeHTML(friend.bio)}</p>` : "")}
+            <div class="friend-popup-meta">${isBiz ? "🏢 Sede / Localização" : "🟢 " + seenLine}${distText}</div>
             <div class="friend-bump-actions">
-                <button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Fazer Bump!</button>
-                <button type="button" class="btn-wave" onclick="window.openFriendChat('${friend.id}')">💬 Chat / Bombs</button>
+                ${!isBiz ? `<button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Fazer Bump!</button>` : `<button type="button" class="btn-wave" onclick="window.openFriendChat('${friend.id}')">✉️ Contactar</button>`}
+                ${!isBiz ? `<button type="button" class="btn-wave" onclick="window.openFriendChat('${friend.id}')">💬 Chat / Bombs</button>` : `<a href="${directions}" target="_blank" rel="noopener" class="btn-wave" style="text-decoration:none;">🧭 Direções</a>`}
             </div>
-            <a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter com ${escapeHTML(friend.full_name.split(" ")[0])}</a>
+            ${!isBiz ? `<a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter com ${escapeHTML(friend.full_name.split(" ")[0])}</a>` : ""}
         </div>`;
 }
 
@@ -424,54 +429,58 @@ function showFriendsOnMap(friends) {
 
     const hangoutIds = new Set();
     const hangoutNames = [];
-    for (let i = 0; i < visibleFriends.length; i++) {
-        for (let j = i + 1; j < visibleFriends.length; j++) {
+    const personalVisible = visibleFriends.filter(f => f.role !== "business");
+    for (let i = 0; i < personalVisible.length; i++) {
+        for (let j = i + 1; j < personalVisible.length; j++) {
             const d = distanceKm(
-                visibleFriends[i].last_lat,
-                visibleFriends[i].last_lng,
-                visibleFriends[j].last_lat,
-                visibleFriends[j].last_lng
+                personalVisible[i].last_lat,
+                personalVisible[i].last_lng,
+                personalVisible[j].last_lat,
+                personalVisible[j].last_lng
             );
             if (d <= 0.15) {
-                hangoutIds.add(visibleFriends[i].id);
-                hangoutIds.add(visibleFriends[j].id);
-                hangoutNames.push(`${visibleFriends[i].full_name.split(" ")[0]} & ${visibleFriends[j].full_name.split(" ")[0]}`);
+                hangoutIds.add(personalVisible[i].id);
+                hangoutIds.add(personalVisible[j].id);
+                hangoutNames.push(`${personalVisible[i].full_name.split(" ")[0]} & ${personalVisible[j].full_name.split(" ")[0]}`);
             }
         }
     }
 
     if (typeof window.updateHangoutBanner === "function") {
-        window.updateHangoutBanner(hangoutNames, visibleFriends.find(f => hangoutIds.has(f.id)));
+        window.updateHangoutBanner(hangoutNames, personalVisible.find(f => hangoutIds.has(f.id)));
     }
 
     visibleFriends.forEach(f => {
+        const isBiz = f.role === "business";
         const el = document.createElement("div");
         el.className = "friend-map-pin";
         const avatarContent = f.avatar_url
             ? `<img src="${escapeHTML(f.avatar_url)}" alt="" onerror="this.remove()">`
             : escapeHTML(getInitials(f.full_name));
 
-        const isRecent = f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000;
-        const firstName = f.full_name.trim().split(/\s+/)[0];
-        const isHangout = hangoutIds.has(f.id);
-        const isBlurred = f.privacy_mode === "blurred";
+        const isRecent = !isBiz && f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000;
+        const labelName = isBiz ? f.full_name : f.full_name.trim().split(/\s+/)[0];
+        const isHangout = !isBiz && hangoutIds.has(f.id);
+        const isBlurred = !isBiz && f.privacy_mode === "blurred";
 
-        const bubbleText = isHangout
-            ? `🔥 Hangout! ${f.status_emoji || ""}`
-            : (f.current_place ? `📍 ${escapeHTML(f.current_place)}` : `${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "Online")}`);
+        const bubbleText = isBiz
+            ? `🏛️ ${escapeHTML(f.business_type || "Entidade")}`
+            : (isHangout
+                ? `🔥 Hangout! ${f.status_emoji || ""}`
+                : (f.current_place ? `📍 ${escapeHTML(f.current_place)}` : `${f.status_emoji || "📍"} ${escapeHTML(f.status_text || "Online")}`));
 
-        const batPill = typeof f.battery_level === "number"
+        const batPill = !isBiz && typeof f.battery_level === "number"
             ? `<span class="friend-battery-pill${f.battery_level <= 20 && !f.is_charging ? " low" : ""}">${f.is_charging ? "⚡" : ""}${f.battery_level}%</span>`
             : "";
 
         el.innerHTML = `
-            <div class="friend-status-bubble">${bubbleText}</div>
-            <div class="friend-avatar-pin${isHangout ? " hangout-glow" : ""}${isBlurred ? " blurred-pin" : ""}">
+            <div class="friend-status-bubble${isBiz ? " business-bubble" : ""}">${bubbleText}</div>
+            <div class="friend-avatar-pin${isBiz ? " business-pin" : ""}${isHangout ? " hangout-glow" : ""}${isBlurred ? " blurred-pin" : ""}">
                 ${avatarContent}
                 ${batPill}
                 ${isRecent ? '<span class="friend-online-dot"></span>' : ""}
             </div>
-            <div class="friend-name-tag">${escapeHTML(firstName)}${f.speed_kmh > 15 ? " 🚗" : ""}</div>
+            <div class="friend-name-tag">${escapeHTML(labelName)}${!isBiz && f.speed_kmh > 15 ? " 🚗" : ""}</div>
         `;
 
         const popup = new maplibregl.Popup({
