@@ -173,8 +173,13 @@ function isAdminAccount() {
     return currentProfile?.role === "admin";
 }
 
+// Verificação armazenada no campo status_emoji ("✅") sem precisar de alterar a BD
+function isEntityVerified(profile) {
+    return profile?.role === "business" && (profile?.is_verified === true || profile?.status_emoji === "✅");
+}
+
 function verifiedBadgeHTML(profile) {
-    if (profile?.role === "business" && profile?.is_verified) {
+    if (isEntityVerified(profile)) {
         return `<span class="verified-check" title="Entidade Oficial Verificada">✓</span>`;
     }
     return "";
@@ -325,7 +330,7 @@ function startOnboardingWizard() {
     onboardingData.businessType = currentProfile?.business_type || "Empresa / Comércio";
     onboardingData.avatarFile = null;
     onboardingData.avatarPreviewUrl = currentProfile?.avatar_url || null;
-    onboardingData.statusEmoji = isBiz ? "🏢" : (currentProfile?.status_emoji || "📍");
+    onboardingData.statusEmoji = isBiz ? (isEntityVerified(currentProfile) ? "✅" : "🏢") : (currentProfile?.status_emoji || "📍");
     onboardingData.statusText = isBiz ? (currentProfile?.business_type || "Entidade Oficial") : (currentProfile?.status_text || "No LocalSpot");
     onboardingData.privacyMode = currentProfile?.privacy_mode || (isBiz ? "ghost" : "precise");
 
@@ -637,7 +642,7 @@ async function finishOnboardingWizard() {
             birth_date: isBiz ? null : (onboardingData.birthDate || null),
             business_type: isBiz ? onboardingData.businessType : currentProfile.business_type,
             avatar_url: avatarUrl,
-            status_emoji: isBiz ? "🏢" : onboardingData.statusEmoji,
+            status_emoji: isBiz ? (isEntityVerified(currentProfile) ? "✅" : "🏢") : onboardingData.statusEmoji,
             status_text: isBiz ? onboardingData.businessType : onboardingData.statusText,
             privacy_mode: onboardingData.privacyMode,
             ghost_mode: isGhost,
@@ -1365,11 +1370,9 @@ function applyRoleUI() {
     const isUser = role === "user";
     const isAdm = role === "admin";
 
-    // Amigos apenas para utilizadores normais
     if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", !isUser);
     if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.toggle("hidden", !isUser);
 
-    // Seguidores / Rede Institucional apenas para empresas e entidades públicas
     if ($("entityNetworkNavBtn")) {
         $("entityNetworkNavBtn").classList.toggle("hidden", !isBiz);
         if ($("headerFollowersCount")) $("headerFollowersCount").textContent = myFollowersList.length;
@@ -1478,7 +1481,6 @@ async function loadUnreadMessagesCount() {
 async function loadSocialData() {
     if (!currentUser) return;
 
-    // Empresas e Admins não têm amigos — apenas mostram entidades seguidas no mapa
     if (!isNormalUserAccount()) {
         window.friendsList = [];
         if (typeof showFriendsOnMap === "function") {
@@ -1528,7 +1530,6 @@ async function loadSocialData() {
             }
         }
 
-        // Garante que apenas contas de utilizador normal (role === 'user') constam como amigos
         window.friendsList = [...acceptedIds]
             .map(id => {
                 const prof = profilesById.get(id);
@@ -1636,9 +1637,6 @@ function renderFriendsModalContent() {
     }).join("");
 }
 
-// Pesquisa unificada para utilizadores:
-// - Se o resultado for role === 'user' -> permite adicionar como AMIGO (nunca seguir)
-// - Se o resultado for role === 'business' -> permite SEGUIR (nunca amigo)
 async function searchUsersAndEntities() {
     const query = $("friendSearchInput").value.trim();
     const resultsEl = $("friendSearchResults");
@@ -1712,7 +1710,6 @@ window.sendFriendRequest = async (targetId, targetName) => {
         return;
     }
 
-    // Verifica no Supabase que o destinatário é realmente um utilizador normal
     const { data: targetProf } = await supabaseClient
         .from("profiles")
         .select("role")
@@ -2439,7 +2436,6 @@ async function toggleFollowOrganizer(creatorId, creatorName) {
         myFollowingProfiles = myFollowingProfiles.filter(p => String(p.id) !== key);
         showToast(`Deixaste de seguir ${creatorName}.`);
     } else {
-        // Verifica estritamente que o alvo é uma empresa ou entidade pública (role === 'business')
         const { data: targetProf } = await supabaseClient
             .from("profiles")
             .select("*")
@@ -2482,10 +2478,6 @@ window.toggleFollowFromList = async (id, name) => {
     await toggleFollowOrganizer(id, name);
 };
 
-// Atualiza o botão de interação no Modal de Detalhes do Evento:
-// - Se o organizador for Empresa/Entidade ('business') -> Botão "+ Seguir" / "✓ A seguir"
-// - Se o organizador for Utilizador ('user') e o viewer for 'user' -> Botão "👊 Adicionar Amigo" / "✓ Amigos"
-// - Se o organizador for Utilizador ('user') e o viewer for 'business' -> Oculto (entidades não adicionam amigos)
 function updateDetailSocialButton(ev) {
     const btn = $("detailFollowBtn");
     const creatorId = ev?.creatorId;
@@ -2551,11 +2543,10 @@ userBadge.addEventListener("click", async () => {
     if ($("businessOnlyProfileFields")) $("businessOnlyProfileFields").classList.toggle("hidden", !isBiz);
     if ($("userOnlyProfileFields")) $("userOnlyProfileFields").classList.toggle("hidden", isBiz || isAdm);
 
-    // Barra de Métricas e Estado de Verificação
     const statsBar = $("profileStatsBar");
     if (statsBar) {
         if (isBiz) {
-            const verifBadge = currentProfile.is_verified
+            const verifBadge = isEntityVerified(currentProfile)
                 ? `<span class="verified-pill">✅ Entidade Verificada</span>`
                 : `<span class="unverified-pill">⏳ A aguardar verificação pelo Admin</span>`;
             statsBar.innerHTML = `
@@ -2613,7 +2604,6 @@ userBadge.addEventListener("click", async () => {
         }
     }
 
-    // Configurar abas do Perfil conforme a classe da conta
     if ($("tabMyFriends")) {
         $("tabMyFriends").classList.toggle("hidden", isBiz || isAdm);
     }
@@ -2673,7 +2663,7 @@ $("profileUpdateForm").addEventListener("submit", async e => {
     if (isBiz) {
         const bizSector = $("profileBusinessTypeSelect")?.value || currentProfile.business_type || "Empresa / Comércio";
         updatePayload.business_type = bizSector;
-        updatePayload.status_emoji = "🏢";
+        updatePayload.status_emoji = isEntityVerified(currentProfile) ? "✅" : "🏢";
         updatePayload.status_text = bizSector;
         updatePayload.birth_date = null;
     } else if (!isAdminAccount()) {
@@ -2726,7 +2716,6 @@ function renderProfileLists() {
     const followingList = $("profileFollowingList");
 
     if (isBiz) {
-        // Para empresas/entidades, a primeira aba mostra os SEGUIDORES da entidade
         enrolledList.innerHTML = myFollowersList.length
             ? myFollowersList.map(u => `
                 <div class="profile-event-item">
@@ -2834,7 +2823,7 @@ async function loadAdminDashboard() {
 
     const allUsers = users || [];
     const bizAccounts = allUsers.filter(u => u.role === "business");
-    const verifiedBizCount = bizAccounts.filter(u => u.is_verified).length;
+    const verifiedBizCount = bizAccounts.filter(u => isEntityVerified(u)).length;
     const allReports = reports || [];
 
     $("statTotalUsers").textContent = allUsers.length;
@@ -2848,8 +2837,9 @@ async function loadAdminDashboard() {
     } else {
         usersContainer.innerHTML = allUsers.map(u => {
             const isBiz = u.role === "business";
+            const verified = isEntityVerified(u);
             const verifyActionBtn = isBiz
-                ? (u.is_verified
+                ? (verified
                     ? `<button type="button" class="btn-unverify" onclick="window.toggleVerifyEntity('${u.id}', false)" title="Remover selo de verificação">✓ Verificada</button>`
                     : `<button type="button" class="btn-verify" onclick="window.toggleVerifyEntity('${u.id}', true)" title="Verificar esta empresa ou entidade">✅ Verificar</button>`)
                 : "";
@@ -2892,20 +2882,21 @@ async function loadAdminDashboard() {
     }
 }
 
-// Ação exclusiva dos Admins: Verificar ou remover verificação de uma Empresa / Entidade Pública
+// Ação exclusiva dos Admins: Verificar ou remover verificação usando o campo status_emoji existente
 window.toggleVerifyEntity = async (userId, verifyState) => {
     if (!isAdminAccount()) {
         showToast("Apenas administradores podem verificar entidades.", "error");
         return;
     }
 
+    const nextEmoji = verifyState ? "✅" : "🏢";
     const { error } = await supabaseClient
         .from("profiles")
-        .update({ is_verified: verifyState })
+        .update({ status_emoji: nextEmoji })
         .eq("id", userId);
 
     if (error) {
-        showToast("Erro ao atualizar verificação. Confirma a coluna 'is_verified' na tabela profiles.", "error");
+        showToast("Erro ao atualizar verificação.", "error");
         return;
     }
 
@@ -2927,10 +2918,10 @@ window.toggleVerifyEntity = async (userId, verifyState) => {
 
 window.changeUserRole = async (userId, newRole) => {
     if (!isAdminAccount()) return;
-    const updateData = { role: newRole };
-    if (newRole !== "business") {
-        updateData.is_verified = false;
-    }
+    const updateData = {
+        role: newRole,
+        status_emoji: newRole === "business" ? "🏢" : (newRole === "admin" ? "🛡️" : "📍")
+    };
     const { error } = await supabaseClient.from("profiles").update(updateData).eq("id", userId);
     if (error) {
         showToast("Erro ao atualizar classe da conta.", "error");
@@ -2972,7 +2963,7 @@ function mapDbEvent(row, creatorProfilesMap = new Map()) {
         creatorName: creatorProf?.full_name || row.creator_name || "",
         creatorType: creatorProf?.business_type || row.creator_type || "",
         creatorRole,
-        creatorVerified: Boolean(creatorProf?.is_verified),
+        creatorVerified: Boolean(creatorProf && isEntityVerified(creatorProf)),
         price: row.price || "Gratuito",
         externalUrl: row.external_url || ""
     };
@@ -2992,7 +2983,7 @@ async function loadEventsFromSupabase() {
             if (creatorIds.length > 0) {
                 const { data: profs } = await supabaseClient
                     .from("profiles")
-                    .select("id, full_name, role, business_type, is_verified")
+                    .select("id, full_name, role, business_type, status_emoji")
                     .in("id", creatorIds);
 
                 if (profs) {
@@ -3725,7 +3716,6 @@ function renderEventDetailsData(ev) {
     $("reviewForm").classList.toggle("hidden", !enrolled);
 }
 
-// Partilhar Link Direto
 $("detailShareBtn").addEventListener("click", async () => {
     const ev = events.find(x => String(x.id) === String(detailEventId));
     if (!ev) return;
@@ -3744,7 +3734,6 @@ $("detailShareBtn").addEventListener("click", async () => {
     }
 });
 
-// Download .ICS
 $("detailIcsBtn").addEventListener("click", () => {
     const ev = events.find(x => String(x.id) === String(detailEventId));
     if (!ev) return;
@@ -3775,7 +3764,6 @@ $("detailIcsBtn").addEventListener("click", () => {
     a.click();
 });
 
-// Denunciar Evento
 $("detailReportBtn").addEventListener("click", () => {
     $("reportDetails").value = "";
     openModal(reportModal);
