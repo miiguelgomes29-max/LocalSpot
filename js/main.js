@@ -102,7 +102,9 @@ let currentUser = null;
 let currentProfile = null;
 let favorites = new Set(loadJSON(STORAGE_FAVS, []).map(String));
 let myEnrollments = new Set();
-let myFollowing = new Map();
+let myFollowing = new Map();       // Entidades que esta conta segue (apenas role === 'business')
+let myFollowingProfiles = [];      // Perfis completos das entidades seguidas
+let myFollowersList = [];          // Quem segue esta entidade (apenas quando currentProfile.role === 'business')
 let notifications = [];
 let activeId = null;
 let pendingLocation = null;
@@ -110,7 +112,7 @@ let editingEventId = null;
 let detailEventId = null;
 let currentList = [];
 
-// Estado Social Completo estilo Bump
+// Estado Social (Amigos estritamente entre role === 'user')
 window.friendsList = [];
 let friendshipRecords = new Map();
 let incomingFriendRequests = [];
@@ -162,6 +164,32 @@ const BUSINESS_SECTORS = [
 function isBusinessAccount() {
     return currentProfile?.role === "business";
 }
+
+function isNormalUserAccount() {
+    return currentProfile?.role === "user";
+}
+
+function isAdminAccount() {
+    return currentProfile?.role === "admin";
+}
+
+function verifiedBadgeHTML(profile) {
+    if (profile?.role === "business" && profile?.is_verified) {
+        return `<span class="verified-check" title="Entidade Oficial Verificada">✓</span>`;
+    }
+    return "";
+}
+
+window.getMapSocialEntities = () => {
+    const followedVisibleEntities = myFollowingProfiles.filter(e =>
+        e.role === "business" &&
+        !e.ghost_mode &&
+        e.privacy_mode !== "ghost" &&
+        typeof e.last_lat === "number" &&
+        typeof e.last_lng === "number"
+    );
+    return [...window.friendsList, ...followedVisibleEntities];
+};
 
 // ---------- Toast Notifications ----------
 let toastTimer;
@@ -238,12 +266,12 @@ function showWelcomeSplash(isBusiness = false) {
                 <div class="welcome-wave-wrap"><span class="welcome-suit-emoji">👔</span></div>
                 <h1 class="welcome-title">Bem-vindo!</h1>
                 <p class="welcome-desc">
-                    Divulgue iniciativas oficiais, alcance a comunidade local em tempo real e gira a presença institucional no mapa.
+                    Divulgue iniciativas oficiais, alcance seguidores locais em tempo real e gira a presença institucional no mapa.
                 </p>
                 <div class="welcome-feature-pills">
                     <span class="welcome-feat-chip">🏛️ Perfil Institucional</span>
-                    <span class="welcome-feat-chip">📅 Gestão de Eventos</span>
-                    <span class="welcome-feat-chip">📊 Alcance Local</span>
+                    <span class="welcome-feat-chip">✅ Selo Verificado</span>
+                    <span class="welcome-feat-chip">📊 Seguidores & Eventos</span>
                 </div>
                 <div class="welcome-loader-track">
                     <div class="welcome-loader-fill"></div>
@@ -260,12 +288,12 @@ function showWelcomeSplash(isBusiness = false) {
                 <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
                 <h1 class="welcome-title">Bem-vindo!</h1>
                 <p class="welcome-desc">
-                    Descobre eventos perto de ti, vê onde estão os teus amigos em tempo real e envia Bumps no mapa.
+                    Descobre eventos perto de ti, liga-te aos teus amigos em tempo real e segue as tuas entidades favoritas.
                 </p>
                 <div class="welcome-feature-pills">
                     <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
-                    <span class="welcome-feat-chip">👊 Bumps & Amigos</span>
-                    <span class="welcome-feat-chip">🎉 Eventos locais</span>
+                    <span class="welcome-feat-chip">👊 Amigos & Bumps</span>
+                    <span class="welcome-feat-chip">🏛️ Entidades Locais</span>
                 </div>
                 <div class="welcome-loader-track">
                     <div class="welcome-loader-fill"></div>
@@ -281,7 +309,7 @@ function showWelcomeSplash(isBusiness = false) {
         splash.classList.add("leaving");
         setTimeout(() => {
             splash.remove();
-            if (currentUser && currentProfile && currentProfile.onboarding_completed === false) {
+            if (currentUser && currentProfile && currentProfile.onboarding_completed === false && !isAdminAccount()) {
                 startOnboardingWizard();
             }
         }, 550);
@@ -327,15 +355,12 @@ function renderOnboardingStep() {
     let stepBody = "";
 
     if (isBiz) {
-        // ==========================================
-        // FLUXO EXECUTIVO: EMPRESAS & DOMÍNIOS PÚBLICOS
-        // ==========================================
         if (onboardingStep === 1) {
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">👔</div>
                     <h2>Identidade Institucional</h2>
-                    <p class="ob-sub">Configure o nome oficial da empresa ou organismo público que aparecerá como promotor dos eventos.</p>
+                    <p class="ob-sub">Configure o nome oficial da empresa ou organismo público que aparecerá aos seus seguidores.</p>
                     <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome Oficial da Entidade / Empresa *</label>
                     <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Câmara Municipal / Teatro Municipal" maxlength="60" required>
                     <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Apresentação ou Missão Institucional (opcional)</label>
@@ -374,7 +399,7 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">🏛️</div>
                     <h2>Logótipo Oficial</h2>
-                    <p class="ob-sub">Carregue o logótipo ou imagem representativa da entidade para destacar os seus eventos.</p>
+                    <p class="ob-sub">Carregue o logótipo ou imagem representativa da entidade para destacar a sua página e eventos.</p>
                     <div class="ob-avatar-picker">
                         <label for="obAvatarFile" class="ob-avatar-circle business-logo-shape" id="obAvatarCircle" title="Carregar logótipo">${avatarInner}</label>
                         <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
@@ -390,14 +415,14 @@ function renderOnboardingStep() {
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">📊</div>
-                    <h2>Presença no Mapa</h2>
-                    <p class="ob-sub">Defina como pretende que a sua entidade seja apresentada no mapa interativo.</p>
+                    <h2>Presença no Mapa & Verificação</h2>
+                    <p class="ob-sub">Defina como a sua entidade é apresentada aos seus seguidores no mapa.</p>
                     <div id="obPrivacyGrid" class="privacy-selector-grid two-cols">
                         <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">🏢 Sede Visível no Mapa</button>
                         <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">📅 Apenas Eventos Públicos</button>
                     </div>
                     <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
-                        💼 <strong>Nota Institucional:</strong> Independentemente desta escolha, todos os eventos que publicar ficarão visíveis para toda a comunidade.
+                        ✅ <strong>Selo de Verificação:</strong> Após concluir, um Administrador poderá validar a sua conta para atribuir o selo oficial de entidade verificada.
                     </div>
                     <div class="onboarding-nav-row">
                         <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
@@ -407,9 +432,6 @@ function renderOnboardingStep() {
             `;
         }
     } else {
-        // ==========================================
-        // FLUXO PESSOAL: UTILIZADOR NORMAL
-        // ==========================================
         if (onboardingStep === 1) {
             stepBody = `
                 <div class="onboarding-step-panel">
@@ -477,14 +499,14 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">🛰️</div>
                     <h2>Privacidade no Mapa</h2>
-                    <p class="ob-sub">Tu controlas sempre quem vê a tua localização. Podes mudar isto a qualquer momento.</p>
+                    <p class="ob-sub">Apenas os teus amigos aceites podem ver a tua localização. Podes mudar isto a qualquer momento.</p>
                     <div id="obPrivacyGrid" class="privacy-selector-grid">
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">📍 Precisa</button>
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "blurred" ? " active" : ""}" data-mode="blurred">🌫️ Borrão</button>
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">👻 Fantasma</button>
                     </div>
                     <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
-                        💡 <strong>Dica:</strong> No modo <strong>Precisa</strong>, os teus amigos veem a tua bateria, velocidade e distância exata para fazerem Bump!
+                        💡 <strong>Dica:</strong> Adiciona outros utilizadores como <strong>Amigos</strong> e segue <strong>Empresas e Entidades Públicas</strong> para acompanhar os seus eventos!
                     </div>
                     <div class="onboarding-nav-row">
                         <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
@@ -505,7 +527,6 @@ function renderOnboardingStep() {
         ${stepBody}
     `;
 
-    // Bindings comuns
     if ($("obBackBtn")) {
         $("obBackBtn").onclick = () => {
             onboardingStep = Math.max(1, onboardingStep - 1);
@@ -651,11 +672,12 @@ async function finishOnboardingWizard() {
 }
 
 // ==========================================
-// INJEÇÃO DA UI SOCIAL COMPLETA (BUMP)
+// INJEÇÃO DA UI SOCIAL (AMIGOS PARA USERS / SEGUIDORES & VERIFICAÇÃO PARA ENTIDADES)
 // ==========================================
 function ensureSocialUI() {
-    // 1. Botão Amigos no Header
     const nav = document.querySelector(".header nav");
+
+    // 1A. Botão Amigos no Header (exclusivo para Utilizadores Normais)
     if (nav && !$("friendsNavBtn")) {
         const friendsBtn = document.createElement("button");
         friendsBtn.type = "button";
@@ -665,7 +687,17 @@ function ensureSocialUI() {
         nav.insertBefore(friendsBtn, notifBtn);
     }
 
-    // 2. Controlos Sociais no Mapa (Privacidade + Check-in rápido)
+    // 1B. Botão Rede / Seguidores no Header (exclusivo para Empresas / Domínios Públicos)
+    if (nav && !$("entityNetworkNavBtn")) {
+        const entBtn = document.createElement("button");
+        entBtn.type = "button";
+        entBtn.id = "entityNetworkNavBtn";
+        entBtn.className = "btn-entity-nav hidden";
+        entBtn.innerHTML = `🏛️ Seguidores (<span id="headerFollowersCount">0</span>)`;
+        nav.insertBefore(entBtn, notifBtn);
+    }
+
+    // 2. Controlos Sociais no Mapa
     const mapCtrls = document.querySelector(".map-floating-controls");
     if (mapCtrls && !$("privacyMapBtn")) {
         const privacyBtn = document.createElement("button");
@@ -673,7 +705,7 @@ function ensureSocialUI() {
         privacyBtn.id = "privacyMapBtn";
         privacyBtn.className = "map-ctrl-btn hidden";
         privacyBtn.textContent = "📍 Precisa";
-        privacyBtn.title = "Alternar privacidade no mapa";
+        privacyBtn.title = "Alternar visibilidade no mapa";
         mapCtrls.appendChild(privacyBtn);
 
         const checkinBtn = document.createElement("button");
@@ -694,9 +726,14 @@ function ensureSocialUI() {
         mapContainer.appendChild(hBanner);
     }
 
-    // 4. Campos no Modal de Perfil (Separados: Utilizador vs Empresa/Domínio Público)
+    // 4. Campos e Estatísticas no Modal de Perfil ("A Minha Conta")
     const profileForm = $("profileUpdateForm");
     if (profileForm && !$("profileAvatarBox")) {
+        const statsBar = document.createElement("div");
+        statsBar.id = "profileStatsBar";
+        statsBar.className = "profile-stats-bar";
+        profileForm.parentElement.insertBefore(statsBar, profileForm.parentElement.querySelector(".profile-edit-box"));
+
         const avatarSection = document.createElement("div");
         avatarSection.id = "profileAvatarBox";
         avatarSection.style.marginBottom = "12px";
@@ -726,9 +763,11 @@ function ensureSocialUI() {
             <div id="userOnlyProfileFields">
                 <label for="profileBirthDateInput">Data de Nascimento</label>
                 <input type="date" id="profileBirthDateInput" style="margin-bottom:10px;">
-                <label>Estado / Vibe atual (visível no mapa)</label>
+                <label>Estado / Vibe atual (visível apenas para amigos no mapa)</label>
                 <div id="statusPillsContainer" class="status-pills-grid">
-                    ${BUMP_STATUSES.map(s => `<button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>`).join("")}
+                    ${BUMP_STATUSES.map(s => `
+                        <button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>
+                    `).join("")}
                 </div>
                 <div style="display:grid; grid-template-columns: 64px 1fr; gap:8px; margin-bottom:12px;">
                     <input type="text" id="profileCustomEmoji" maxlength="4" placeholder="📍" style="text-align:center;">
@@ -749,7 +788,23 @@ function ensureSocialUI() {
         profileForm.insertBefore(avatarSection, profileForm.firstChild);
     }
 
-    // 5. Modal de Amigos & Social estilo Bump
+    // 4B. Aba extra "Amigos" no Modal de Perfil para utilizadores normais
+    const tabFollowing = $("tabMyFollowing");
+    if (tabFollowing && !$("tabMyFriends")) {
+        const friendsTab = document.createElement("button");
+        friendsTab.type = "button";
+        friendsTab.id = "tabMyFriends";
+        friendsTab.className = "auth-tab";
+        friendsTab.textContent = "Amigos";
+        tabFollowing.parentElement.insertBefore(friendsTab, tabFollowing);
+
+        const friendsPanel = document.createElement("div");
+        friendsPanel.id = "profileFriendsList";
+        friendsPanel.className = "profile-events-list hidden";
+        $("profileFollowingList").parentElement.insertBefore(friendsPanel, $("profileFollowingList"));
+    }
+
+    // 5A. Modal de Amigos & Pesquisa (Utilizadores Normais: Amigos com users, Seguir para Entidades)
     if (!$("friendsModal")) {
         const fModal = document.createElement("div");
         fModal.id = "friendsModal";
@@ -758,12 +813,12 @@ function ensureSocialUI() {
         fModal.innerHTML = `
             <div class="modal-content">
                 <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
-                <h2 style="margin:0 0 4px;">👊 Social & Amigos</h2>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Vê a bateria, velocidade e localização dos teus amigos, envia Bumps e abre o chat.</p>
+                <h2 style="margin:0 0 4px;">👊 Amigos & Comunidade</h2>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Adiciona outros utilizadores como amigos ou segue empresas e entidades públicas.</p>
                 
                 <div class="auth-tabs" style="margin-bottom:14px;">
-                    <button type="button" id="tabFriendsList" class="auth-tab active">👥 Amigos (<span id="friendsTabCount">0</span>)</button>
-                    <button type="button" id="tabFriendsAdd" class="auth-tab">➕ Adicionar / Pedidos (<span id="requestsTabCount">0</span>)</button>
+                    <button type="button" id="tabFriendsList" class="auth-tab active">👥 Meus Amigos (<span id="friendsTabCount">0</span>)</button>
+                    <button type="button" id="tabFriendsAdd" class="auth-tab">🔍 Procurar / Pedidos (<span id="requestsTabCount">0</span>)</button>
                 </div>
 
                 <div id="panelFriendsList">
@@ -772,9 +827,9 @@ function ensureSocialUI() {
 
                 <div id="panelFriendsAdd" class="hidden">
                     <div id="incomingRequestsSection" style="margin-bottom:16px;"></div>
-                    <label for="friendSearchInput">Procurar utilizadores por nome ou e-mail</label>
+                    <label for="friendSearchInput">Procurar utilizadores (para amizade) ou entidades (para seguir)</label>
                     <div style="display:flex; gap:8px; margin-bottom:12px;">
-                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, joao@email.com...">
+                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, Câmara Municipal, joao@email.com...">
                         <button type="button" id="friendSearchBtn" class="btn-primary-sm">Procurar</button>
                     </div>
                     <div id="friendSearchResults"></div>
@@ -784,7 +839,46 @@ function ensureSocialUI() {
         document.body.appendChild(fModal);
     }
 
-    // 6. Modal de Chat Direto & Emoji Bombs (Bump Chat)
+    // 5B. Modal de Seguidores & A Seguir (Empresas e Domínios Públicos)
+    if (!$("entityNetworkModal")) {
+        const eModal = document.createElement("div");
+        eModal.id = "entityNetworkModal";
+        eModal.className = "modal hidden";
+        eModal.setAttribute("aria-hidden", "true");
+        eModal.innerHTML = `
+            <div class="modal-content">
+                <button type="button" id="closeEntityNetworkModal" class="close-button" aria-label="Fechar">&times;</button>
+                <h2 style="margin:0 0 4px;">🏛️ Rede Institucional</h2>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Gira os seguidores da sua entidade e acompanhe outras organizações verificadas.</p>
+                
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:var(--bg); padding:4px; border-radius:10px; margin-bottom:14px;">
+                    <button type="button" id="tabEntFollowers" class="auth-tab active">👥 Seguidores (<span id="entFollowersTabCount">0</span>)</button>
+                    <button type="button" id="tabEntFollowing" class="auth-tab">🏛️ A Seguir (<span id="entFollowingTabCount">0</span>)</button>
+                    <button type="button" id="tabEntDiscover" class="auth-tab">🔍 Seguir</button>
+                </div>
+
+                <div id="panelEntFollowers">
+                    <div id="entFollowersListContainer"></div>
+                </div>
+
+                <div id="panelEntFollowing" class="hidden">
+                    <div id="entFollowingListContainer"></div>
+                </div>
+
+                <div id="panelEntDiscover" class="hidden">
+                    <label for="entitySearchInput">Procurar empresas ou entidades públicas para seguir</label>
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <input type="text" id="entitySearchInput" placeholder="Ex: Câmara Municipal, Associação, Teatro...">
+                        <button type="button" id="entitySearchBtn" class="btn-primary-sm">Procurar</button>
+                    </div>
+                    <div id="entitySearchResults"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(eModal);
+    }
+
+    // 6. Modal de Chat Direto & Emoji Bombs (Apenas entre Amigos)
     if (!$("friendChatModal")) {
         const chatModal = document.createElement("div");
         chatModal.id = "friendChatModal";
@@ -819,6 +913,7 @@ function ensureSocialUI() {
 }
 
 function bindSocialEvents() {
+    // Amigos (Utilizador Normal)
     const friendsNavBtn = $("friendsNavBtn");
     const friendsModal = $("friendsModal");
     if (friendsNavBtn && !friendsNavBtn.dataset.bound) {
@@ -836,6 +931,46 @@ function bindSocialEvents() {
         friendsModal.addEventListener("mousedown", e => { if (e.target === friendsModal) closeModalEl(friendsModal); });
     }
 
+    // Rede Institucional (Empresa / Domínio Público)
+    const entNavBtn = $("entityNetworkNavBtn");
+    const entModal = $("entityNetworkModal");
+    if (entNavBtn && !entNavBtn.dataset.bound) {
+        entNavBtn.dataset.bound = "1";
+        entNavBtn.addEventListener("click", async () => {
+            openModal(entModal);
+            await Promise.all([loadMyFollowers(), loadMyFollowing()]);
+            renderEntityNetworkModal();
+        });
+    }
+
+    const closeEntBtn = $("closeEntityNetworkModal");
+    if (closeEntBtn && !closeEntBtn.dataset.bound) {
+        closeEntBtn.dataset.bound = "1";
+        closeEntBtn.addEventListener("click", () => closeModalEl(entModal));
+        entModal.addEventListener("mousedown", e => { if (e.target === entModal) closeModalEl(entModal); });
+    }
+
+    if ($("tabEntFollowers") && !$("tabEntFollowers").dataset.bound) {
+        $("tabEntFollowers").dataset.bound = "1";
+        const switchEntTab = (activeId) => {
+            ["tabEntFollowers", "tabEntFollowing", "tabEntDiscover"].forEach(id => $(id).classList.toggle("active", id === activeId));
+            $("panelEntFollowers").classList.toggle("hidden", activeId !== "tabEntFollowers");
+            $("panelEntFollowing").classList.toggle("hidden", activeId !== "tabEntFollowing");
+            $("panelEntDiscover").classList.toggle("hidden", activeId !== "tabEntDiscover");
+        };
+        $("tabEntFollowers").addEventListener("click", () => switchEntTab("tabEntFollowers"));
+        $("tabEntFollowing").addEventListener("click", () => switchEntTab("tabEntFollowing"));
+        $("tabEntDiscover").addEventListener("click", () => {
+            switchEntTab("tabEntDiscover");
+            searchEntitiesToFollow();
+        });
+        $("entitySearchBtn").addEventListener("click", searchEntitiesToFollow);
+        $("entitySearchInput").addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); searchEntitiesToFollow(); }
+        });
+    }
+
+    // Chat Direto
     const closeChatBtn = $("closeFriendChatModal");
     const chatModal = $("friendChatModal");
     if (closeChatBtn && !closeChatBtn.dataset.bound) {
@@ -878,6 +1013,7 @@ function bindSocialEvents() {
         });
     }
 
+    // Tabs do Modal de Amigos
     const tabList = $("tabFriendsList");
     const tabAdd = $("tabFriendsAdd");
     if (tabList && !tabList.dataset.bound) {
@@ -900,9 +1036,9 @@ function bindSocialEvents() {
     const searchInp = $("friendSearchInput");
     if (searchBtn && !searchBtn.dataset.bound) {
         searchBtn.dataset.bound = "1";
-        searchBtn.addEventListener("click", searchUsersToAdd);
+        searchBtn.addEventListener("click", searchUsersAndEntities);
         searchInp.addEventListener("keydown", e => {
-            if (e.key === "Enter") { e.preventDefault(); searchUsersToAdd(); }
+            if (e.key === "Enter") { e.preventDefault(); searchUsersAndEntities(); }
         });
     }
 
@@ -974,6 +1110,11 @@ function bindSocialEvents() {
             if (currentProfile) currentProfile.onboarding_completed = false;
             showWelcomeSplash(isBusinessAccount());
         });
+    }
+
+    if ($("tabMyFriends") && !$("tabMyFriends").dataset.bound) {
+        $("tabMyFriends").dataset.bound = "1";
+        $("tabMyFriends").addEventListener("click", () => switchProfileTab("tabMyFriends", "profileFriendsList"));
     }
 }
 
@@ -1124,15 +1265,18 @@ logoutButton.addEventListener("click", async () => {
     currentProfile = null;
     myEnrollments.clear();
     myFollowing.clear();
+    myFollowingProfiles = [];
+    myFollowersList = [];
     window.friendsList = [];
     if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
     if ($("friendsNavBtn")) $("friendsNavBtn").classList.add("hidden");
+    if ($("entityNetworkNavBtn")) $("entityNetworkNavBtn").classList.add("hidden");
     if ($("privacyMapBtn")) $("privacyMapBtn").classList.add("hidden");
     if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.add("hidden");
     if ($("hangoutBanner")) $("hangoutBanner").classList.add("hidden");
     notifBtn.classList.add("hidden");
     userBadge.classList.add("hidden");
-    userBadge.classList.remove("business-badge");
+    userBadge.classList.remove("business-badge", "admin-badge");
     adminPanelBtn.classList.add("hidden");
     logoutButton.classList.add("hidden");
     authOverlay.classList.remove("hidden");
@@ -1181,7 +1325,7 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
 
     if (showSplash) {
         showWelcomeSplash(isBusinessAccount());
-    } else if (isNewSignup || currentProfile.onboarding_completed === false) {
+    } else if ((isNewSignup || currentProfile.onboarding_completed === false) && !isAdminAccount()) {
         startOnboardingWizard();
     }
 
@@ -1193,6 +1337,7 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
         loadMyEnrollments(),
         loadAllEnrollmentsSummary(),
         loadMyFollowing(),
+        loadMyFollowers(),
         loadNotifications(),
         loadUnreadMessagesCount(),
         loadSocialData()
@@ -1204,7 +1349,8 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
 
 function renderAvatarChip(profile, sizeClass = "sm") {
     const isBiz = profile?.role === "business";
-    const extraClass = isBiz ? " business-avatar" : "";
+    const isAdm = profile?.role === "admin";
+    const extraClass = isBiz ? " business-avatar" : (isAdm ? " admin-avatar" : "");
     if (profile?.avatar_url) {
         return `<span class="avatar-circle ${sizeClass}${extraClass}"><img src="${escapeHTML(profile.avatar_url)}" alt="" onerror="this.remove()"></span>`;
     }
@@ -1216,13 +1362,23 @@ function applyRoleUI() {
     if (!currentProfile) return;
     const { role, full_name, business_type, privacy_mode } = currentProfile;
     const isBiz = role === "business";
+    const isUser = role === "user";
+    const isAdm = role === "admin";
 
-    if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", isBiz);
-    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.toggle("hidden", isBiz);
+    // Amigos apenas para utilizadores normais
+    if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", !isUser);
+    if ($("quickCheckinMapBtn")) $("quickCheckinMapBtn").classList.toggle("hidden", !isUser);
+
+    // Seguidores / Rede Institucional apenas para empresas e entidades públicas
+    if ($("entityNetworkNavBtn")) {
+        $("entityNetworkNavBtn").classList.toggle("hidden", !isBiz);
+        if ($("headerFollowersCount")) $("headerFollowersCount").textContent = myFollowersList.length;
+    }
 
     if ($("privacyMapBtn")) {
         const pBtn = $("privacyMapBtn");
-        pBtn.classList.remove("hidden", "privacy-blurred", "privacy-ghost");
+        pBtn.classList.toggle("hidden", isAdm);
+        pBtn.classList.remove("privacy-blurred", "privacy-ghost");
         if (isBiz) {
             if (privacy_mode === "ghost") {
                 pBtn.classList.add("privacy-ghost");
@@ -1230,7 +1386,7 @@ function applyRoleUI() {
             } else {
                 pBtn.textContent = "🏢 Sede Visível";
             }
-        } else {
+        } else if (isUser) {
             if (privacy_mode === "ghost") {
                 pBtn.classList.add("privacy-ghost");
                 pBtn.textContent = "👻 Fantasma";
@@ -1245,17 +1401,19 @@ function applyRoleUI() {
 
     notifBtn.classList.remove("hidden");
     logoutButton.classList.remove("hidden");
-    userBadge.classList.remove("hidden");
-    userBadge.classList.toggle("business-badge", isBiz);
+    userBadge.classList.remove("hidden", "business-badge", "admin-badge");
 
     const avatarHtml = renderAvatarChip(currentProfile, "sm");
 
-    if (role === "admin") {
-        userBadge.innerHTML = `${avatarHtml} <span>🛡️ ${escapeHTML(full_name)}</span>`;
+    if (isAdm) {
+        userBadge.classList.add("admin-badge");
+        userBadge.innerHTML = `${avatarHtml} <span>🛡️ Admin · ${escapeHTML(full_name)}</span>`;
         adminPanelBtn.classList.remove("hidden");
     } else if (isBiz) {
+        userBadge.classList.add("business-badge");
         const tipo = business_type || "Entidade";
-        userBadge.innerHTML = `${avatarHtml} <span>👔 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>`;
+        const vBadge = verifiedBadgeHTML(currentProfile);
+        userBadge.innerHTML = `${avatarHtml} <span>👔 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>${vBadge}`;
         adminPanelBtn.classList.add("hidden");
     } else {
         userBadge.innerHTML = `${avatarHtml} <span>${escapeHTML(full_name)}</span>`;
@@ -1281,7 +1439,7 @@ async function initAuth() {
 }
 
 // ==========================================
-// SISTEMA SOCIAL COMPLETO ESTILO BUMP
+// SISTEMA DE AMIZADES (APENAS UTILIZADORES NORMAIS)
 // ==========================================
 window.updateHangoutBanner = (hangoutNames, firstFriend) => {
     const banner = $("hangoutBanner");
@@ -1298,7 +1456,7 @@ window.updateHangoutBanner = (hangoutNames, firstFriend) => {
 };
 
 async function loadUnreadMessagesCount() {
-    if (!currentUser) return;
+    if (!currentUser || !isNormalUserAccount()) return;
     try {
         const { data, error } = await supabaseClient
             .from("friend_messages")
@@ -1319,6 +1477,16 @@ async function loadUnreadMessagesCount() {
 
 async function loadSocialData() {
     if (!currentUser) return;
+
+    // Empresas e Admins não têm amigos — apenas mostram entidades seguidas no mapa
+    if (!isNormalUserAccount()) {
+        window.friendsList = [];
+        if (typeof showFriendsOnMap === "function") {
+            showFriendsOnMap(window.getMapSocialEntities());
+        }
+        return;
+    }
+
     try {
         const { data: rows, error } = await supabaseClient
             .from("friendships")
@@ -1360,24 +1528,28 @@ async function loadSocialData() {
             }
         }
 
+        // Garante que apenas contas de utilizador normal (role === 'user') constam como amigos
         window.friendsList = [...acceptedIds]
             .map(id => {
                 const prof = profilesById.get(id);
-                if (!prof) return null;
+                if (!prof || prof.role !== "user") return null;
                 const fRow = friendshipRecords.get(String(id));
                 return { ...prof, bump_count: fRow?.bump_count || 0 };
             })
             .filter(Boolean);
 
-        incomingFriendRequests = incomingRows.map(r => ({
-            friendshipId: r.id,
-            user: profilesById.get(r.requester_id) || { id: r.requester_id, full_name: "Utilizador", email: "" }
-        }));
+        incomingFriendRequests = incomingRows
+            .map(r => {
+                const prof = profilesById.get(r.requester_id);
+                if (!prof || prof.role !== "user") return null;
+                return { friendshipId: r.id, user: prof };
+            })
+            .filter(Boolean);
 
         updateSocialBadges();
         renderFriendsModalContent();
         if (typeof showFriendsOnMap === "function") {
-            showFriendsOnMap(window.friendsList);
+            showFriendsOnMap(window.getMapSocialEntities());
         }
     } catch (e) {}
 }
@@ -1429,22 +1601,19 @@ function renderFriendsModalContent() {
             <div style="text-align:center; padding:24px 12px; color:var(--muted);">
                 <p style="font-size:28px; margin:0 0 8px;">👊</p>
                 <p style="margin:0 0 12px; font-size:13.5px;">Ainda não tens amigos adicionados.</p>
-                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos</button>
+                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos ou entidades</button>
             </div>
         `;
         return;
     }
 
     container.innerHTML = window.friendsList.map(f => {
-        const isBiz = f.role === "business";
         const isGhost = f.ghost_mode || f.privacy_mode === "ghost";
         const hasLocation = !isGhost && typeof f.last_lat === "number" && typeof f.last_lng === "number";
-        const batStr = !isBiz && typeof f.battery_level === "number" ? ` · ${f.is_charging ? "⚡" : "🔋"}${f.battery_level}%` : "";
-        const statusStr = isBiz
-            ? `🏛️ ${escapeHTML(f.business_type || "Entidade Oficial")}`
-            : (isGhost
-                ? "👻 Modo Fantasma"
-                : `${f.current_place ? "📍 " + escapeHTML(f.current_place) : (f.status_emoji || "📍") + " " + escapeHTML(f.status_text || "Online")}${batStr}`);
+        const batStr = typeof f.battery_level === "number" ? ` · ${f.is_charging ? "⚡" : "🔋"}${f.battery_level}%` : "";
+        const statusStr = isGhost
+            ? "👻 Modo Fantasma"
+            : `${f.current_place ? "📍 " + escapeHTML(f.current_place) : (f.status_emoji || "📍") + " " + escapeHTML(f.status_text || "Online")}${batStr}`;
         const unread = unreadMessagesBySender.get(String(f.id)) || 0;
 
         return `
@@ -1452,12 +1621,12 @@ function renderFriendsModalContent() {
                 <div class="friend-row-left">
                     ${renderAvatarChip(f, "")}
                     <div class="friend-row-info">
-                        <strong>${escapeHTML(f.full_name)} ${!isBiz ? `<small style="color:#f9a8d4;">👊${f.bump_count || 0}</small>` : ""}</strong>
+                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0}</small></strong>
                         <span>${statusStr}</span>
                     </div>
                 </div>
                 <div class="friend-row-actions">
-                    ${!isBiz ? `<button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>` : ""}
+                    <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>
                     <button type="button" class="btn-soft" onclick="window.openFriendChat('${f.id}')" title="Chat">💬${unread > 0 ? ` (${unread})` : ""}</button>
                     ${hasLocation ? `<button type="button" class="btn-soft" onclick="window.locateFriendOnMap('${f.id}')" title="Ver no mapa">📍</button>` : ""}
                     <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover">×</button>
@@ -1467,7 +1636,10 @@ function renderFriendsModalContent() {
     }).join("");
 }
 
-async function searchUsersToAdd() {
+// Pesquisa unificada para utilizadores:
+// - Se o resultado for role === 'user' -> permite adicionar como AMIGO (nunca seguir)
+// - Se o resultado for role === 'business' -> permite SEGUIR (nunca amigo)
+async function searchUsersAndEntities() {
     const query = $("friendSearchInput").value.trim();
     const resultsEl = $("friendSearchResults");
     if (!query || !currentUser) return;
@@ -1478,33 +1650,47 @@ async function searchUsersToAdd() {
         .from("profiles")
         .select("*")
         .neq("id", currentUser.id)
+        .neq("role", "admin")
         .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(15);
+        .limit(18);
 
     if (error || !data || data.length === 0) {
-        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhum utilizador encontrado com "${escapeHTML(query)}".</p>`;
+        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhum resultado encontrado com "${escapeHTML(query)}".</p>`;
         return;
     }
 
-    const friendIds = new Set(window.friendsList.map(f => f.id));
+    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
 
     resultsEl.innerHTML = data.map(u => {
+        const isBiz = u.role === "business";
         let actionBtn = "";
-        if (friendIds.has(u.id)) {
-            actionBtn = `<span class="category">✓ Adicionado</span>`;
-        } else if (sentFriendRequestIds.has(u.id)) {
-            actionBtn = `<span class="muted" style="font-size:12px;">Pedido enviado</span>`;
+
+        if (isBiz) {
+            const isFollowing = myFollowing.has(String(u.id));
+            actionBtn = isFollowing
+                ? `<button type="button" class="btn-soft" onclick="window.toggleFollowFromSearch('${u.id}', '${escapeHTML(u.full_name)}')">✓ A seguir</button>`
+                : `<button type="button" class="btn-primary-sm" onclick="window.toggleFollowFromSearch('${u.id}', '${escapeHTML(u.full_name)}')">+ Seguir</button>`;
         } else {
-            actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">+ Adicionar</button>`;
+            if (friendIds.has(String(u.id))) {
+                actionBtn = `<span class="category">✓ Amigos</span>`;
+            } else if (sentFriendRequestIds.has(u.id)) {
+                actionBtn = `<span class="muted" style="font-size:12px;">Pedido enviado</span>`;
+            } else {
+                actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">👊 Adicionar Amigo</button>`;
+            }
         }
+
+        const subText = isBiz
+            ? `🏛️ ${escapeHTML(u.business_type || "Empresa / Domínio Público")}`
+            : `👤 Utilizador · ${escapeHTML(u.email)}`;
 
         return `
             <div class="friend-row">
                 <div class="friend-row-left">
                     ${renderAvatarChip(u, "")}
                     <div class="friend-row-info">
-                        <strong>${escapeHTML(u.full_name)}</strong>
-                        <span>${u.role === "business" ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : escapeHTML(u.email)}</span>
+                        <strong>${escapeHTML(u.full_name)}${verifiedBadgeHTML(u)}</strong>
+                        <span>${subText}</span>
                     </div>
                 </div>
                 <div>${actionBtn}</div>
@@ -1513,8 +1699,31 @@ async function searchUsersToAdd() {
     }).join("");
 }
 
+window.toggleFollowFromSearch = async (targetId, targetName) => {
+    await toggleFollowOrganizer(targetId, targetName);
+    await searchUsersAndEntities();
+};
+
 window.sendFriendRequest = async (targetId, targetName) => {
     if (!currentUser || !currentProfile) return;
+
+    if (!isNormalUserAccount()) {
+        showToast("Apenas utilizadores normais podem enviar pedidos de amizade.", "error");
+        return;
+    }
+
+    // Verifica no Supabase que o destinatário é realmente um utilizador normal
+    const { data: targetProf } = await supabaseClient
+        .from("profiles")
+        .select("role")
+        .eq("id", targetId)
+        .maybeSingle();
+
+    if (!targetProf || targetProf.role !== "user") {
+        showToast("Empresas e entidades públicas não aceitam pedidos de amizade — clique em Seguir.", "error");
+        return;
+    }
+
     const { error } = await supabaseClient.from("friendships").insert([{
         requester_id: currentUser.id,
         addressee_id: targetId,
@@ -1533,8 +1742,14 @@ window.sendFriendRequest = async (targetId, targetName) => {
         "Novo pedido de amizade 👊",
         `${currentProfile.full_name} quer adicionar-te aos amigos no LocalSpot!`
     );
-    showToast(`Pedido enviado a ${targetName}!`, "success");
-    searchUsersToAdd();
+    showToast(`Pedido de amizade enviado a ${targetName}!`, "success");
+    if ($("friendSearchInput") && $("friendSearchInput").value.trim()) {
+        searchUsersAndEntities();
+    }
+    if (!detailModal.classList.contains("hidden") && detailEventId) {
+        const ev = events.find(x => String(x.id) === String(detailEventId));
+        if (ev) updateDetailSocialButton(ev);
+    }
 };
 
 window.acceptFriendRequest = async (friendshipId, requesterId) => {
@@ -1552,7 +1767,7 @@ window.acceptFriendRequest = async (friendshipId, requesterId) => {
         requesterId,
         null,
         "Pedido de amizade aceite! 🎉",
-        `${currentProfile.full_name} aceitou o teu pedido. Já podem ver-se no mapa!`
+        `${currentProfile.full_name} aceitou o teu pedido. Já são amigos!`
     );
     showToast("Novo amigo adicionado!", "success");
     await loadSocialData();
@@ -1574,6 +1789,7 @@ window.removeFriend = async (friendId, friendName) => {
 
     showToast(`${friendName} removido dos amigos.`);
     await loadSocialData();
+    renderProfileLists();
     filterEvents();
 };
 
@@ -1586,7 +1802,143 @@ window.locateFriendOnMap = friendId => {
 };
 
 // ==========================================
-// BUMP, EMOJI BOMBS & CHAT DIRETO
+// REDE INSTITUCIONAL (SEGUIDORES & A SEGUIR PARA ENTIDADES)
+// ==========================================
+async function loadMyFollowers() {
+    if (!currentUser || !isBusinessAccount()) {
+        myFollowersList = [];
+        return;
+    }
+    try {
+        const { data: rows, error } = await supabaseClient
+            .from("follows")
+            .select("follower_id")
+            .eq("following_id", currentUser.id);
+
+        if (error || !rows || rows.length === 0) {
+            myFollowersList = [];
+            if ($("headerFollowersCount")) $("headerFollowersCount").textContent = "0";
+            return;
+        }
+
+        const followerIds = rows.map(r => r.follower_id).filter(Boolean);
+        const { data: profs } = await supabaseClient
+            .from("profiles")
+            .select("*")
+            .in("id", followerIds);
+
+        myFollowersList = profs || [];
+        if ($("headerFollowersCount")) $("headerFollowersCount").textContent = myFollowersList.length;
+    } catch (e) {}
+}
+
+function renderEntityNetworkModal() {
+    if ($("entFollowersTabCount")) $("entFollowersTabCount").textContent = myFollowersList.length;
+    if ($("entFollowingTabCount")) $("entFollowingTabCount").textContent = myFollowingProfiles.length;
+
+    const followersBox = $("entFollowersListContainer");
+    if (followersBox) {
+        followersBox.innerHTML = myFollowersList.length
+            ? myFollowersList.map(u => {
+                const isBiz = u.role === "business";
+                return `
+                    <div class="friend-row">
+                        <div class="friend-row-left">
+                            ${renderAvatarChip(u, "")}
+                            <div class="friend-row-info">
+                                <strong>${escapeHTML(u.full_name)}${verifiedBadgeHTML(u)}</strong>
+                                <span>${isBiz ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : "👤 Utilizador"}</span>
+                            </div>
+                        </div>
+                        ${isBiz && String(u.id) !== String(currentUser.id)
+                            ? `<div>
+                                ${myFollowing.has(String(u.id))
+                                    ? `<button type="button" class="btn-soft" onclick="window.toggleFollowEntityModal('${u.id}', '${escapeHTML(u.full_name)}')">✓ A seguir</button>`
+                                    : `<button type="button" class="btn-primary-sm" onclick="window.toggleFollowEntityModal('${u.id}', '${escapeHTML(u.full_name)}')">+ Seguir</button>`
+                                }
+                               </div>`
+                            : ""}
+                    </div>
+                `;
+            }).join("")
+            : `<p class="muted" style="font-size:13px; text-align:center; padding:18px;">Ainda sem seguidores.</p>`;
+    }
+
+    const followingBox = $("entFollowingListContainer");
+    if (followingBox) {
+        followingBox.innerHTML = myFollowingProfiles.length
+            ? myFollowingProfiles.map(ent => `
+                <div class="friend-row">
+                    <div class="friend-row-left">
+                        ${renderAvatarChip(ent, "")}
+                        <div class="friend-row-info">
+                            <strong>${escapeHTML(ent.full_name)}${verifiedBadgeHTML(ent)}</strong>
+                            <span>🏛️ ${escapeHTML(ent.business_type || "Entidade Oficial")}</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-logout" onclick="window.toggleFollowEntityModal('${ent.id}', '${escapeHTML(ent.full_name)}')">Deixar de seguir</button>
+                </div>
+            `).join("")
+            : `<p class="muted" style="font-size:13px; text-align:center; padding:18px;">Ainda não está a seguir nenhuma empresa ou entidade.</p>`;
+    }
+}
+
+async function searchEntitiesToFollow() {
+    const query = ($("entitySearchInput")?.value || "").trim();
+    const resultsEl = $("entitySearchResults");
+    if (!resultsEl || !currentUser) return;
+
+    resultsEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A carregar entidades...</p>`;
+
+    let req = supabaseClient
+        .from("profiles")
+        .select("*")
+        .eq("role", "business")
+        .neq("id", currentUser.id)
+        .limit(20);
+
+    if (query) {
+        req = req.ilike("full_name", `%${query}%`);
+    }
+
+    const { data, error } = await req;
+    if (error || !data || data.length === 0) {
+        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhuma empresa ou entidade encontrada.</p>`;
+        return;
+    }
+
+    resultsEl.innerHTML = data.map(ent => {
+        const isFollowing = myFollowing.has(String(ent.id));
+        return `
+            <div class="friend-row">
+                <div class="friend-row-left">
+                    ${renderAvatarChip(ent, "")}
+                    <div class="friend-row-info">
+                        <strong>${escapeHTML(ent.full_name)}${verifiedBadgeHTML(ent)}</strong>
+                        <span>🏛️ ${escapeHTML(ent.business_type || "Entidade Oficial")}</span>
+                    </div>
+                </div>
+                <div>
+                    ${isFollowing
+                        ? `<button type="button" class="btn-soft" onclick="window.toggleFollowEntityModal('${ent.id}', '${escapeHTML(ent.full_name)}')">✓ A seguir</button>`
+                        : `<button type="button" class="btn-primary-sm" onclick="window.toggleFollowEntityModal('${ent.id}', '${escapeHTML(ent.full_name)}')">+ Seguir</button>`
+                    }
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+window.toggleFollowEntityModal = async (targetId, targetName) => {
+    await toggleFollowOrganizer(targetId, targetName);
+    renderEntityNetworkModal();
+    if ($("panelEntDiscover") && !$("panelEntDiscover").classList.contains("hidden")) {
+        await searchEntitiesToFollow();
+    }
+};
+
+// ==========================================
+// BUMP, EMOJI BOMBS & CHAT DIRETO (ENTRE AMIGOS)
 // ==========================================
 function triggerBumpVisual(emoji = "👊", text = "BUMP!") {
     const existing = document.querySelector(".bump-overlay");
@@ -1617,9 +1969,9 @@ function launchEmojiBombAnimation(emoji = "👊") {
 }
 
 window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
-    if (!currentUser || !currentProfile) return;
+    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
-    const targetName = friend ? friend.full_name : "amigo";
+    if (!friend) return;
 
     const fRow = friendshipRecords.get(String(friendId));
     const nextCount = (fRow?.bump_count || 0) + 1;
@@ -1627,11 +1979,11 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
         fRow.bump_count = nextCount;
         await supabaseClient.from("friendships").update({ bump_count: nextCount }).eq("id", fRow.id);
     }
-    if (friend) friend.bump_count = nextCount;
+    friend.bump_count = nextCount;
 
-    triggerBumpVisual(emoji, `${emoji} ${label} com ${targetName}! (#${nextCount})`);
+    triggerBumpVisual(emoji, `${emoji} ${label} com ${friend.full_name}! (#${nextCount})`);
     renderFriendsModalContent();
-    if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.friendsList);
+    if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
 
     await createNotification(
         friendId,
@@ -1644,7 +1996,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
 window.openFriendChat = async friendId => {
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     if (!friend) return;
-    const isBiz = friend.role === "business";
 
     activeChatFriendId = String(friend.id);
     closeModalEl($("friendsModal"));
@@ -1653,14 +2004,11 @@ window.openFriendChat = async friendId => {
         ${renderAvatarChip(friend, "")}
         <div>
             <strong style="display:block; font-size:15px;">${escapeHTML(friend.full_name)}</strong>
-            <span style="font-size:12px; color:${isBiz ? "#fcd34d" : "#f9a8d4"};">
-                ${isBiz ? `🏛️ ${escapeHTML(friend.business_type || "Entidade Oficial")}` : `👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}`}
+            <span style="font-size:12px; color:#f9a8d4;">
+                👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}
             </span>
         </div>
     `;
-
-    const bombBar = document.querySelector(".emoji-bomb-bar");
-    if (bombBar) bombBar.classList.toggle("hidden", isBiz);
 
     openModal($("friendChatModal"));
     await loadChatHistory(activeChatFriendId);
@@ -1678,7 +2026,7 @@ async function loadChatHistory(friendId) {
         .limit(50);
 
     if (error) {
-        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Executa o SQL no Supabase para ativar o chat direto.</p>`;
+        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Sem mensagens disponíveis.</p>`;
         return;
     }
 
@@ -1739,7 +2087,7 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
 // TELEMETRIA: BATERIA, VELOCIDADE, PRIVACIDADE & CHECK-IN
 // ==========================================
 async function getDeviceBatteryTelemetry() {
-    if (!navigator.getBattery || isBusinessAccount()) return {};
+    if (!navigator.getBattery || !isNormalUserAccount()) return {};
     try {
         const bat = await navigator.getBattery();
         return {
@@ -1763,7 +2111,7 @@ function applyPrivacyOffset(lat, lng, mode) {
 }
 
 window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
-    if (!currentUser || !currentProfile) return;
+    if (!currentUser || !currentProfile || isAdminAccount()) return;
     const mode = currentProfile.privacy_mode || (currentProfile.ghost_mode ? "ghost" : "precise");
     if (mode === "ghost") return;
 
@@ -1782,7 +2130,7 @@ window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
 };
 
 async function cyclePrivacyMode() {
-    if (!currentUser || !currentProfile) return;
+    if (!currentUser || !currentProfile || isAdminAccount()) return;
     const isBiz = isBusinessAccount();
     const order = isBiz ? ["precise", "ghost"] : ["precise", "blurred", "ghost"];
     const current = currentProfile.privacy_mode || "precise";
@@ -1813,16 +2161,16 @@ async function cyclePrivacyMode() {
     if (isBiz) {
         if (next === "ghost") showToast("📅 Apenas Eventos Públicos visíveis no mapa.");
         else {
-            showToast("🏢 Sede Institucional visível no mapa!", "success");
+            showToast("🏢 Sede Institucional visível aos seus seguidores no mapa!", "success");
             if (!userPosition) {
                 try { await locateUser(); } catch (e) {}
             }
         }
     } else {
         if (next === "ghost") showToast("👻 Modo Fantasma — estás invisível no mapa.");
-        else if (next === "blurred") showToast("🌫️ Modo Borrão — os amigos veem apenas a tua zona aproximada.");
+        else if (next === "blurred") showToast("🌫️ Modo Borrão — os teus amigos veem apenas a tua zona aproximada.");
         else {
-            showToast("📍 Localização Precisa ativa!", "success");
+            showToast("📍 Localização Precisa ativa para os teus amigos!", "success");
             if (!userPosition) {
                 try { await locateUser(); } catch (e) {}
             }
@@ -1831,7 +2179,7 @@ async function cyclePrivacyMode() {
 }
 
 async function doQuickCheckin() {
-    if (!currentUser || !currentProfile || isBusinessAccount()) return;
+    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
     if (!userPosition) {
         try { await locateUser(); } catch (e) {}
     }
@@ -1876,7 +2224,7 @@ function startLiveSocialSync() {
     if (locationSyncInterval) clearInterval(locationSyncInterval);
     if (geoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
 
-    if (!isBusinessAccount() && navigator.permissions && navigator.permissions.query) {
+    if (isNormalUserAccount() && navigator.permissions && navigator.permissions.query) {
         navigator.permissions.query({ name: "geolocation" }).then(res => {
             if (res.state === "granted" && navigator.geolocation) {
                 geoWatchId = navigator.geolocation.watchPosition(pos => {
@@ -1890,7 +2238,7 @@ function startLiveSocialSync() {
 
     locationSyncInterval = setInterval(async () => {
         if (!currentUser) return;
-        await loadSocialData();
+        await Promise.all([loadSocialData(), loadMyFollowing(), loadMyFollowers()]);
         if (userPosition && currentProfile?.privacy_mode !== "ghost") {
             await window.syncMyLiveLocation(userPosition.lat, userPosition.lng, 0);
         }
@@ -1924,7 +2272,7 @@ function startLiveSocialSync() {
             filter: `receiver_id=eq.${currentUser.id}`
         }, async payload => {
             const msg = payload.new;
-            if (!msg) return;
+            if (!msg || !isNormalUserAccount()) return;
             if (msg.msg_type === "emoji_bomb") {
                 launchEmojiBombAnimation(msg.content);
             }
@@ -1944,7 +2292,15 @@ function startLiveSocialSync() {
             schema: "public",
             table: "friendships"
         }, () => {
-            loadSocialData();
+            if (isNormalUserAccount()) loadSocialData();
+        })
+        .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "follows"
+        }, async () => {
+            await Promise.all([loadMyFollowing(), loadMyFollowers()]);
+            applyRoleUI();
         })
         .subscribe();
 }
@@ -2022,9 +2378,13 @@ notifList.addEventListener("click", async e => {
 
     if (eventId) {
         openEventDetails(eventId);
-    } else if ($("friendsModal") && !isBusinessAccount()) {
+    } else if ($("friendsModal") && isNormalUserAccount()) {
         openModal($("friendsModal"));
         await loadSocialData();
+    } else if ($("entityNetworkModal") && isBusinessAccount()) {
+        openModal($("entityNetworkModal"));
+        await Promise.all([loadMyFollowers(), loadMyFollowing()]);
+        renderEntityNetworkModal();
     }
 });
 
@@ -2036,7 +2396,7 @@ $("markAllReadBtn").addEventListener("click", async () => {
 });
 
 // ==========================================
-// SEGUIR ORGANIZADORES
+// SEGUIR EMPRESAS & ENTIDADES PÚBLICAS (UNIDIRECIONAL)
 // ==========================================
 async function loadMyFollowing() {
     if (!currentUser) return;
@@ -2047,108 +2407,204 @@ async function loadMyFollowing() {
             .eq("follower_id", currentUser.id);
 
         if (!error && data) {
-            myFollowing = new Map(data.map(r => [String(r.following_id), r.following_name]));
+            const ids = data.map(r => r.following_id).filter(Boolean);
+            let validBusinesses = [];
+
+            if (ids.length > 0) {
+                const { data: profs } = await supabaseClient
+                    .from("profiles")
+                    .select("*")
+                    .in("id", ids)
+                    .eq("role", "business");
+                validBusinesses = profs || [];
+            }
+
+            myFollowingProfiles = validBusinesses;
+            myFollowing = new Map(validBusinesses.map(b => [String(b.id), b.full_name]));
+
+            if (typeof showFriendsOnMap === "function") {
+                showFriendsOnMap(window.getMapSocialEntities());
+            }
         }
     } catch (e) {}
 }
 
 async function toggleFollowOrganizer(creatorId, creatorName) {
-    if (!currentUser || !creatorId || creatorId === currentUser.id) return;
+    if (!currentUser || !creatorId || String(creatorId) === String(currentUser.id)) return;
     const key = String(creatorId);
 
     if (myFollowing.has(key)) {
         await supabaseClient.from("follows").delete().eq("follower_id", currentUser.id).eq("following_id", creatorId);
         myFollowing.delete(key);
+        myFollowingProfiles = myFollowingProfiles.filter(p => String(p.id) !== key);
         showToast(`Deixaste de seguir ${creatorName}.`);
     } else {
+        // Verifica estritamente que o alvo é uma empresa ou entidade pública (role === 'business')
+        const { data: targetProf } = await supabaseClient
+            .from("profiles")
+            .select("*")
+            .eq("id", creatorId)
+            .maybeSingle();
+
+        if (!targetProf || targetProf.role !== "business") {
+            showToast("Apenas empresas e entidades públicas podem ser seguidas. Envia um pedido de amizade aos utilizadores.", "error");
+            return;
+        }
+
         await supabaseClient.from("follows").insert([{
             follower_id: currentUser.id,
             following_id: creatorId,
-            following_name: creatorName
+            following_name: targetProf.full_name || creatorName
         }]);
-        myFollowing.set(key, creatorName);
-        showToast(`Agora segues ${creatorName}!`, "success");
+        myFollowing.set(key, targetProf.full_name || creatorName);
+        myFollowingProfiles.push(targetProf);
+
+        await createNotification(
+            creatorId,
+            null,
+            "Novo seguidor! 🏛️",
+            `${currentProfile.full_name} começou a seguir a sua página.`
+        );
+        showToast(`Agora segues ${targetProf.full_name || creatorName}!`, "success");
     }
 
+    if (typeof showFriendsOnMap === "function") {
+        showFriendsOnMap(window.getMapSocialEntities());
+    }
     if (!detailModal.classList.contains("hidden") && detailEventId) {
-        updateDetailFollowButton(creatorId);
+        const ev = events.find(x => String(x.id) === String(detailEventId));
+        if (ev) updateDetailSocialButton(ev);
     }
     if (state.onlyFollowing) filterEvents();
 }
 
-function updateDetailFollowButton(creatorId) {
+window.toggleFollowFromList = async (id, name) => {
+    await toggleFollowOrganizer(id, name);
+};
+
+// Atualiza o botão de interação no Modal de Detalhes do Evento:
+// - Se o organizador for Empresa/Entidade ('business') -> Botão "+ Seguir" / "✓ A seguir"
+// - Se o organizador for Utilizador ('user') e o viewer for 'user' -> Botão "👊 Adicionar Amigo" / "✓ Amigos"
+// - Se o organizador for Utilizador ('user') e o viewer for 'business' -> Oculto (entidades não adicionam amigos)
+function updateDetailSocialButton(ev) {
     const btn = $("detailFollowBtn");
+    const creatorId = ev?.creatorId;
     if (!creatorId || !currentUser || String(creatorId) === String(currentUser.id)) {
         btn.classList.add("hidden");
         return;
     }
-    const isFollowing = myFollowing.has(String(creatorId));
-    btn.classList.remove("hidden");
-    btn.classList.toggle("following", isFollowing);
-    btn.textContent = isFollowing ? "✓ A seguir" : "+ Seguir";
+
+    const creatorRole = ev.creatorRole || (ev.creatorType === "Utilizador" ? "user" : "business");
+    btn.classList.remove("hidden", "following", "friend-action");
+
+    if (creatorRole === "business") {
+        const isFollowing = myFollowing.has(String(creatorId));
+        btn.classList.toggle("following", isFollowing);
+        btn.textContent = isFollowing ? "✓ A seguir" : "+ Seguir";
+        btn.onclick = () => toggleFollowOrganizer(creatorId, ev.creatorName);
+    } else if (creatorRole === "user" && isNormalUserAccount()) {
+        btn.classList.add("friend-action");
+        const isFriend = window.friendsList.some(f => String(f.id) === String(creatorId));
+        const isPending = sentFriendRequestIds.has(creatorId);
+
+        if (isFriend) {
+            btn.classList.add("following");
+            btn.textContent = "✓ Amigos";
+            btn.onclick = () => {
+                closeModalEl(detailModal);
+                openFriendChat(creatorId);
+            };
+        } else if (isPending) {
+            btn.textContent = "⏳ Pedido enviado";
+            btn.onclick = null;
+        } else {
+            btn.textContent = "👊 Adicionar Amigo";
+            btn.onclick = () => window.sendFriendRequest(creatorId, ev.creatorName);
+        }
+    } else {
+        btn.classList.add("hidden");
+    }
 }
 
 // ==========================================
-// MODAL DE PERFIL ("A MINHA CONTA" — SEPARADO PARA EMPRESAS VS UTILIZADORES)
+// MODAL DE PERFIL ("A MINHA CONTA" — SEPARADO POR CLASSE)
 // ==========================================
-userBadge.addEventListener("click", () => {
+userBadge.addEventListener("click", async () => {
     if (!currentProfile) return;
     ensureSocialUI();
     const isBiz = isBusinessAccount();
+    const isAdm = isAdminAccount();
 
-    $("profileEmailDisplay").textContent = currentProfile.email;
-    $("profileNameInput").value = currentProfile.full_name;
+    await Promise.all([loadMyFollowing(), loadMyFollowers(), loadSocialData()]);
+
+    $("profileEmailDisplay").textContent = `${currentProfile.email} · ${isAdm ? "🛡️ Administrador" : (isBiz ? "👔 Empresa / Domínio Público" : "👤 Utilizador")}`;
+    $("profileNameInput").value = currentProfile.full_name || "";
     $("profileBioInput").value = currentProfile.bio || "";
 
-    // Alterna entre campos institucionais e campos de utilizador normal (sem "a ouvir música" nas empresas)
-    $("businessOnlyProfileFields").classList.toggle("hidden", !isBiz);
-    $("userOnlyProfileFields").classList.toggle("hidden", isBiz);
+    const nameLabel = document.querySelector("label[for='profileNameInput']");
+    const bioLabel = document.querySelector("label[for='profileBioInput']");
+    const avatarLabel = $("profileAvatarLabel");
+    if (nameLabel) nameLabel.textContent = isBiz ? "Nome da Empresa / Entidade *" : "Nome de exibição *";
+    if (bioLabel) bioLabel.textContent = isBiz ? "Apresentação Institucional / Missão" : "Bio / Sobre mim";
+    if (avatarLabel) avatarLabel.textContent = isBiz ? "Logótipo da Entidade" : "Foto de Perfil";
 
-    if ($("profileAvatarLabel")) {
-        $("profileAvatarLabel").textContent = isBiz ? "Logótipo Oficial da Entidade / Empresa" : "Foto de Perfil";
+    if ($("businessOnlyProfileFields")) $("businessOnlyProfileFields").classList.toggle("hidden", !isBiz);
+    if ($("userOnlyProfileFields")) $("userOnlyProfileFields").classList.toggle("hidden", isBiz || isAdm);
+
+    // Barra de Métricas e Estado de Verificação
+    const statsBar = $("profileStatsBar");
+    if (statsBar) {
+        if (isBiz) {
+            const verifBadge = currentProfile.is_verified
+                ? `<span class="verified-pill">✅ Entidade Verificada</span>`
+                : `<span class="unverified-pill">⏳ A aguardar verificação pelo Admin</span>`;
+            statsBar.innerHTML = `
+                ${verifBadge}
+                <span class="profile-stat-pill">👥 ${myFollowersList.length} Seguidores</span>
+                <span class="profile-stat-pill">🏛️ ${myFollowingProfiles.length} A Seguir</span>
+            `;
+        } else if (isAdm) {
+            statsBar.innerHTML = `
+                <span class="verified-pill">🛡️ Administrador da Plataforma</span>
+                <button type="button" class="btn-admin" onclick="closeModalEl(profileModal); openModal(adminModal); loadAdminDashboard();">Abrir Painel Admin</button>
+            `;
+        } else {
+            statsBar.innerHTML = `
+                <span class="profile-stat-pill">👊 ${window.friendsList.length} Amigos</span>
+                <span class="profile-stat-pill">🏛️ ${myFollowingProfiles.length} Entidades a seguir</span>
+            `;
+        }
     }
 
-    const previewEl = $("profileAvatarPreview");
-    if (previewEl) {
-        previewEl.classList.toggle("business-avatar", isBiz);
-        previewEl.innerHTML = currentProfile.avatar_url
-            ? `<img src="${escapeHTML(currentProfile.avatar_url)}" alt="">`
-            : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
+    const preview = $("profileAvatarPreview");
+    if (preview) {
+        preview.classList.toggle("business-avatar", isBiz);
+        preview.classList.toggle("admin-avatar", isAdm);
+        if (currentProfile.avatar_url) {
+            preview.innerHTML = `<img src="${escapeHTML(currentProfile.avatar_url)}" alt="">`;
+        } else {
+            const initials = (currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+            preview.textContent = initials;
+        }
     }
-    if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
 
-    const curMode = currentProfile.privacy_mode || (currentProfile.ghost_mode ? "ghost" : "precise");
+    const curMode = currentProfile.privacy_mode || "precise";
 
     if (isBiz) {
-        const bizSelect = $("profileBusinessTypeSelect");
-        if (bizSelect) {
-            const curSector = currentProfile.business_type || "Empresa / Comércio";
-            if (![...bizSelect.options].some(o => o.value === curSector)) {
-                const opt = document.createElement("option");
-                opt.value = curSector;
-                opt.textContent = `🏛️ ${curSector}`;
-                bizSelect.appendChild(opt);
-            }
-            bizSelect.value = curSector;
+        if ($("profileBusinessTypeSelect")) {
+            $("profileBusinessTypeSelect").value = currentProfile.business_type || "Empresa / Comércio";
         }
         if ($("businessPrivacyGrid")) {
             $("businessPrivacyGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
                 btn.classList.toggle("active", btn.dataset.mode === (curMode === "ghost" ? "ghost" : "precise"));
             });
         }
-    } else {
-        if ($("profileBirthDateInput")) $("profileBirthDateInput").value = currentProfile.birth_date || "";
-
-        const curEmoji = currentProfile.status_emoji || "📍";
-        const curText = currentProfile.status_text || "No LocalSpot";
-        if ($("profileCustomEmoji")) $("profileCustomEmoji").value = curEmoji;
-        if ($("profileCustomStatus")) $("profileCustomStatus").value = curText;
-
-        if ($("statusPillsContainer")) {
-            $("statusPillsContainer").querySelectorAll(".status-pill-btn").forEach(btn => {
-                btn.classList.toggle("active", btn.dataset.emoji === curEmoji && btn.dataset.text === curText);
-            });
+    } else if (!isAdm) {
+        if ($("profileBirthDateInput")) {
+            $("profileBirthDateInput").value = currentProfile.birth_date || "";
         }
+        if ($("profileCustomEmoji")) $("profileCustomEmoji").value = currentProfile.status_emoji || "📍";
+        if ($("profileCustomStatus")) $("profileCustomStatus").value = currentProfile.status_text || "";
 
         if ($("privacySelectorGrid")) {
             $("privacySelectorGrid").querySelectorAll(".privacy-opt-btn").forEach(btn => {
@@ -2157,156 +2613,198 @@ userBadge.addEventListener("click", () => {
         }
     }
 
+    // Configurar abas do Perfil conforme a classe da conta
+    if ($("tabMyFriends")) {
+        $("tabMyFriends").classList.toggle("hidden", isBiz || isAdm);
+    }
+    if (isBiz) {
+        $("tabMyEnrollments").textContent = `Seguidores (${myFollowersList.length})`;
+        $("tabMyFollowing").textContent = `A Seguir (${myFollowingProfiles.length})`;
+    } else {
+        $("tabMyEnrollments").textContent = "Minhas Inscrições";
+        if ($("tabMyFriends")) $("tabMyFriends").textContent = `Amigos (${window.friendsList.length})`;
+        $("tabMyFollowing").textContent = `A Seguir (${myFollowingProfiles.length})`;
+    }
+
     renderProfileLists();
     openModal(profileModal);
+});
+
+async function uploadAvatarImage(file) {
+    if (!file || !currentUser) return null;
+    try {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `avatars/${currentUser.id}-${Date.now()}.${ext}`;
+        const { error } = await supabaseClient.storage.from("event-images").upload(path, file, { upsert: true });
+        if (error) return null;
+        const { data } = supabaseClient.storage.from("event-images").getPublicUrl(path);
+        return data?.publicUrl || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+$("profileUpdateForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser) return;
+    const isBiz = isBusinessAccount();
+    const fullName = $("profileNameInput").value.trim();
+    const bio = $("profileBioInput").value.trim();
+    if (!fullName) return;
+
+    let avatarUrl = currentProfile.avatar_url || null;
+    const avatarFile = $("profileAvatarInput")?.files?.[0];
+    if (avatarFile) {
+        const uploaded = await uploadAvatarImage(avatarFile);
+        if (uploaded) avatarUrl = uploaded;
+    }
+
+    const privacyMode = currentProfile.privacy_mode || "precise";
+    const isGhost = privacyMode === "ghost";
+
+    let updatePayload = {
+        full_name: fullName,
+        bio,
+        avatar_url: avatarUrl,
+        privacy_mode: privacyMode,
+        ghost_mode: isGhost
+    };
+
+    if (isBiz) {
+        const bizSector = $("profileBusinessTypeSelect")?.value || currentProfile.business_type || "Empresa / Comércio";
+        updatePayload.business_type = bizSector;
+        updatePayload.status_emoji = "🏢";
+        updatePayload.status_text = bizSector;
+        updatePayload.birth_date = null;
+    } else if (!isAdminAccount()) {
+        const birthDate = $("profileBirthDateInput")?.value || null;
+        const statusEmoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
+        const statusText = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
+        updatePayload.birth_date = birthDate;
+        updatePayload.status_emoji = statusEmoji;
+        updatePayload.status_text = statusText;
+    }
+
+    if (isGhost) {
+        updatePayload.last_lat = null;
+        updatePayload.last_lng = null;
+    }
+
+    const { error } = await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
+
+    if (error) {
+        showToast("Erro ao guardar perfil.", "error");
+        return;
+    }
+
+    Object.assign(currentProfile, updatePayload);
+    applyRoleUI();
+    showToast("Perfil atualizado com sucesso!", "success");
 });
 
 $("closeProfile").addEventListener("click", () => closeModalEl(profileModal));
 profileModal.addEventListener("mousedown", e => { if (e.target === profileModal) closeModalEl(profileModal); });
 
-function switchProfileTab(activeTab, activePanel) {
-    ["tabMyEnrollments", "tabMyCreated", "tabMyFollowing"].forEach(id => $(id).classList.toggle("active", id === activeTab));
-    ["profileEnrolledList", "profileCreatedList", "profileFollowingList"].forEach(id => $(id).classList.toggle("hidden", id !== activePanel));
+function switchProfileTab(activeTabId, activePanelId) {
+    ["tabMyEnrollments", "tabMyCreated", "tabMyFriends", "tabMyFollowing"].forEach(id => {
+        if ($(id)) $(id).classList.toggle("active", id === activeTabId);
+    });
+    ["profileEnrolledList", "profileCreatedList", "profileFriendsList", "profileFollowingList"].forEach(id => {
+        if ($(id)) $(id).classList.toggle("hidden", id !== activePanelId);
+    });
 }
 
 $("tabMyEnrollments").addEventListener("click", () => switchProfileTab("tabMyEnrollments", "profileEnrolledList"));
 $("tabMyCreated").addEventListener("click", () => switchProfileTab("tabMyCreated", "profileCreatedList"));
 $("tabMyFollowing").addEventListener("click", () => switchProfileTab("tabMyFollowing", "profileFollowingList"));
 
-async function uploadAvatarImage(file) {
-    const { blob, dataUrl } = await resizeImageToBlob(file, 400);
-    const fileName = `${currentUser.id}/avatar_${Date.now()}.jpg`;
-
-    for (const bucket of ["avatars", "event-images"]) {
-        try {
-            const { error } = await supabaseClient.storage
-                .from(bucket)
-                .upload(fileName, blob, { contentType: "image/jpeg", upsert: true });
-            if (!error) {
-                const { data } = supabaseClient.storage.from(bucket).getPublicUrl(fileName);
-                if (data?.publicUrl) return data.publicUrl;
-            }
-        } catch (e) {}
-    }
-    return dataUrl;
-}
-
-$("profileUpdateForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    const newName = $("profileNameInput").value.trim();
-    const newBio = $("profileBioInput").value.trim();
-    if (!newName || !currentProfile) return;
-
+function renderProfileLists() {
     const isBiz = isBusinessAccount();
-    let avatarUrl = currentProfile.avatar_url || null;
-    const avatarFile = $("profileAvatarInput")?.files?.[0];
-    if (avatarFile) {
-        avatarUrl = await uploadAvatarImage(avatarFile);
-    }
-
-    const privacyMode = currentProfile.privacy_mode || "precise";
-    const ghostMode = privacyMode === "ghost";
-
-    const updateObj = {
-        full_name: newName,
-        bio: newBio,
-        avatar_url: avatarUrl,
-        privacy_mode: privacyMode,
-        ghost_mode: ghostMode
-    };
+    const enrolledList = $("profileEnrolledList");
+    const createdList = $("profileCreatedList");
+    const friendsListEl = $("profileFriendsList");
+    const followingList = $("profileFollowingList");
 
     if (isBiz) {
-        const selectedSector = $("profileBusinessTypeSelect")?.value || currentProfile.business_type || "Entidade Oficial";
-        updateObj.business_type = selectedSector;
-        updateObj.birth_date = null;
-        updateObj.status_emoji = "🏢";
-        updateObj.status_text = selectedSector;
+        // Para empresas/entidades, a primeira aba mostra os SEGUIDORES da entidade
+        enrolledList.innerHTML = myFollowersList.length
+            ? myFollowersList.map(u => `
+                <div class="profile-event-item">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        ${renderAvatarChip(u, "")}
+                        <div>
+                            <strong>${escapeHTML(u.full_name)}${verifiedBadgeHTML(u)}</strong>
+                            <span>${u.role === "business" ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : "👤 Utilizador"}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join("")
+            : `<p class="muted" style="font-size:13px;">Ainda não tem seguidores.</p>`;
     } else {
-        updateObj.birth_date = $("profileBirthDateInput")?.value || null;
-        updateObj.status_emoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
-        updateObj.status_text = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
-    }
-
-    if (ghostMode) {
-        updateObj.last_lat = null;
-        updateObj.last_lng = null;
-    } else if (userPosition) {
-        const coords = applyPrivacyOffset(userPosition.lat, userPosition.lng, privacyMode);
-        updateObj.last_lat = coords.lat;
-        updateObj.last_lng = coords.lng;
-        updateObj.last_seen = new Date().toISOString();
-    }
-
-    const { error } = await supabaseClient
-        .from("profiles")
-        .update(updateObj)
-        .eq("id", currentProfile.id);
-
-    if (error) {
-        showToast("Erro ao atualizar o perfil.", "error");
-        return;
-    }
-
-    Object.assign(currentProfile, updateObj);
-    applyRoleUI();
-    showToast(isBiz ? "Perfil institucional atualizado!" : "Perfil atualizado com sucesso!", "success");
-});
-
-function renderProfileLists() {
-    const enrolledEvents = events.filter(ev => myEnrollments.has(String(ev.id)));
-    const createdEvents = events.filter(ev => ev.creatorId === currentProfile.id);
-
-    $("profileEnrolledList").innerHTML = enrolledEvents.length
-        ? enrolledEvents.map(ev => `
-            <div class="profile-event-item">
-                <div>
-                    <strong>${escapeHTML(ev.name)}</strong>
-                    <span>📅 ${escapeHTML(formatEventDate(ev))} · 📍 ${escapeHTML(ev.location)}</span>
+        const enrolledEvents = events.filter(e => myEnrollments.has(String(e.id)));
+        enrolledList.innerHTML = enrolledEvents.length
+            ? enrolledEvents.map(ev => `
+                <div class="profile-event-item">
+                    <div>
+                        <strong>${escapeHTML(ev.name)}</strong>
+                        <span>📅 ${escapeHTML(formatEventDate(ev))} · 📍 ${escapeHTML(ev.location)}</span>
+                    </div>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); openEventDetails('${ev.id}')">Ver</button>
                 </div>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-ticket" onclick="closeModalEl(profileModal); window.openEventTicket('${ev.id}')">🎟️</button>
-                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
-                </div>
-            </div>
-        `).join("")
-        : `<p class="muted" style="font-size:13px;">Ainda não estás inscrito em nenhum evento.</p>`;
+            `).join("")
+            : `<p class="muted" style="font-size:13px;">Ainda não estás inscrito em nenhum evento.</p>`;
+    }
 
-    $("profileCreatedList").innerHTML = createdEvents.length
+    const createdEvents = events.filter(e => currentUser && String(e.creatorId) === String(currentUser.id));
+    createdList.innerHTML = createdEvents.length
         ? createdEvents.map(ev => `
             <div class="profile-event-item">
                 <div>
                     <strong>${escapeHTML(ev.name)}</strong>
-                    <span>👥 ${ev.enrolled || 0}${ev.maxParticipants ? "/" + ev.maxParticipants : ""} inscritos · ${escapeHTML(formatEventDate(ev))}</span>
+                    <span>👥 ${ev.enrolled || 0} inscritos · 📅 ${escapeHTML(formatEventDate(ev))}</span>
                 </div>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.startEditEvent('${ev.id}')">✏️</button>
-                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Ver</button>
-                </div>
+                <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); openEventDetails('${ev.id}')">Gerir</button>
             </div>
         `).join("")
-        : `<p class="muted" style="font-size:13px;">Ainda não criaste nenhum evento.</p>`;
+        : `<p class="muted" style="font-size:13px;">Ainda não publicaste nenhum evento.</p>`;
 
-    const followingArr = [...myFollowing.entries()];
-    $("profileFollowingList").innerHTML = followingArr.length
-        ? followingArr.map(([id, name]) => `
+    if (friendsListEl && !isBiz) {
+        friendsListEl.innerHTML = window.friendsList.length
+            ? window.friendsList.map(f => `
+                <div class="profile-event-item">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        ${renderAvatarChip(f, "")}
+                        <div>
+                            <strong>${escapeHTML(f.full_name)}</strong>
+                            <span>👊 ${f.bump_count || 0} Bumps · ${escapeHTML(f.status_emoji || "📍")} ${escapeHTML(f.status_text || "Online")}</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); openFriendChat('${f.id}')">💬 Chat</button>
+                </div>
+            `).join("")
+            : `<p class="muted" style="font-size:13px;">Ainda não tens amigos adicionados.</p>`;
+    }
+
+    followingList.innerHTML = myFollowingProfiles.length
+        ? myFollowingProfiles.map(ent => `
             <div class="profile-event-item">
-                <strong>🏢 ${escapeHTML(name)}</strong>
-                <button type="button" class="btn-logout" onclick="window.unfollowFromProfile('${id}', '${escapeHTML(name)}')">Deixar de seguir</button>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    ${renderAvatarChip(ent, "")}
+                    <div>
+                        <strong>${escapeHTML(ent.full_name)}${verifiedBadgeHTML(ent)}</strong>
+                        <span>🏛️ ${escapeHTML(ent.business_type || "Entidade Oficial")}</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-logout" onclick="toggleFollowFromList('${ent.id}', '${escapeHTML(ent.full_name)}'); renderProfileLists();">Deixar de seguir</button>
             </div>
         `).join("")
-        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhum organizador.</p>`;
+        : `<p class="muted" style="font-size:13px;">Ainda não estás a seguir nenhuma empresa ou entidade pública.</p>`;
 }
 
-window.unfollowFromProfile = async (id, name) => {
-    await toggleFollowOrganizer(id, name);
-    renderProfileLists();
-};
-
 // ==========================================
-// PAINEL DE ADMINISTRAÇÃO & MODERAÇÃO
+// PAINEL DE ADMINISTRAÇÃO (CLASSE ADMIN & VERIFICAÇÃO DE ENTIDADES)
 // ==========================================
 adminPanelBtn.addEventListener("click", async () => {
-    if (currentProfile?.role !== "admin") return;
     openModal(adminModal);
     await loadAdminDashboard();
 });
@@ -2329,107 +2827,187 @@ $("tabAdminReports").addEventListener("click", () => {
 });
 
 async function loadAdminDashboard() {
-    const listEl = $("adminUsersList");
-    const reportsEl = $("adminReportsList");
-    listEl.innerHTML = `<p class="muted">A carregar utilizadores...</p>`;
+    if (!isAdminAccount()) return;
 
-    const [{ data: users }, { data: reports }] = await Promise.all([
-        supabaseClient.from("profiles").select("*").order("created_at", { ascending: false }),
-        supabaseClient.from("reports").select("*").eq("status", "pendente").order("created_at", { ascending: false })
-    ]);
+    const { data: users } = await supabaseClient.from("profiles").select("*").order("created_at", { ascending: false });
+    const { data: reports } = await supabaseClient.from("event_reports").select("*").order("created_at", { ascending: false });
 
-    if (users) {
-        $("statTotalUsers").textContent = users.length;
-        $("statBusinessUsers").textContent = users.filter(u => u.role === "business").length;
-        $("statTotalEvents").textContent = events.length;
+    const allUsers = users || [];
+    const bizAccounts = allUsers.filter(u => u.role === "business");
+    const verifiedBizCount = bizAccounts.filter(u => u.is_verified).length;
+    const allReports = reports || [];
 
-        listEl.innerHTML = users.map(u => {
-            const typeLabel = u.role === "business" && u.business_type ? ` (${u.business_type})` : "";
+    $("statTotalUsers").textContent = allUsers.length;
+    $("statBusinessUsers").textContent = `${bizAccounts.length} (${verifiedBizCount}✓)`;
+    $("statTotalEvents").textContent = events.length;
+    $("statTotalReports").textContent = allReports.length;
+
+    const usersContainer = $("adminUsersList");
+    if (!allUsers.length) {
+        usersContainer.innerHTML = `<p class="muted">Nenhum utilizador encontrado.</p>`;
+    } else {
+        usersContainer.innerHTML = allUsers.map(u => {
+            const isBiz = u.role === "business";
+            const verifyActionBtn = isBiz
+                ? (u.is_verified
+                    ? `<button type="button" class="btn-unverify" onclick="window.toggleVerifyEntity('${u.id}', false)" title="Remover selo de verificação">✓ Verificada</button>`
+                    : `<button type="button" class="btn-verify" onclick="window.toggleVerifyEntity('${u.id}', true)" title="Verificar esta empresa ou entidade">✅ Verificar</button>`)
+                : "";
+
             return `
                 <div class="admin-user-row">
                     <div class="admin-user-info">
-                        <strong>${escapeHTML(u.full_name)}${escapeHTML(typeLabel)}</strong>
-                        <span>${escapeHTML(u.email)}</span>
+                        <strong>${escapeHTML(u.full_name || "Sem nome")}${verifiedBadgeHTML(u)}</strong>
+                        <span>${escapeHTML(u.email)} ${u.business_type ? `· ${escapeHTML(u.business_type)}` : ""}</span>
                     </div>
-                    <select data-user-id="${u.id}" class="admin-role-select">
-                        <option value="user" ${u.role === "user" ? "selected" : ""}>👤 Utilizador</option>
-                        <option value="business" ${u.role === "business" ? "selected" : ""}>🏢 Domínio Público</option>
-                        <option value="admin" ${u.role === "admin" ? "selected" : ""}>🛡️ Admin</option>
-                    </select>
+                    <div class="admin-row-controls">
+                        ${verifyActionBtn}
+                        <select onchange="window.changeUserRole('${u.id}', this.value)" aria-label="Classe da conta">
+                            <option value="user" ${u.role === "user" ? "selected" : ""}>👤 Utilizador</option>
+                            <option value="business" ${u.role === "business" ? "selected" : ""}>🏢 Empresa / Entidade</option>
+                            <option value="admin" ${u.role === "admin" ? "selected" : ""}>🛡️ Admin</option>
+                        </select>
+                    </div>
                 </div>
             `;
         }).join("");
     }
 
-    const pendingReports = reports || [];
-    $("statTotalReports").textContent = pendingReports.length;
-    reportsEl.innerHTML = pendingReports.length
-        ? pendingReports.map(r => `
+    const reportsContainer = $("adminReportsList");
+    if (!allReports.length) {
+        reportsContainer.innerHTML = `<p class="muted" style="font-size:13px;">Nenhuma denúncia pendente.</p>`;
+    } else {
+        reportsContainer.innerHTML = allReports.map(r => `
             <div class="admin-user-row">
                 <div class="admin-user-info">
-                    <strong>🚩 ${escapeHTML(r.event_name)}</strong>
-                    <span>Motivo: ${escapeHTML(r.reason)} · Por ${escapeHTML(r.reporter_name)}</span>
+                    <strong>🚩 ${escapeHTML(r.reason)} — ${escapeHTML(r.event_name || "Evento")}</strong>
+                    <span>${escapeHTML(r.details || "Sem detalhes adicionais")}</span>
                 </div>
                 <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-soft" onclick="closeModalEl(adminModal); window.openEventDetails('${r.event_id}')">Ver</button>
-                    <button type="button" class="btn-logout" onclick="window.resolveReport(${r.id})">Arquivar</button>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(adminModal); openEventDetails('${r.event_id}')">Ver</button>
+                    <button type="button" class="btn-logout" onclick="window.dismissReport(${r.id})">Arquivar</button>
                 </div>
             </div>
-        `).join("")
-        : `<p class="muted" style="font-size:13px;">Nenhuma denúncia pendente.</p>`;
+        `).join("");
+    }
 }
 
-window.resolveReport = async reportId => {
-    await supabaseClient.from("reports").update({ status: "resolvida" }).eq("id", reportId);
-    showToast("Denúncia arquivada.");
-    await loadAdminDashboard();
-};
-
-$("adminUsersList").addEventListener("change", async e => {
-    const select = e.target.closest(".admin-role-select");
-    if (!select) return;
-
-    const userId = select.dataset.userId;
-    const newRole = select.value;
-
-    const { error } = await supabaseClient.from("profiles").update({ role: newRole }).eq("id", userId);
-    if (error) {
-        showToast("Erro ao atualizar cargo.", "error");
+// Ação exclusiva dos Admins: Verificar ou remover verificação de uma Empresa / Entidade Pública
+window.toggleVerifyEntity = async (userId, verifyState) => {
+    if (!isAdminAccount()) {
+        showToast("Apenas administradores podem verificar entidades.", "error");
         return;
     }
 
-    showToast("Permissões atualizadas!", "success");
-    if (userId === currentProfile.id) {
-        currentProfile.role = newRole;
-        applyRoleUI();
+    const { error } = await supabaseClient
+        .from("profiles")
+        .update({ is_verified: verifyState })
+        .eq("id", userId);
+
+    if (error) {
+        showToast("Erro ao atualizar verificação. Confirma a coluna 'is_verified' na tabela profiles.", "error");
+        return;
     }
+
+    if (verifyState) {
+        await createNotification(
+            userId,
+            null,
+            "Conta Oficial Verificada! ✅",
+            "Um Administrador validou a sua entidade. O selo de verificação já está ativo no seu perfil e eventos."
+        );
+        showToast("Entidade verificada com sucesso! ✅", "success");
+    } else {
+        showToast("Verificação removida.");
+    }
+
     await loadAdminDashboard();
-});
+    await loadEventsFromSupabase();
+};
+
+window.changeUserRole = async (userId, newRole) => {
+    if (!isAdminAccount()) return;
+    const updateData = { role: newRole };
+    if (newRole !== "business") {
+        updateData.is_verified = false;
+    }
+    const { error } = await supabaseClient.from("profiles").update(updateData).eq("id", userId);
+    if (error) {
+        showToast("Erro ao atualizar classe da conta.", "error");
+        return;
+    }
+    showToast("Classe da conta atualizada!", "success");
+    await loadAdminDashboard();
+};
+
+window.dismissReport = async reportId => {
+    if (!isAdminAccount()) return;
+    await supabaseClient.from("event_reports").delete().eq("id", reportId);
+    showToast("Denúncia arquivada.");
+    loadAdminDashboard();
+};
 
 // ==========================================
-// SUPABASE: CARREGAR EVENTOS E INSCRIÇÕES
+// CARREGAMENTO DE EVENTOS E INSCRIÇÕES (SUPABASE)
 // ==========================================
-function mapDbEvent(item, index = 0) {
+function mapDbEvent(row, creatorProfilesMap = new Map()) {
+    const creatorProf = row.creator_id ? creatorProfilesMap.get(String(row.creator_id)) : null;
+    const creatorRole = creatorProf?.role || (row.creator_type === "Utilizador" ? "user" : (row.creator_type === "Admin" ? "admin" : "business"));
+
     return {
-        id: item.id ?? (index + 1),
-        name: item.name,
-        description: item.description,
-        category: item.category,
-        date: item.date,
-        time: item.time,
-        location: item.location,
-        distrito: item.distrito,
-        latitude: Number(item.latitude),
-        longitude: Number(item.longitude),
-        image: item.image,
-        maxParticipants: item.max_participants,
-        enrolled: item.enrolled || 0,
-        price: item.price || "Gratuito",
-        externalUrl: item.external_url || "",
-        creatorId: item.creator_id || null,
-        creatorName: item.creator_name || null,
-        creatorType: item.creator_type || null
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        distrito: row.distrito,
+        date: row.date,
+        time: row.time ? String(row.time).slice(0, 5) : "18:00",
+        location: row.location,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        description: row.description || "",
+        image: row.image || "",
+        maxParticipants: row.max_participants ? Number(row.max_participants) : null,
+        enrolled: Number(row.enrolled || 0),
+        creatorId: row.creator_id || null,
+        creatorName: creatorProf?.full_name || row.creator_name || "",
+        creatorType: creatorProf?.business_type || row.creator_type || "",
+        creatorRole,
+        creatorVerified: Boolean(creatorProf?.is_verified),
+        price: row.price || "Gratuito",
+        externalUrl: row.external_url || ""
     };
+}
+
+async function loadEventsFromSupabase() {
+    try {
+        const { data, error } = await supabaseClient
+            .from("events")
+            .select("*")
+            .order("date", { ascending: true });
+
+        if (!error && data) {
+            const creatorIds = [...new Set(data.map(r => r.creator_id).filter(Boolean))];
+            let creatorProfilesMap = new Map();
+
+            if (creatorIds.length > 0) {
+                const { data: profs } = await supabaseClient
+                    .from("profiles")
+                    .select("id, full_name, role, business_type, is_verified")
+                    .in("id", creatorIds);
+
+                if (profs) {
+                    creatorProfilesMap = new Map(profs.map(p => [String(p.id), p]));
+                }
+            }
+
+            events = data.map(r => mapDbEvent(r, creatorProfilesMap));
+        }
+    } catch (e) {}
+    filterEvents();
+    if (!detailModal.classList.contains("hidden") && detailEventId) {
+        const updated = events.find(x => String(x.id) === String(detailEventId));
+        if (updated) renderEventDetailsData(updated);
+    }
 }
 
 async function loadMyEnrollments() {
@@ -2441,12 +3019,9 @@ async function loadMyEnrollments() {
             .eq("user_id", currentUser.id);
 
         if (!error && data) {
-            myEnrollments = new Set(data.map(r => String(r.event_id)));
-            saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
-            return;
+            myEnrollments = new Set(data.map(row => String(row.event_id)));
         }
     } catch (e) {}
-    myEnrollments = new Set(loadJSON(`localspot_enrolled_${currentUser.id}`, []).map(String));
 }
 
 async function loadAllEnrollmentsSummary() {
@@ -2458,237 +3033,207 @@ async function loadAllEnrollmentsSummary() {
         if (!error && data) {
             allEnrollmentsMap = new Map();
             data.forEach(row => {
-                const key = String(row.event_id);
-                if (!allEnrollmentsMap.has(key)) allEnrollmentsMap.set(key, []);
-                allEnrollmentsMap.get(key).push(String(row.user_id));
+                const k = String(row.event_id);
+                if (!allEnrollmentsMap.has(k)) allEnrollmentsMap.set(k, new Set());
+                allEnrollmentsMap.get(k).add(String(row.user_id));
             });
         }
     } catch (e) {}
 }
 
 window.getFriendsGoingToEvent = eventId => {
-    const enrolledUserIds = new Set(allEnrollmentsMap.get(String(eventId)) || []);
-    if (!enrolledUserIds.size || !window.friendsList.length) return [];
-    return window.friendsList.filter(f => enrolledUserIds.has(String(f.id)));
+    const enrolledIds = allEnrollmentsMap.get(String(eventId));
+    if (!enrolledIds || !window.friendsList.length) return [];
+    return window.friendsList.filter(f => enrolledIds.has(String(f.id)));
 };
 
-async function loadEventsFromSupabase() {
-    let { data, error } = await supabaseClient.from("events").select("*");
-
-    if (error) {
-        events.length = 0;
-        INITIAL_EVENTS.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
-        filterEvents({ fit: true });
-        return;
-    }
-
-    if ((!data || data.length === 0) && INITIAL_EVENTS.length > 0 && !localStorage.getItem("localspot_seeded")) {
-        localStorage.setItem("localspot_seeded", "1");
-        const { data: seeded } = await supabaseClient.from("events").insert(INITIAL_EVENTS).select();
-        if (seeded && seeded.length > 0) data = seeded;
-    }
-
-    events.length = 0;
-    const sourceList = (data && data.length > 0) ? data : INITIAL_EVENTS;
-    sourceList.forEach((item, idx) => events.push(mapDbEvent(item, idx)));
-
-    filterEvents({ fit: true });
-}
-
-function checkSharedEventUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const sharedId = params.get("evento");
-    if (!sharedId) return;
-    const ev = events.find(x => String(x.id) === String(sharedId));
-    if (ev) {
-        setActive(ev.id, true);
-        focusEvent(ev.id);
-        openEventDetails(ev.id);
-    }
-}
-
-// ---------- Preencher controlos ----------
-function setupControls() {
-    districtFilter.innerHTML = `<option value="all">Todos os distritos</option>` +
-        DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
-
-    $("eventFormDistrict").innerHTML = `<option value="">Selecionar distrito</option>` +
-        DISTRICTS.map(d => `<option value="${d.value}">${d.label}</option>`).join("");
-
-    $("eventCategory").innerHTML = `<option value="">Selecionar categoria</option>` +
-        Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`).join("");
-
-    const chips = [["all", "Todas"], ...Object.entries(CATEGORIES).map(([k, c]) => [k, `${c.emoji} ${c.label}`])];
-    categoryChips.innerHTML = chips.map(([key, label]) =>
-        `<button type="button" class="chip${key === "all" ? " active" : ""}" data-category="${key}">${label}</button>`
-    ).join("");
-
-    const today = new Date().toISOString().slice(0, 10);
-    $("eventDate").min = today;
-}
-
-// ---------- Inscrição Real em Atividades ----------
-async function toggleEnrollment(id) {
+window.toggleEnrollment = async id => {
     if (!currentUser || !currentProfile) return;
     const ev = events.find(x => String(x.id) === String(id));
     if (!ev) return;
 
-    const idKey = String(ev.id);
-    const isEnrolled = myEnrollments.has(idKey);
-    let newEnrolledCount = ev.enrolled || 0;
+    const key = String(id);
+    const alreadyEnrolled = myEnrollments.has(key);
 
-    if (isEnrolled) {
-        await supabaseClient.from("enrollments").delete().eq("event_id", ev.id).eq("user_id", currentUser.id);
-        myEnrollments.delete(idKey);
-        newEnrolledCount = Math.max(0, newEnrolledCount - 1);
-    } else {
-        const isFull = ev.maxParticipants && newEnrolledCount >= ev.maxParticipants;
-        if (isFull) {
-            showToast("Vagas esgotadas para este evento!", "error");
+    if (alreadyEnrolled) {
+        const { error } = await supabaseClient
+            .from("enrollments")
+            .delete()
+            .eq("event_id", ev.id)
+            .eq("user_id", currentUser.id);
+
+        if (error) {
+            showToast("Erro ao cancelar inscrição.", "error");
             return;
         }
 
-        await supabaseClient.from("enrollments").insert([{
-            event_id: ev.id,
-            user_id: currentUser.id,
-            user_name: currentProfile.full_name
-        }]);
-
-        myEnrollments.add(idKey);
-        newEnrolledCount += 1;
-
-        if (ev.creatorId) {
-            await createNotification(
-                ev.creatorId,
-                ev.id,
-                "Nova inscrição no teu evento!",
-                `${currentProfile.full_name} inscreveu-se em "${ev.name}".`
-            );
-        }
-    }
-
-    const { error } = await supabaseClient.from("events").update({ enrolled: newEnrolledCount }).eq("id", ev.id);
-    if (error) {
-        showToast("Erro ao atualizar as vagas.", "error");
-        return;
-    }
-
-    ev.enrolled = newEnrolledCount;
-    saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
-    await loadAllEnrollmentsSummary();
-
-    if (isEnrolled) {
-        showToast(`Cancelaste a tua inscrição em "${ev.name}".`);
+        myEnrollments.delete(key);
+        if (allEnrollmentsMap.has(key)) allEnrollmentsMap.get(key).delete(String(currentUser.id));
+        const newCount = Math.max(0, (ev.enrolled || 1) - 1);
+        ev.enrolled = newCount;
+        await supabaseClient.from("events").update({ enrolled: newCount }).eq("id", ev.id);
+        showToast("Inscrição cancelada.");
     } else {
-        showToast(`Inscrição confirmada! Bilhete QR disponível.`, "success");
+        if (ev.maxParticipants && (ev.enrolled || 0) >= ev.maxParticipants) {
+            showToast("Este evento já esgotou as vagas.", "error");
+            return;
+        }
+
+        const { error } = await supabaseClient
+            .from("enrollments")
+            .insert([{
+                event_id: ev.id,
+                user_id: currentUser.id,
+                user_name: currentProfile.full_name,
+                user_email: currentProfile.email
+            }]);
+
+        if (error) {
+            showToast("Não foi possível concluir a inscrição.", "error");
+            return;
+        }
+
+        myEnrollments.add(key);
+        if (!allEnrollmentsMap.has(key)) allEnrollmentsMap.set(key, new Set());
+        allEnrollmentsMap.get(key).add(String(currentUser.id));
+        const newCount = (ev.enrolled || 0) + 1;
+        ev.enrolled = newCount;
+        await supabaseClient.from("events").update({ enrolled: newCount }).eq("id", ev.id);
+
+        await createNotification(
+            ev.creatorId,
+            ev.id,
+            "Nova inscrição no teu evento! 🎉",
+            `${currentProfile.full_name} inscreveu-se em "${ev.name}".`
+        );
+
+        if (isNormalUserAccount()) {
+            for (const f of window.friendsList) {
+                await createNotification(
+                    f.id,
+                    ev.id,
+                    `👊 ${currentProfile.full_name} vai a um evento!`,
+                    `Inscreveu-se em "${ev.name}" (${ev.location}).`
+                );
+            }
+        }
+
+        showToast("Inscrição confirmada!", "success");
     }
 
     filterEvents();
-    if (!detailModal.classList.contains("hidden") && String(detailEventId) === idKey) {
-        openEventDetails(ev.id);
+    if (!detailModal.classList.contains("hidden") && String(detailEventId) === key) {
+        renderEventDetailsData(ev);
     }
+};
+
+// ---------- Favoritos ----------
+window.toggleFavorite = id => {
+    const key = String(id);
+    favorites.has(key) ? favorites.delete(key) : favorites.add(key);
+    saveJSON(STORAGE_FAVS, [...favorites]);
+    filterEvents();
+};
+
+// ---------- Distritos & Categorias ----------
+function populateDistricts() {
+    const districts = Object.keys(DISTRICTS).sort((a, b) => DISTRICTS[a].localeCompare(DISTRICTS[b], "pt"));
+    const options = districts.map(k => `<option value="${k}">${DISTRICTS[k]}</option>`).join("");
+    districtFilter.insertAdjacentHTML("beforeend", options);
+    $("eventFormDistrict").insertAdjacentHTML("beforeend", options);
 }
 
-window.toggleEnrollment = toggleEnrollment;
+function buildCategoryChips() {
+    categoryChips.innerHTML = `<button type="button" class="chip active" data-category="all">Todos</button>` +
+        Object.entries(CATEGORIES)
+            .map(([k, c]) => `<button type="button" class="chip" data-category="${k}">${c.emoji} ${c.label}</button>`)
+            .join("");
 
-// ---------- Filtros & Ordenação ----------
+    $("eventCategory").innerHTML = Object.entries(CATEGORIES)
+        .map(([k, c]) => `<option value="${k}">${c.emoji} ${c.label}</option>`)
+        .join("");
+}
+
 function isPast(ev) {
     return eventDateTime(ev) < new Date();
 }
 
 function matchesPeriod(ev) {
     if (state.period === "all") return true;
-    const d = eventDateTime(ev);
     const now = new Date();
-    if (d < now) return false;
-    if (state.period === "upcoming") return true;
-    const days = state.period === "week" ? 7 : 30;
-    return d <= new Date(now.getTime() + days * 86400000);
-}
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dt = eventDateTime(ev);
 
-function matchesRadius(ev) {
-    if (state.radius >= 100) return true;
-    const km = distanceOf(ev);
-    if (km === null) return true;
-    return km <= state.radius;
-}
-
-function distanceOf(ev) {
-    if (!userPosition) return null;
-    return distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude);
-}
-
-function sortEvents(list) {
-    const sorted = [...list];
-    if (state.sort === "name") {
-        sorted.sort((a, b) => a.name.localeCompare(b.name, "pt"));
-    } else if (state.sort === "popular") {
-        sorted.sort((a, b) => (b.enrolled || 0) - (a.enrolled || 0));
-    } else if (state.sort === "distance" && userPosition) {
-        sorted.sort((a, b) => distanceOf(a) - distanceOf(b));
-    } else {
-        const upcoming = sorted.filter(e => !isPast(e)).sort((a, b) => eventDateTime(a) - eventDateTime(b));
-        const past = sorted.filter(isPast).sort((a, b) => eventDateTime(b) - eventDateTime(a));
-        return [...upcoming, ...past];
+    if (state.period === "today") {
+        const end = new Date(startOfToday);
+        end.setDate(end.getDate() + 1);
+        return dt >= startOfToday && dt < end;
     }
-    return sorted;
+    if (state.period === "week") {
+        const end = new Date(startOfToday);
+        end.setDate(end.getDate() + 7);
+        return dt >= startOfToday && dt < end;
+    }
+    if (state.period === "weekend") {
+        if (dt < startOfToday) return false;
+        const day = dt.getDay();
+        const diffDays = (dt - startOfToday) / 86400000;
+        return (day === 0 || day === 6) && diffDays <= 7;
+    }
+    return true;
 }
 
-function getFilteredEvents() {
-    const q = normalizeText(state.search.trim());
-    const filtered = events.filter(ev => {
-        const haystack = normalizeText(`${ev.name} ${ev.location} ${ev.description || ""} ${ev.creatorName || ""}`);
-        return (!q || haystack.includes(q)) &&
-            (state.category === "all" || ev.category === state.category) &&
-            (state.district === "all" || ev.distrito === state.district) &&
-            matchesPeriod(ev) &&
-            matchesRadius(ev) &&
-            (!state.onlyFavorites || favorites.has(String(ev.id))) &&
-            (!state.onlyFree || isFreePrice(ev.price)) &&
-            (!state.onlyFollowing || (ev.creatorId && myFollowing.has(String(ev.creatorId))));
+function isFreeEvent(ev) {
+    const p = (ev.price || "").toLowerCase().trim();
+    return !p || p === "gratuito" || p === "grátis" || p === "0" || p === "0€";
+}
+
+function filterEvents() {
+    const q = state.search.trim().toLowerCase();
+
+    let list = events.filter(ev => {
+        if (state.category !== "all" && ev.category !== state.category) return false;
+        if (state.district !== "all" && ev.distrito !== state.district) return false;
+        if (state.onlyFavorites && !favorites.has(String(ev.id))) return false;
+        if (state.onlyFree && !isFreeEvent(ev)) return false;
+        if (state.onlyFollowing && (!ev.creatorId || !myFollowing.has(String(ev.creatorId)))) return false;
+        if (!matchesPeriod(ev)) return false;
+        if (userPosition && state.radius < 100) {
+            if (distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude) > state.radius) return false;
+        }
+        if (q) {
+            const hay = `${ev.name} ${ev.location} ${districtLabel(ev.distrito)} ${ev.description} ${ev.creatorName}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
     });
-    return sortEvents(filtered);
+
+    list.sort((a, b) => {
+        const aPast = isPast(a), bPast = isPast(b);
+        if (aPast !== bPast) return aPast ? 1 : -1;
+        if (state.sort === "distance" && userPosition) {
+            return distanceKm(userPosition.lat, userPosition.lng, a.latitude, a.longitude) -
+                   distanceKm(userPosition.lat, userPosition.lng, b.latitude, b.longitude);
+        }
+        if (state.sort === "name") return a.name.localeCompare(b.name, "pt");
+        return eventDateTime(a) - eventDateTime(b);
+    });
+
+    currentList = list;
+    renderEvents(list);
+    showEventsOnMap(list);
 }
 
-function hasActiveFilters() {
-    return state.search || state.category !== "all" || state.district !== "all" ||
-        state.period !== "all" || state.radius < 100 || state.onlyFavorites ||
-        state.onlyFree || state.onlyFollowing;
-}
-
-function filterEvents({ fit = false } = {}) {
-    currentList = getFilteredEvents();
-    displayEvents(currentList);
-    showEventsOnMap(currentList);
-    if (fit) fitToEvents(currentList);
-    resetFiltersBtn.classList.toggle("hidden", !hasActiveFilters());
-}
-
-// ---------- Renderização da Lista ----------
-function formatKm(km) {
-    return km < 10 ? `${km.toFixed(1).replace(".", ",")} km` : `${Math.round(km)} km`;
-}
-
-function canManageEvent(ev) {
-    return currentProfile && (
-        currentProfile.role === "admin" ||
-        (ev.creatorId && ev.creatorId === currentProfile.id)
-    );
-}
-
-function displayEvents(list) {
-    eventsList.innerHTML = "";
+function renderEvents(list) {
     eventCount.textContent = list.length;
     emptyState.classList.toggle("hidden", list.length > 0);
 
-    const frag = document.createDocumentFragment();
-
-    list.forEach(ev => {
+    eventsList.innerHTML = list.map(ev => {
         const cat = CATEGORIES[ev.category];
-        const km = distanceOf(ev);
         const fav = favorites.has(String(ev.id));
-        const enrolled = myEnrollments.has(String(ev.id));
         const past = isPast(ev);
+        const enrolled = myEnrollments.has(String(ev.id));
+        const isOwner = currentUser && (String(ev.creatorId) === String(currentUser.id) || isAdminAccount());
 
         const currentEnrolled = ev.enrolled || 0;
         const max = ev.maxParticipants;
@@ -2697,25 +3242,36 @@ function displayEvents(list) {
         let vagasLabel = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
         if (isFull) vagasLabel += " (Esgotado)";
 
+        let dist = "";
+        if (userPosition) {
+            const km = distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude);
+            dist = ` · ${km < 1 ? Math.round(km * 1000) + " m" : km.toFixed(1).replace(".", ",") + " km"}`;
+        }
+
         let enrollBtnHtml = "";
         if (!past) {
             if (enrolled) {
-                enrollBtnHtml = `<button type="button" class="register-btn registered" data-action="enroll">✓ Inscrito</button>`;
+                enrollBtnHtml = `<button type="button" class="register-btn registered" onclick="event.stopPropagation(); window.toggleEnrollment('${ev.id}')">✓ Inscrito</button>`;
             } else if (isFull) {
-                enrollBtnHtml = `<button type="button" class="register-btn" disabled>Esgotado</button>`;
+                enrollBtnHtml = `<button type="button" class="register-btn" disabled onclick="event.stopPropagation()">Esgotado</button>`;
             } else {
-                enrollBtnHtml = `<button type="button" class="register-btn" data-action="enroll">✋ Inscrever-me</button>`;
+                enrollBtnHtml = `<button type="button" class="register-btn" onclick="event.stopPropagation(); window.toggleEnrollment('${ev.id}')">✋ Inscrever-me</button>`;
             }
         } else {
-            enrollBtnHtml = `<button type="button" class="register-btn" disabled>Terminado</button>`;
+            enrollBtnHtml = `<button type="button" class="register-btn" disabled onclick="event.stopPropagation()">Terminado</button>`;
         }
 
         let organizerBadge = "";
         if (ev.creatorName) {
-            const isNormalUser = ev.creatorType === "Utilizador";
-            const badgeIcon = isNormalUser ? "👤" : "🏢";
-            const prefix = !isNormalUser && ev.creatorType ? `${ev.creatorType} · ` : "";
-            organizerBadge = `<div class="organizer-tag${isNormalUser ? " user-tag" : ""}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}</div>`;
+            const isNormalUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
+            const isAdmin = ev.creatorRole === "admin" || ev.creatorType === "Admin";
+            const badgeIcon = isAdmin ? "🛡️" : (isNormalUser ? "👤" : "🏢");
+            const prefix = !isNormalUser && !isAdmin && ev.creatorType ? `${ev.creatorType} · ` : "";
+            const verifiedHtml = !isNormalUser && !isAdmin && ev.creatorVerified
+                ? `<span class="verified-check" title="Entidade Verificada">✓</span>`
+                : "";
+            const tagClass = isAdmin ? " admin-tag" : (isNormalUser ? " user-tag" : "");
+            organizerBadge = `<div class="organizer-tag${tagClass}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}${verifiedHtml}</div>`;
         }
 
         const friendsGoing = window.getFriendsGoingToEvent(ev.id);
@@ -2723,171 +3279,428 @@ function displayEvents(list) {
             ? `<div class="friends-going-badge">👊 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
             : "";
 
-        const ownerBar = canManageEvent(ev)
-            ? `<div class="owner-card-bar">
-                    <button type="button" class="edit-btn" data-action="edit">✏️ Editar</button>
-                    <button type="button" class="delete-btn" data-action="delete">🗑 Apagar</button>
-               </div>`
-            : "";
-
-        const card = document.createElement("article");
-        card.className = "event-card" + (past ? " past" : "") + (String(ev.id) === String(activeId) ? " active" : "");
-        card.dataset.id = ev.id;
-        card.tabIndex = 0;
-
-        card.innerHTML = `
-            <div class="event-image-wrap">
-                <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="" class="event-image" loading="lazy"
-                     onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
-                ${past ? '<span class="badge-past">Terminado</span>' : ""}
-                <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
-                <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav">${fav ? "★" : "☆"}</button>
-            </div>
-            <div class="event-meta">
-                <span class="category">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
-                ${km !== null ? `<span class="distance">${formatKm(km)}</span>` : ""}
-            </div>
-            <h4>${escapeHTML(ev.name)}</h4>
-            ${organizerBadge}
-            ${friendsBadge}
-            <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
-            <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
-            
-            <div class="registration-info">👥 ${vagasLabel}</div>
-            <div class="card-actions-grid">
-                ${enrollBtnHtml}
-                <button type="button" class="details-btn" data-action="details">Detalhes</button>
-            </div>
-            ${ownerBar}
-        `;
-        frag.appendChild(card);
-    });
-
-    eventsList.appendChild(frag);
+        return `
+            <article class="event-card${String(ev.id) === String(activeId) ? " active" : ""}" data-id="${ev.id}">
+                <div class="event-image-wrap">
+                    <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="${escapeHTML(ev.name)}" class="event-image"
+                         onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
+                    ${past ? '<span class="badge-past">Terminado</span>' : ""}
+                    <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
+                    <button type="button" class="fav-btn${fav ? " on" : ""}" onclick="event.stopPropagation(); window.toggleFavorite('${ev.id}')" title="Favorito">${fav ? "★" : "☆"}</button>
+                </div>
+                <div class="event-meta">
+                    <span class="category">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
+                </div>
+                <h4>${escapeHTML(ev.name)}</h4>
+                ${organizerBadge}
+                ${friendsBadge}
+                <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
+                <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}${dist}</p>
+                <div class="registration-info">👥 ${vagasLabel}</div>
+                <div class="card-actions-grid">
+                    ${enrollBtnHtml}
+                    <button type="button" class="details-btn" onclick="event.stopPropagation(); window.openEventDetails('${ev.id}')">Detalhes</button>
+                </div>
+                ${isOwner ? `
+                    <div class="owner-card-bar">
+                        <button type="button" class="edit-btn" onclick="event.stopPropagation(); window.openEditEventModal('${ev.id}')">✏️ Editar</button>
+                        <button type="button" class="delete-btn" onclick="event.stopPropagation(); window.deleteEvent('${ev.id}')">🗑️ Eliminar</button>
+                    </div>
+                ` : ""}
+            </article>`;
+    }).join("");
 }
 
-function setActive(id, scroll = true) {
+function selectEventCard(id) {
     activeId = id;
-    highlightMarkerOnMap(id);
-    eventsList.querySelectorAll(".event-card").forEach(c => {
-        const on = String(c.dataset.id) === String(id);
-        c.classList.toggle("active", on);
-        if (on && scroll) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
+    eventsList.querySelectorAll(".event-card").forEach(c => c.classList.toggle("active", c.dataset.id === String(id)));
+    const card = eventsList.querySelector(`.event-card[data-id="${id}"]`);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-function openEventOnMap(id) {
-    setActive(id, false);
-    if (window.innerWidth <= 820) setMobileView("map");
-    focusEvent(id);
-}
+window.onEventMarkerClick = id => selectEventCard(id);
 
 eventsList.addEventListener("click", e => {
     const card = e.target.closest(".event-card");
     if (!card) return;
-    const id = card.dataset.id;
-    const action = e.target.closest("[data-action]")?.dataset.action;
-
-    if (action === "fav") toggleFavorite(id);
-    else if (action === "enroll") toggleEnrollment(id);
-    else if (action === "details") openEventDetails(id);
-    else if (action === "edit") startEditEvent(id);
-    else if (action === "delete") deleteEvent(id);
-    else openEventOnMap(id);
+    selectEventCard(card.dataset.id);
+    if (window.innerWidth <= 820) setMobileView("map");
+    focusEvent(card.dataset.id);
 });
 
-eventsList.addEventListener("keydown", e => {
-    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("event-card")) {
+// ==========================================
+// CRIAR / EDITAR / DUPLICAR / ELIMINAR EVENTO
+// ==========================================
+function openModal(el) {
+    el.classList.remove("hidden");
+    el.setAttribute("aria-hidden", "false");
+}
+
+function closeModalEl(el) {
+    el.classList.add("hidden");
+    el.setAttribute("aria-hidden", "true");
+}
+
+function setCoordinates(latlng) {
+    pendingLocation = latlng;
+    coordsText.textContent = `Coordenadas: ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+    coordsText.classList.add("ok");
+}
+
+function startPickingLocation(latlngToCenter = null) {
+    closeModalEl(modal);
+    pickBanner.classList.remove("hidden");
+    if (window.innerWidth <= 820) setMobileView("map");
+
+    if (latlngToCenter) {
+        flyToCoordinates(latlngToCenter.lng, latlngToCenter.lat, 15);
+    }
+
+    pickLocation(latlng => {
+        pickBanner.classList.add("hidden");
+        setTempMarker(latlng);
+        setCoordinates(latlng);
+        openModal(modal);
+    });
+}
+
+$("cancelPickBtn").addEventListener("click", () => {
+    cancelPick();
+    pickBanner.classList.add("hidden");
+    openModal(modal);
+});
+
+async function searchAddressOnMap() {
+    const query = $("pickSearchInput").value.trim();
+    if (!query) return;
+    const btn = $("pickSearchBtn");
+    btn.disabled = true;
+    btn.textContent = "...";
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+        if (results && results.length > 0) {
+            const lat = parseFloat(results[0].lat);
+            const lng = parseFloat(results[0].lon);
+            flyToCoordinates(lng, lat, 16);
+            showToast(`Mapa centrado em: ${results[0].display_name.split(",")[0]}`, "success");
+        } else {
+            showToast("Morada não encontrada. Tenta outro termo.", "error");
+        }
+    } catch (e) {
+        showToast("Erro ao pesquisar morada.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Ir";
+    }
+}
+
+$("pickSearchBtn").addEventListener("click", searchAddressOnMap);
+$("pickSearchInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
         e.preventDefault();
-        openEventOnMap(e.target.dataset.id);
+        searchAddressOnMap();
     }
 });
 
-window.onEventMarkerClick = id => setActive(id, true);
+addEventButton.addEventListener("click", () => {
+    editingEventId = null;
+    eventForm.reset();
+    imagePreview.classList.add("hidden");
+    formError.classList.add("hidden");
+    pendingLocation = null;
+    coordsText.textContent = "Nenhum local escolhido no mapa.";
+    coordsText.classList.remove("ok");
+    $("eventModalTitle").textContent = "Criar Novo Evento";
+    $("eventSubmitBtn").textContent = "Publicar Evento no Mapa";
 
-function toggleFavorite(id) {
-    const key = String(id);
-    if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
-    saveJSON(STORAGE_FAVS, [...favorites]);
-    filterEvents();
-}
+    if (state.district !== "all") $("eventFormDistrict").value = state.district;
+    $("eventDate").value = new Date().toISOString().slice(0, 10);
+    $("eventTime").value = "18:00";
 
-window.toggleFavorite = toggleFavorite;
+    startPickingLocation();
+});
 
-async function deleteEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
-
-    const { error } = await supabaseClient.from("events").delete().eq("id", ev.id);
-    if (error) {
-        showToast("Erro ao apagar o evento.", "error");
-        return;
-    }
-
-    events.splice(events.indexOf(ev), 1);
-    favorites.delete(String(ev.id));
-    myEnrollments.delete(String(ev.id));
-    saveJSON(STORAGE_FAVS, [...favorites]);
-    if (currentUser) saveJSON(`localspot_enrolled_${currentUser.id}`, [...myEnrollments]);
-    if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
-    filterEvents();
-    showToast("Evento apagado com sucesso.");
-}
-
-// ==========================================
-// MODAL DE DETALHES, BILHETE QR, AVALIAÇÕES E COMENTÁRIOS
-// ==========================================
-async function openEventDetails(id) {
+window.openEditEventModal = id => {
     const ev = events.find(x => String(x.id) === String(id));
     if (!ev) return;
 
+    editingEventId = ev.id;
+    formError.classList.add("hidden");
+    $("eventModalTitle").textContent = "Editar Evento";
+    $("eventSubmitBtn").textContent = "Guardar Alterações";
+
+    $("eventName").value = ev.name;
+    $("eventCategory").value = ev.category;
+    $("eventFormDistrict").value = ev.distrito;
+    $("eventDate").value = ev.date;
+    $("eventTime").value = ev.time;
+    $("eventLocation").value = ev.location;
+    $("eventMaxParticipants").value = ev.maxParticipants || "";
+    $("eventPrice").value = ev.price || "";
+    $("eventExternalUrl").value = ev.externalUrl || "";
+    $("eventDescription").value = ev.description || "";
+    eventImageInput.value = "";
+
+    if (ev.image) {
+        imagePreview.src = ev.image;
+        imagePreview.classList.remove("hidden");
+    } else {
+        imagePreview.classList.add("hidden");
+    }
+
+    setCoordinates({ lat: ev.latitude, lng: ev.longitude });
+    closeModalEl(detailModal);
+    openModal(modal);
+};
+
+window.duplicateEvent = id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
+
+    editingEventId = null;
+    formError.classList.add("hidden");
+    $("eventModalTitle").textContent = "Duplicar Evento";
+    $("eventSubmitBtn").textContent = "Publicar Cópia do Evento";
+
+    $("eventName").value = `${ev.name} (Nova Edição)`;
+    $("eventCategory").value = ev.category;
+    $("eventFormDistrict").value = ev.distrito;
+    $("eventDate").value = new Date().toISOString().slice(0, 10);
+    $("eventTime").value = ev.time;
+    $("eventLocation").value = ev.location;
+    $("eventMaxParticipants").value = ev.maxParticipants || "";
+    $("eventPrice").value = ev.price || "";
+    $("eventExternalUrl").value = ev.externalUrl || "";
+    $("eventDescription").value = ev.description || "";
+    eventImageInput.value = "";
+
+    if (ev.image) {
+        imagePreview.src = ev.image;
+        imagePreview.classList.remove("hidden");
+    } else {
+        imagePreview.classList.add("hidden");
+    }
+
+    setCoordinates({ lat: ev.latitude, lng: ev.longitude });
+    closeModalEl(detailModal);
+    openModal(modal);
+};
+
+changeLocationButton.addEventListener("click", () => {
+    startPickingLocation(pendingLocation);
+});
+
+closeModal.addEventListener("click", () => {
+    cancelPick();
+    clearTempMarker();
+    closeModalEl(modal);
+});
+modal.addEventListener("mousedown", e => {
+    if (e.target === modal) {
+        cancelPick();
+        clearTempMarker();
+        closeModalEl(modal);
+    }
+});
+
+eventImageInput.addEventListener("change", () => {
+    const file = eventImageInput.files[0];
+    if (!file) {
+        imagePreview.classList.add("hidden");
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+        imagePreview.src = reader.result;
+        imagePreview.classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+});
+
+async function uploadEventImage(file) {
+    if (!file) return null;
+    try {
+        const ext = file.name.split(".").pop() || "jpg";
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabaseClient.storage.from("event-images").upload(fileName, file);
+        if (error) return null;
+        const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
+        return data?.publicUrl || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+eventForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    formError.classList.add("hidden");
+    const submitBtn = $("eventSubmitBtn");
+
+    if (!pendingLocation) {
+        formError.textContent = "Escolhe primeiro o local do evento no mapa.";
+        formError.classList.remove("hidden");
+        return;
+    }
+
+    const name = $("eventName").value.trim();
+    const location = $("eventLocation").value.trim();
+    if (!name || !location) {
+        formError.textContent = "Preenche o nome e a morada do evento.";
+        formError.classList.remove("hidden");
+        return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "A guardar evento...";
+
+    const maxPartVal = $("eventMaxParticipants").value;
+    const maxParticipants = maxPartVal ? parseInt(maxPartVal, 10) : null;
+    const priceVal = $("eventPrice").value.trim() || "Gratuito";
+    const externalUrlVal = $("eventExternalUrl").value.trim();
+    const file = eventImageInput.files[0];
+
+    try {
+        let imageUrl = null;
+        if (file) {
+            imageUrl = await uploadEventImage(file);
+        } else if (!imagePreview.classList.contains("hidden") && imagePreview.src) {
+            imageUrl = imagePreview.src;
+        }
+
+        const payload = {
+            name,
+            category: $("eventCategory").value,
+            distrito: $("eventFormDistrict").value,
+            date: $("eventDate").value,
+            time: $("eventTime").value || "18:00",
+            location,
+            latitude: pendingLocation.lat,
+            longitude: pendingLocation.lng,
+            description: $("eventDescription").value.trim() || "Evento publicado pela comunidade.",
+            image: imageUrl || "",
+            max_participants: maxParticipants,
+            price: priceVal,
+            external_url: externalUrlVal
+        };
+
+        if (editingEventId) {
+            const { error } = await supabaseClient.from("events").update(payload).eq("id", editingEventId);
+            if (error) throw error;
+            showToast("Evento atualizado com sucesso!", "success");
+        } else {
+            payload.enrolled = 0;
+            payload.creator_id = currentUser ? currentUser.id : null;
+            payload.creator_name = currentProfile ? currentProfile.full_name : "Utilizador";
+            payload.creator_type = isAdminAccount()
+                ? "Admin"
+                : (isBusinessAccount() ? (currentProfile.business_type || "Entidade") : "Utilizador");
+
+            const { data: createdRows, error } = await supabaseClient.from("events").insert([payload]).select();
+            if (error) throw error;
+            const createdEv = createdRows?.[0];
+            if (createdEv) {
+                activeId = createdEv.id;
+                if (isNormalUserAccount()) {
+                    for (const f of window.friendsList) {
+                        await createNotification(
+                            f.id,
+                            createdEv.id,
+                            `🎉 ${currentProfile.full_name} criou um evento!`,
+                            `"${name}" em ${location}`
+                        );
+                    }
+                }
+            }
+            showToast("Evento publicado no mapa!", "success");
+        }
+
+        clearTempMarker();
+        closeModalEl(modal);
+        await loadEventsFromSupabase();
+        if (activeId) focusEvent(activeId);
+    } catch (err) {
+        formError.textContent = "Erro ao guardar evento: " + (err.message || "tenta novamente.");
+        formError.classList.remove("hidden");
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = editingEventId ? "Guardar Alterações" : "Publicar Evento no Mapa";
+    }
+});
+
+window.deleteEvent = async id => {
+    if (!confirm("Tens a certeza que queres eliminar este evento?")) return;
+    const { error } = await supabaseClient.from("events").delete().eq("id", id);
+    if (error) {
+        showToast("Erro ao eliminar evento.", "error");
+        return;
+    }
+    closeModalEl(detailModal);
+    showToast("Evento eliminado.");
+    await loadEventsFromSupabase();
+};
+
+// ==========================================
+// MODAL DE DETALHES, BILHETE QR, PARTILHA, REVIEWS E COMENTÁRIOS
+// ==========================================
+window.openEventDetails = async id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
     detailEventId = ev.id;
+    renderEventDetailsData(ev);
+    openModal(detailModal);
+    await Promise.all([loadEventAttendees(ev.id), loadEventComments(ev.id), loadEventReviews(ev.id)]);
+};
+
+function renderEventDetailsData(ev) {
     const cat = CATEGORIES[ev.category];
-    const past = isPast(ev);
     const enrolled = myEnrollments.has(String(ev.id));
+    const past = isPast(ev);
+    const isOwner = currentUser && (String(ev.creatorId) === String(currentUser.id) || isAdminAccount());
+
+    $("detailImage").src = ev.image || DEFAULT_IMAGE;
+    $("detailImage").onerror = function() { this.onerror = null; this.src = DEFAULT_IMAGE; };
+    $("detailCategory").textContent = cat ? `${cat.emoji} ${cat.label}` : ev.category;
+    $("detailPriceBadge").textContent = `💶 ${ev.price || "Gratuito"}`;
+
+    const isNormalUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
+    const isAdmin = ev.creatorRole === "admin" || ev.creatorType === "Admin";
+    const badgeIcon = isAdmin ? "🛡️" : (isNormalUser ? "👤" : "🏢");
+    const prefix = !isNormalUser && !isAdmin && ev.creatorType ? `${ev.creatorType} · ` : "";
+    const verifiedHtml = !isNormalUser && !isAdmin && ev.creatorVerified
+        ? `<span class="verified-check" title="Entidade Verificada">✓</span>`
+        : "";
+
+    $("detailOrganizer").className = `organizer-tag${isAdmin ? " admin-tag" : (isNormalUser ? " user-tag" : "")}`;
+    $("detailOrganizer").innerHTML = `${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName || "Comunidade")}${verifiedHtml}`;
+
+    updateDetailSocialButton(ev);
+
+    $("detailTitle").textContent = ev.name;
+    $("detailDescription").textContent = ev.description || "Sem descrição.";
+    $("detailDateTime").textContent = formatEventDate(ev);
+    $("detailLocation").textContent = `${ev.location}, ${districtLabel(ev.distrito)}`;
+
     const currentEnrolled = ev.enrolled || 0;
     const max = ev.maxParticipants;
     const isFull = max && currentEnrolled >= max;
+    $("detailVacancies").textContent = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
 
-    const imgEl = $("detailImage");
-    imgEl.src = ev.image || DEFAULT_IMAGE;
-    imgEl.onerror = () => { imgEl.src = DEFAULT_IMAGE; };
-
-    $("detailCategory").textContent = cat ? `${cat.emoji} ${cat.label}` : ev.category;
-    $("detailPriceBadge").textContent = `🎟️ ${ev.price || "Gratuito"}`;
-
-    const orgEl = $("detailOrganizer");
-    if (ev.creatorName) {
-        const isNormal = ev.creatorType === "Utilizador";
-        orgEl.textContent = `${isNormal ? "👤" : "🏢"} ${ev.creatorName}`;
-        orgEl.classList.toggle("user-tag", isNormal);
-        orgEl.classList.remove("hidden");
+    const extBanner = $("detailExternalLink");
+    if (ev.externalUrl) {
+        extBanner.href = ev.externalUrl.startsWith("http") ? ev.externalUrl : `https://${ev.externalUrl}`;
+        extBanner.classList.remove("hidden");
     } else {
-        orgEl.classList.add("hidden");
-    }
-
-    updateDetailFollowButton(ev.creatorId);
-
-    $("detailTitle").textContent = ev.name;
-    $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
-    $("detailDateTime").textContent = formatEventDate(ev);
-    $("detailLocation").textContent = `${ev.location} · ${districtLabel(ev.distrito)}`;
-    $("detailVacancies").textContent = max ? `${currentEnrolled} / ${max} vagas` : `${currentEnrolled} inscritos (ilimitado)`;
-
-    const extLink = $("detailExternalLink");
-    const safeUrl = sanitizeUrl(ev.externalUrl);
-    if (safeUrl) {
-        extLink.href = safeUrl;
-        extLink.classList.remove("hidden");
-    } else {
-        extLink.classList.add("hidden");
+        extBanner.classList.add("hidden");
     }
 
     const enrollBtn = $("detailEnrollBtn");
+    enrollBtn.className = "register-btn";
     enrollBtn.disabled = false;
-    enrollBtn.classList.remove("registered");
+
     if (past) {
-        enrollBtn.textContent = "Evento terminado";
+        enrollBtn.textContent = "Terminado";
         enrollBtn.disabled = true;
     } else if (enrolled) {
         enrollBtn.textContent = "✓ Inscrito (Cancelar)";
@@ -2898,300 +3711,245 @@ async function openEventDetails(id) {
     } else {
         enrollBtn.textContent = "✋ Inscrever-me";
     }
+    enrollBtn.onclick = () => window.toggleEnrollment(ev.id);
 
-    $("detailTicketBtn").classList.toggle("hidden", !enrolled);
+    const ticketBtn = $("detailTicketBtn");
+    ticketBtn.classList.toggle("hidden", !enrolled);
+    ticketBtn.onclick = () => openTicketModal(ev);
+
     $("detailCalendarBtn").href = buildGoogleCalendarUrl(ev);
     $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
-    $("detailOwnerActions").classList.toggle("hidden", !canManageEvent(ev));
 
-    const reviewsSection = $("detailReviewsSection");
-    reviewsSection.classList.toggle("hidden", !past);
-    $("reviewForm").classList.toggle("hidden", !past || !enrolled);
-
-    openModal(detailModal);
-    await Promise.all([
-        loadEventAttendees(ev),
-        loadEventComments(ev.id),
-        loadEventReviews(ev.id)
-    ]);
+    $("detailOwnerActions").classList.toggle("hidden", !isOwner);
+    $("detailReviewsSection").classList.toggle("hidden", !past);
+    $("reviewForm").classList.toggle("hidden", !enrolled);
 }
 
-window.openEventDetails = openEventDetails;
-
-$("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
-detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) closeModalEl(detailModal); });
-
-$("detailFollowBtn").addEventListener("click", () => {
-    const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (ev && ev.creatorId) toggleFollowOrganizer(ev.creatorId, ev.creatorName);
-});
-
-$("detailEnrollBtn").addEventListener("click", () => {
-    if (detailEventId) toggleEnrollment(detailEventId);
-});
-
-$("detailTicketBtn").addEventListener("click", () => {
-    if (detailEventId) openEventTicket(detailEventId);
-});
-
+// Partilhar Link Direto
 $("detailShareBtn").addEventListener("click", async () => {
-    if (!detailEventId) return;
-    const shareUrl = `${window.location.origin}${window.location.pathname}?evento=${detailEventId}`;
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (!ev) return;
+    const url = `${window.location.origin}${window.location.pathname}?event=${ev.id}`;
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: ev.name, text: `Vê este evento no LocalSpot: ${ev.name}`, url });
+            return;
+        } catch (e) {}
+    }
     try {
-        await navigator.clipboard.writeText(shareUrl);
+        await navigator.clipboard.writeText(url);
         showToast("Link do evento copiado!", "success");
     } catch (e) {
-        showToast(shareUrl);
+        showToast(url);
     }
 });
 
+// Download .ICS
 $("detailIcsBtn").addEventListener("click", () => {
     const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (ev) downloadEventICS(ev);
+    if (!ev) return;
+    const start = eventDateTime(ev);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+    const ics = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//LocalSpot//Eventos//PT",
+        "BEGIN:VEVENT",
+        `UID:localspot-${ev.id}@localspot.pt`,
+        `DTSTAMP:${fmt(new Date())}`,
+        `DTSTART:${fmt(start)}`,
+        `DTEND:${fmt(end)}`,
+        `SUMMARY:${ev.name}`,
+        `DESCRIPTION:${(ev.description || "").replace(/\n/g, " ")}`,
+        `LOCATION:${ev.location}, ${districtLabel(ev.distrito)}`,
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${ev.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`;
+    a.click();
 });
 
+// Denunciar Evento
 $("detailReportBtn").addEventListener("click", () => {
-    if (!detailEventId) return;
-    $("reportForm").reset();
+    $("reportDetails").value = "";
     openModal(reportModal);
 });
 
-$("detailEditBtn").addEventListener("click", () => {
-    if (!detailEventId) return;
-    closeModalEl(detailModal);
-    startEditEvent(detailEventId);
-});
-
-$("detailDuplicateBtn").addEventListener("click", () => {
-    if (!detailEventId) return;
-    closeModalEl(detailModal);
-    startDuplicateEvent(detailEventId);
-});
-
-$("detailDeleteBtn").addEventListener("click", () => {
-    if (detailEventId) deleteEvent(detailEventId);
-});
-
-// ---------- Bilhete Digital / QR Code ----------
-function drawDeterministicQR(canvas, seedText) {
-    const ctx = canvas.getContext("2d");
-    const size = canvas.width;
-    const cells = 21;
-    const cellSize = Math.floor(size / cells);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = "#0f172a";
-
-    let hash = 0;
-    for (let i = 0; i < seedText.length; i++) {
-        hash = ((hash << 5) - hash + seedText.charCodeAt(i)) | 0;
-    }
-
-    const drawFinder = (ox, oy) => {
-        ctx.fillRect(ox * cellSize, oy * cellSize, 7 * cellSize, 7 * cellSize);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect((ox + 1) * cellSize, (oy + 1) * cellSize, 5 * cellSize, 5 * cellSize);
-        ctx.fillStyle = "#0f172a";
-        ctx.fillRect((ox + 2) * cellSize, (oy + 2) * cellSize, 3 * cellSize, 3 * cellSize);
-    };
-
-    drawFinder(0, 0);
-    drawFinder(cells - 7, 0);
-    drawFinder(0, cells - 7);
-
-    for (let r = 0; r < cells; r++) {
-        for (let c = 0; c < cells; c++) {
-            const inFinder = (r < 8 && c < 8) || (r < 8 && c >= cells - 8) || (r >= cells - 8 && c < 8);
-            if (inFinder) continue;
-            hash = (hash * 1664525 + 1013904223) | 0;
-            if ((hash >>> 24) & 1) {
-                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
-            }
-        }
-    }
-}
-
-function openEventTicket(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !currentUser || !currentProfile) return;
-
-    const code = `LS-${ev.id}-${currentUser.id.slice(0, 6).toUpperCase()}`;
-    $("ticketEventName").textContent = ev.name;
-    $("ticketDateTime").textContent = `📅 ${formatEventDate(ev)}`;
-    $("ticketLocation").textContent = `📍 ${ev.location} · ${districtLabel(ev.distrito)}`;
-    $("ticketCodeText").textContent = code;
-    $("ticketUserName").textContent = `Participante: ${currentProfile.full_name}`;
-    drawDeterministicQR($("ticketQrCanvas"), code);
-    openModal(ticketModal);
-}
-
-window.openEventTicket = openEventTicket;
-
-$("closeTicket").addEventListener("click", () => closeModalEl(ticketModal));
-ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) closeModalEl(ticketModal); });
-
-// ---------- Denúncias ----------
 $("closeReport").addEventListener("click", () => closeModalEl(reportModal));
 reportModal.addEventListener("mousedown", e => { if (e.target === reportModal) closeModalEl(reportModal); });
 
 $("reportForm").addEventListener("submit", async e => {
     e.preventDefault();
-    if (!currentUser || !currentProfile || !detailEventId) return;
     const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (!ev) return;
+    if (!ev || !currentUser) return;
 
-    const reason = `${$("reportReason").value}${ $("reportDetails").value.trim() ? " — " + $("reportDetails").value.trim() : "" }`;
-    const { error } = await supabaseClient.from("reports").insert([{
+    await supabaseClient.from("event_reports").insert([{
         event_id: ev.id,
         event_name: ev.name,
         reporter_id: currentUser.id,
-        reporter_name: currentProfile.full_name,
-        reason
+        reason: $("reportReason").value,
+        details: $("reportDetails").value.trim()
     }]);
 
-    if (error) {
-        showToast("Erro ao enviar denúncia.", "error");
+    closeModalEl(reportModal);
+    showToast("Denúncia enviada à moderação.", "success");
+});
+
+$("detailEditBtn").addEventListener("click", () => { if (detailEventId) window.openEditEventModal(detailEventId); });
+$("detailDuplicateBtn").addEventListener("click", () => { if (detailEventId) window.duplicateEvent(detailEventId); });
+$("detailDeleteBtn").addEventListener("click", () => { if (detailEventId) window.deleteEvent(detailEventId); });
+
+function openTicketModal(ev) {
+    const code = `LS-${String(ev.id).slice(0, 4).toUpperCase()}-${currentUser.id.slice(0, 6).toUpperCase()}`;
+    $("ticketEventName").textContent = ev.name;
+    $("ticketDateTime").textContent = `📅 ${formatEventDate(ev)}`;
+    $("ticketLocation").textContent = `📍 ${ev.location} · ${districtLabel(ev.distrito)}`;
+    $("ticketCodeText").textContent = code;
+    $("ticketUserName").textContent = `Titular: ${currentProfile.full_name}`;
+
+    const qrData = encodeURIComponent(`LOCALSPOT|${code}|${ev.name}|${currentProfile.full_name}`);
+    $("ticketQrCanvas").innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${qrData}" alt="QR Code Bilhete" width="160" height="160">`;
+
+    openModal(ticketModal);
+}
+
+$("closeTicket").addEventListener("click", () => closeModalEl(ticketModal));
+ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) closeModalEl(ticketModal); });
+
+function buildGoogleCalendarUrl(ev) {
+    const start = eventDateTime(ev);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const params = new URLSearchParams({
+        action: "TEMPLATE",
+        text: ev.name,
+        dates: `${fmt(start)}/${fmt(end)}`,
+        details: ev.description || "",
+        location: `${ev.location}, ${districtLabel(ev.distrito)}`
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+async function loadEventAttendees(eventId) {
+    const listEl = $("detailAttendeesList");
+    const exportBtn = $("exportCsvBtn");
+    listEl.innerHTML = `<span class="muted" style="font-size:12px;">A carregar participantes...</span>`;
+    exportBtn.classList.add("hidden");
+
+    const { data, error } = await supabaseClient
+        .from("enrollments")
+        .select("user_id, user_name, user_email")
+        .eq("event_id", eventId);
+
+    if (error || !data || data.length === 0) {
+        listEl.innerHTML = `<span class="muted" style="font-size:12.5px;">Ainda sem inscritos. Sê o primeiro!</span>`;
         return;
     }
 
-    closeModalEl(reportModal);
-    showToast("Denúncia enviada à equipa de moderação.", "success");
-});
+    const ev = events.find(x => String(x.id) === String(eventId));
+    const isOwner = currentUser && ev && (String(ev.creatorId) === String(currentUser.id) || isAdminAccount());
 
-// ---------- Avaliações (Estrelas) ----------
+    if (isOwner) {
+        exportBtn.classList.remove("hidden");
+        exportBtn.onclick = () => exportAttendeesCsv(ev.name, data);
+    }
+
+    const friendIdSet = new Set(window.friendsList.map(f => String(f.id)));
+    listEl.innerHTML = data.map(row => {
+        const isFriend = friendIdSet.has(String(row.user_id));
+        return `<span class="attendee-pill${isFriend ? " friend-attendee" : ""}">${isFriend ? "👊" : "👤"} ${escapeHTML(row.user_name || "Participante")}</span>`;
+    }).join("");
+}
+
+function exportAttendeesCsv(eventName, rows) {
+    const csv = ["Nome,Email", ...rows.map(r => `"${(r.user_name || "").replace(/"/g, '""')}","${r.user_email || ""}"`)].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `inscritos-${eventName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
+    a.click();
+}
+
 async function loadEventReviews(eventId) {
-    const ratingBadge = $("detailRatingBadge");
     const listEl = $("detailReviewsList");
+    const badgeEl = $("detailRatingBadge");
+    badgeEl.classList.add("hidden");
 
     const { data, error } = await supabaseClient
-        .from("reviews")
+        .from("event_reviews")
         .select("*")
         .eq("event_id", eventId)
         .order("created_at", { ascending: false });
 
     if (error || !data || data.length === 0) {
-        ratingBadge.classList.add("hidden");
-        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem avaliações para este evento.</p>`;
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem avaliações.</p>`;
         return;
     }
 
-    const avg = (data.reduce((acc, r) => acc + r.rating, 0) / data.length).toFixed(1);
-    ratingBadge.textContent = `⭐ ${avg} (${data.length})`;
-    ratingBadge.classList.remove("hidden");
+    const avg = (data.reduce((s, r) => s + r.rating, 0) / data.length).toFixed(1);
+    badgeEl.textContent = `⭐ ${avg} (${data.length})`;
+    badgeEl.classList.remove("hidden");
 
     listEl.innerHTML = data.map(r => `
         <div class="comment-item">
             <div class="comment-head">
-                <strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong>
+                <strong>${escapeHTML(r.user_name)}</strong>
+                <span>${"⭐".repeat(r.rating)}</span>
             </div>
-            ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
+            <p>${escapeHTML(r.comment || "")}</p>
         </div>
     `).join("");
 }
 
 $("reviewForm").addEventListener("submit", async e => {
     e.preventDefault();
-    if (!currentUser || !currentProfile || !detailEventId) return;
-
-    const rating = Number($("reviewRating").value);
+    if (!detailEventId || !currentUser) return;
+    const rating = parseInt($("reviewRating").value, 10);
     const comment = $("reviewCommentInput").value.trim();
 
-    const { error } = await supabaseClient.from("reviews").upsert({
+    await supabaseClient.from("event_reviews").insert([{
         event_id: detailEventId,
         user_id: currentUser.id,
         user_name: currentProfile.full_name,
         rating,
         comment
-    }, { onConflict: "event_id,user_id" });
-
-    if (error) {
-        showToast("Erro ao guardar avaliação.", "error");
-        return;
-    }
+    }]);
 
     $("reviewCommentInput").value = "";
-    showToast("Avaliação registada!", "success");
+    showToast("Avaliação enviada!", "success");
     await loadEventReviews(detailEventId);
 });
 
-// ---------- Lista de Participantes ----------
-async function loadEventAttendees(ev) {
-    const box = $("detailAttendeesList");
-    const exportBtn = $("exportCsvBtn");
-    box.innerHTML = `<span class="muted" style="font-size:12.5px;">A carregar inscritos...</span>`;
+async function loadEventComments(eventId) {
+    const listEl = $("detailCommentsList");
+    listEl.innerHTML = `<p class="muted" style="font-size:12px;">A carregar comentários...</p>`;
 
     const { data, error } = await supabaseClient
-        .from("enrollments")
-        .select("user_id, user_name")
-        .eq("event_id", ev.id)
+        .from("event_comments")
+        .select("*")
+        .eq("event_id", eventId)
         .order("created_at", { ascending: true });
 
     if (error || !data || data.length === 0) {
-        box.innerHTML = `<span class="muted" style="font-size:12.5px;">Ainda ninguém se inscreveu. Sê o primeiro!</span>`;
-        exportBtn.classList.add("hidden");
-        return;
-    }
-
-    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
-    const attendeeIds = data.map(r => r.user_id).filter(Boolean);
-    let avatarMap = new Map();
-    if (attendeeIds.length > 0) {
-        const { data: profs } = await supabaseClient
-            .from("profiles")
-            .select("id, avatar_url, full_name, role")
-            .in("id", attendeeIds);
-        if (profs) avatarMap = new Map(profs.map(p => [String(p.id), p]));
-    }
-
-    box.innerHTML = data.map(r => {
-        const isFriend = friendIds.has(String(r.user_id));
-        const prof = avatarMap.get(String(r.user_id)) || { full_name: r.user_name };
-        const miniAvatar = renderAvatarChip(prof, "sm");
-        return `<span class="attendee-pill${isFriend ? " friend-attendee" : ""}">${miniAvatar} ${escapeHTML(r.user_name)}${isFriend ? " (Amigo)" : ""}</span>`;
-    }).join("");
-
-    if (canManageEvent(ev)) {
-        exportBtn.classList.remove("hidden");
-        exportBtn.onclick = () => exportAttendeesCSV(ev, data);
-    } else {
-        exportBtn.classList.add("hidden");
-    }
-}
-
-function exportAttendeesCSV(ev, rows) {
-    const csv = "Nome do Participante\n" + rows.map(r => `"${r.user_name.replace(/"/g, '""')}"`).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `inscritos_${normalizeText(ev.name).replace(/\s+/g, "_")}.csv`;
-    link.click();
-}
-
-// ---------- Comentários & Perguntas ----------
-async function loadEventComments(eventId) {
-    const listEl = $("detailCommentsList");
-    listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A carregar comentários...</p>`;
-
-    const { data, error } = await supabaseClient
-        .from("comments")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-
-    if (error || !data || data.length === 0) {
-        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem comentários.</p>`;
+        listEl.innerHTML = `<p class="muted" style="font-size:12.5px;">Ainda sem comentários. Deixa uma dúvida ou sugestão!</p>`;
         return;
     }
 
     listEl.innerHTML = data.map(c => {
-        const canDel = currentProfile && (currentProfile.role === "admin" || c.user_id === currentProfile.id);
+        const canDel = currentUser && (String(c.user_id) === String(currentUser.id) || isAdminAccount());
         return `
             <div class="comment-item">
                 <div class="comment-head">
-                    <strong>${escapeHTML(c.user_name)}</strong>
+                    <strong>${escapeHTML(c.user_name || "Utilizador")}</strong>
                     ${canDel ? `<button type="button" class="delete-btn" onclick="window.deleteComment(${c.id})">Apagar</button>` : ""}
                 </div>
-                <p>${escapeHTML(c.content)}</p>
+                <p>${escapeHTML(c.comment)}</p>
             </div>
         `;
     }).join("");
@@ -3199,17 +3957,16 @@ async function loadEventComments(eventId) {
 
 $("commentForm").addEventListener("submit", async e => {
     e.preventDefault();
-    if (!currentUser || !currentProfile || !detailEventId) return;
-
+    if (!detailEventId || !currentUser || !currentProfile) return;
     const input = $("commentInput");
-    const content = input.value.trim();
-    if (!content) return;
+    const text = input.value.trim();
+    if (!text) return;
 
-    const { error } = await supabaseClient.from("comments").insert([{
+    const { error } = await supabaseClient.from("event_comments").insert([{
         event_id: detailEventId,
         user_id: currentUser.id,
         user_name: currentProfile.full_name,
-        content
+        comment: text
     }]);
 
     if (error) {
@@ -3218,12 +3975,12 @@ $("commentForm").addEventListener("submit", async e => {
     }
 
     const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (ev && ev.creatorId) {
+    if (ev) {
         await createNotification(
             ev.creatorId,
             ev.id,
-            "Novo comentário no teu evento",
-            `${currentProfile.full_name} comentou em "${ev.name}": "${content.slice(0, 50)}"`
+            "Novo comentário no teu evento 💬",
+            `${currentProfile.full_name}: "${text.slice(0, 60)}"`
         );
     }
 
@@ -3232,445 +3989,136 @@ $("commentForm").addEventListener("submit", async e => {
 });
 
 window.deleteComment = async commentId => {
-    await supabaseClient.from("comments").delete().eq("id", commentId);
+    await supabaseClient.from("event_comments").delete().eq("id", commentId);
     if (detailEventId) await loadEventComments(detailEventId);
 };
 
-// ---------- Controlos de Pesquisa & Filtros ----------
-let searchDebounce;
-searchInput.addEventListener("input", () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { state.search = searchInput.value; filterEvents(); }, 180);
+$("closeDetail").addEventListener("click", () => {
+    detailEventId = null;
+    closeModalEl(detailModal);
+});
+detailModal.addEventListener("mousedown", e => {
+    if (e.target === detailModal) {
+        detailEventId = null;
+        closeModalEl(detailModal);
+    }
 });
 
+// ==========================================
+// FILTROS E CONTROLOS GERAIS
+// ==========================================
+searchInput.addEventListener("input", () => { state.search = searchInput.value; filterEvents(); });
+
 categoryChips.addEventListener("click", e => {
-    const chip = e.target.closest(".chip");
-    if (!chip) return;
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
     categoryChips.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
-    chip.classList.add("active");
-    state.category = chip.dataset.category;
+    btn.classList.add("active");
+    state.category = btn.dataset.category;
     filterEvents();
 });
 
 districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents(); });
 periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents(); });
+sortFilter.addEventListener("change", () => { state.sort = sortFilter.value; filterEvents(); });
 
-radiusSlider.addEventListener("input", async () => {
+radiusSlider.addEventListener("input", () => {
     state.radius = Number(radiusSlider.value);
     radiusValue.textContent = state.radius >= 100 ? "Sem limite" : `${state.radius} km`;
-
-    if (state.radius < 100 && !userPosition) {
-        try {
-            await locateUser();
-            enableDistanceSort();
-        } catch (e) {}
-    }
     filterEvents();
 });
-
-sortFilter.addEventListener("change", () => { state.sort = sortFilter.value; filterEvents(); });
 
 favoritesToggle.addEventListener("click", () => {
     state.onlyFavorites = !state.onlyFavorites;
     favoritesToggle.classList.toggle("on", state.onlyFavorites);
-    favoritesToggle.setAttribute("aria-pressed", String(state.onlyFavorites));
+    favoritesToggle.textContent = state.onlyFavorites ? "★ Favoritos" : "☆ Favoritos";
     filterEvents();
 });
 
 freeOnlyToggle.addEventListener("click", () => {
     state.onlyFree = !state.onlyFree;
     freeOnlyToggle.classList.toggle("on", state.onlyFree);
-    freeOnlyToggle.setAttribute("aria-pressed", String(state.onlyFree));
     filterEvents();
 });
 
 followingOnlyToggle.addEventListener("click", () => {
     state.onlyFollowing = !state.onlyFollowing;
     followingOnlyToggle.classList.toggle("on", state.onlyFollowing);
-    followingOnlyToggle.setAttribute("aria-pressed", String(state.onlyFollowing));
     filterEvents();
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    state.search = ""; state.category = "all"; state.district = "all";
-    state.period = "all"; state.radius = 100; state.onlyFavorites = false;
-    state.onlyFree = false; state.onlyFollowing = false;
+    state.search = "";
+    state.category = "all";
+    state.district = "all";
+    state.period = "all";
+    state.radius = 100;
+    state.sort = "date";
+    state.onlyFavorites = false;
+    state.onlyFree = false;
+    state.onlyFollowing = false;
 
-    searchInput.value = ""; districtFilter.value = "all"; periodFilter.value = "all";
-    radiusSlider.value = 100; radiusValue.textContent = "Sem limite";
+    searchInput.value = "";
+    districtFilter.value = "all";
+    periodFilter.value = "all";
+    sortFilter.value = "date";
+    radiusSlider.value = "100";
+    radiusValue.textContent = "Sem limite";
     favoritesToggle.classList.remove("on");
+    favoritesToggle.textContent = "☆ Favoritos";
     freeOnlyToggle.classList.remove("on");
     followingOnlyToggle.classList.remove("on");
     categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.category === "all"));
-    filterEvents({ fit: true });
+
+    filterEvents();
 });
 
-function enableDistanceSort() {
-    const opt = sortFilter.querySelector('option[value="distance"]');
-    if (opt) opt.disabled = false;
-}
-
 locationButton.addEventListener("click", async () => {
+    const labelSpan = locationButton.querySelector("span");
     locationButton.disabled = true;
-    locationButton.textContent = "A localizar...";
+    if (labelSpan) labelSpan.textContent = "A localizar...";
     try {
         await locateUser();
-        enableDistanceSort();
-        if (window.innerWidth <= 820) setMobileView("map");
-        showToast("Localização encontrada!");
+        sortFilter.value = "distance";
+        state.sort = "distance";
         filterEvents();
+        showToast("Localização atualizada!", "success");
     } catch (err) {
         showToast(err.message, "error");
     } finally {
         locationButton.disabled = false;
-        locationButton.textContent = "📍 Perto de mim";
+        if (labelSpan) labelSpan.textContent = "Perto de mim";
     }
 });
 
-// ==========================================
-// ESCOLHA DE LOCAL NO MAPA, CRIAÇÃO, EDIÇÃO E DUPLICAÇÃO
-// ==========================================
-function beginPickOnMap() {
-    closeModalEl(modal);
-    pickBanner.classList.remove("hidden");
-    $("pickSearchInput").value = "";
-    if (window.innerWidth <= 820) setMobileView("map");
-
-    pickLocation(latlng => {
-        pickBanner.classList.add("hidden");
-        setPickedLocation(latlng);
-        openModal(modal);
-    });
-}
-
-$("cancelPickBtn").addEventListener("click", () => {
-    cancelPick();
-    pickBanner.classList.add("hidden");
-});
-
-$("pickSearchBtn").addEventListener("click", searchPlaceForPick);
-$("pickSearchInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        searchPlaceForPick();
-    }
-});
-
-async function searchPlaceForPick() {
-    const q = $("pickSearchInput").value.trim();
-    if (!q) return;
-    const btn = $("pickSearchBtn");
-    btn.disabled = true;
-    btn.textContent = "...";
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q + ", Portugal")}`);
-        const data = await res.json();
-        if (data && data.length > 0) {
-            const lat = parseFloat(data[0].lat);
-            const lng = parseFloat(data[0].lon);
-            flyToCoordinates(lng, lat, 15);
-            showToast(`Mapa centrado em: ${data[0].display_name.split(",")[0]}`);
-        } else {
-            showToast("Local não encontrado.", "error");
-        }
-    } catch (e) {
-        showToast("Erro ao pesquisar local.", "error");
-    } finally {
-        btn.disabled = false;
-        btn.textContent = "Ir";
-    }
-}
-
-addEventButton.addEventListener("click", () => {
-    editingEventId = null;
-    $("eventModalTitle").textContent = "Adicionar Novo Evento";
-    $("eventSubmitBtn").textContent = "Publicar Evento";
-    eventForm.reset();
-    imagePreview.classList.add("hidden");
-    imagePreview.removeAttribute("src");
-    formError.classList.add("hidden");
-    beginPickOnMap();
-});
-
-changeLocationButton.addEventListener("click", beginPickOnMap);
-
-function startEditEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev) return;
-
-    editingEventId = ev.id;
-    $("eventModalTitle").textContent = "Editar Evento";
-    $("eventSubmitBtn").textContent = "Guardar Alterações";
-    fillEventFormFromObject(ev);
-    openModal(modal);
-}
-
-function startDuplicateEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev) return;
-
-    editingEventId = null;
-    $("eventModalTitle").textContent = "Duplicar Evento";
-    $("eventSubmitBtn").textContent = "Publicar Cópia";
-    fillEventFormFromObject(ev, true);
-    openModal(modal);
-}
-
-function fillEventFormFromObject(ev, isDuplicate = false) {
-    $("eventName").value = isDuplicate ? `${ev.name} (Cópia)` : ev.name;
-    $("eventCategory").value = ev.category;
-    $("eventDate").value = ev.date;
-    $("eventTime").value = ev.time;
-    $("eventLocation").value = ev.location;
-    $("eventFormDistrict").value = ev.distrito;
-    $("eventMaxParticipants").value = ev.maxParticipants || "";
-    $("eventPrice").value = ev.price || "Gratuito";
-    $("eventExternalUrl").value = ev.externalUrl || "";
-    $("eventDescription").value = ev.description || "";
-    eventImageInput.value = "";
-    formError.classList.add("hidden");
-
-    if (ev.image) {
-        imagePreview.src = ev.image;
-        imagePreview.classList.remove("hidden");
-    } else {
-        imagePreview.classList.add("hidden");
-    }
-
-    setPickedLocation({ lat: ev.latitude, lng: ev.longitude });
-}
-
-window.startEditEvent = startEditEvent;
-
-function setPickedLocation(latlng) {
-    pendingLocation = latlng;
-    setTempMarker(latlng);
-    coordsText.textContent = `📍 ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
-    coordsText.classList.add("ok");
-}
-
-function closeEventModal() {
-    closeModalEl(modal);
-    clearTempMarker();
-    pendingLocation = null;
-    editingEventId = null;
-}
-
-closeModal.addEventListener("click", closeEventModal);
-modal.addEventListener("mousedown", e => { if (e.target === modal) closeEventModal(); });
-
-eventImageInput.addEventListener("change", () => {
-    const file = eventImageInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-        imagePreview.src = reader.result;
-        imagePreview.classList.remove("hidden");
-    };
-    reader.readAsDataURL(file);
-});
-
-async function uploadEventImage(file) {
-    const { blob, dataUrl } = await resizeImageToBlob(file);
-    try {
-        const fileName = `${currentUser.id}/${Date.now()}.jpg`;
-        const { error } = await supabaseClient.storage
-            .from("event-images")
-            .upload(fileName, blob, { contentType: "image/jpeg", upsert: true });
-
-        if (!error) {
-            const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
-            if (data?.publicUrl) return data.publicUrl;
-        }
-    } catch (e) {}
-    return dataUrl;
-}
-
-function resizeImageToBlob(file, maxWidth = 900) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
-        reader.onload = () => {
-            const img = new Image();
-            img.onerror = () => reject(new Error("Ficheiro inválido."));
-            img.onload = () => {
-                const scale = Math.min(1, maxWidth / img.width);
-                const canvas = document.createElement("canvas");
-                canvas.width = Math.round(img.width * scale);
-                canvas.height = Math.round(img.height * scale);
-                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-                canvas.toBlob(blob => resolve({ blob, dataUrl }), "image/jpeg", 0.8);
-            };
-            img.src = reader.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
-eventForm.addEventListener("submit", async e => {
-    e.preventDefault();
-    formError.classList.add("hidden");
-
-    const name = $("eventName").value.trim();
-    const category = $("eventCategory").value;
-    const date = $("eventDate").value;
-    const time = $("eventTime").value;
-    const location = $("eventLocation").value.trim();
-    const distrito = $("eventFormDistrict").value;
-    const description = $("eventDescription").value.trim();
-    const rawMax = $("eventMaxParticipants").value;
-    const maxParticipants = rawMax ? parseInt(rawMax, 10) : null;
-    const price = $("eventPrice").value.trim() || "Gratuito";
-    const externalUrl = sanitizeUrl($("eventExternalUrl").value);
-
-    const errors = [];
-    if (!name) errors.push("Indica o nome do evento.");
-    if (!category) errors.push("Escolhe uma categoria.");
-    if (!date) errors.push("Indica a data.");
-    if (!time) errors.push("Indica a hora.");
-    if (!location) errors.push("Indica a morada ou local.");
-    if (!distrito) errors.push("Escolhe um distrito.");
-    if (!pendingLocation) errors.push("Escolhe a localização no mapa.");
-
-    if (errors.length) {
-        formError.textContent = errors.join(" ");
-        formError.classList.remove("hidden");
-        return;
-    }
-
-    const submitBtn = $("eventSubmitBtn");
-    submitBtn.disabled = true;
-    submitBtn.textContent = "A guardar...";
-
-    try {
-        const existingEv = editingEventId ? events.find(x => String(x.id) === String(editingEventId)) : null;
-        let image = existingEv ? existingEv.image : DEFAULT_IMAGE;
-
-        const file = eventImageInput.files[0];
-        if (file) {
-            image = await uploadEventImage(file);
-        }
-
-        const payload = {
-            name,
-            category,
-            date,
-            time,
-            location,
-            distrito,
-            description,
-            image,
-            latitude: pendingLocation.lat,
-            longitude: pendingLocation.lng,
-            max_participants: maxParticipants,
-            price,
-            external_url: externalUrl
-        };
-
-        if (editingEventId) {
-            const { data, error } = await supabaseClient
-                .from("events")
-                .update(payload)
-                .eq("id", editingEventId)
-                .select()
-                .single();
-
-            if (error) throw error;
-            const idx = events.findIndex(x => String(x.id) === String(editingEventId));
-            if (idx !== -1) events[idx] = mapDbEvent(data);
-
-            closeEventModal();
-            filterEvents();
-            showToast("Evento atualizado com sucesso!", "success");
-        } else {
-            payload.enrolled = 0;
-            payload.creator_id = currentProfile ? currentProfile.id : null;
-            payload.creator_name = currentProfile ? currentProfile.full_name : null;
-            payload.creator_type = currentProfile
-                ? (currentProfile.role === "business" ? (currentProfile.business_type || "Domínio Público") : "Utilizador")
-                : null;
-
-            const { data, error } = await supabaseClient
-                .from("events")
-                .insert([payload])
-                .select()
-                .single();
-
-            if (error) throw error;
-            const created = mapDbEvent(data);
-            events.push(created);
-
-            if (currentProfile) {
-                const { data: followers } = await supabaseClient
-                    .from("follows")
-                    .select("follower_id")
-                    .eq("following_id", currentProfile.id);
-
-                if (followers && followers.length > 0) {
-                    const notifs = followers.map(f => ({
-                        user_id: f.follower_id,
-                        event_id: created.id,
-                        title: `Novo evento de ${currentProfile.full_name}`,
-                        message: `${created.name} · ${formatEventDate(created)}`
-                    }));
-                    await supabaseClient.from("notifications").insert(notifs);
-                }
-            }
-
-            closeEventModal();
-            filterEvents();
-            openEventOnMap(created.id);
-            showToast("Evento publicado no mapa!", "success");
-        }
-    } catch (err) {
-        formError.textContent = err.message || "Erro ao guardar evento.";
-        formError.classList.remove("hidden");
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = editingEventId ? "Guardar Alterações" : "Publicar Evento";
-    }
-});
-
-// ---------- Controlo de Modais e Acertos de Início ----------
-let lastFocused = null;
-function openModal(el) {
-    lastFocused = document.activeElement;
-    el.classList.remove("hidden");
-    el.setAttribute("aria-hidden", "false");
-    const first = el.querySelector("input, select, textarea, button");
-    if (first) first.focus();
-}
-
-function closeModalEl(el) {
-    el.classList.add("hidden");
-    el.setAttribute("aria-hidden", "true");
-    if (lastFocused) lastFocused.focus();
-}
-
+// Sobre
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
 $("closeAbout").addEventListener("click", () => closeModalEl(aboutModal));
 aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) closeModalEl(aboutModal); });
 
+function checkSharedEventUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get("event");
+    if (sharedId) {
+        const ev = events.find(x => String(x.id) === String(sharedId));
+        if (ev) {
+            focusEvent(ev.id);
+            openEventDetails(ev.id);
+        }
+    }
+}
+
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if (!modal.classList.contains("hidden")) closeEventModal();
-    if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
-    if (!adminModal.classList.contains("hidden")) closeModalEl(adminModal);
-    if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
-    if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
-    if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
-    if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
-    if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
-    if ($("friendChatModal") && !$("friendChatModal").classList.contains("hidden")) {
-        activeChatFriendId = null;
-        closeModalEl($("friendChatModal"));
-    }
-    if (!pickBanner.classList.contains("hidden")) {
-        cancelPick();
-        pickBanner.classList.add("hidden");
-    }
+    [modal, aboutModal, detailModal, adminModal, profileModal, ticketModal, reportModal, $("friendsModal"), $("entityNetworkModal"), $("friendChatModal")].forEach(m => {
+        if (m && !m.classList.contains("hidden")) closeModalEl(m);
+    });
+    activeChatFriendId = null;
+    cancelPick();
+    pickBanner.classList.add("hidden");
 });
 
-setupControls();
+// ---------- Arranque ----------
+populateDistricts();
+buildCategoryChips();
 initAuth();
