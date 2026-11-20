@@ -368,13 +368,17 @@ function formatSpeed(speedKmh) {
     return `🚗 ${speedKmh} km/h`;
 }
 
+function isSocialEntityVerified(entity) {
+    return entity?.role === "business" && (entity?.is_verified === true || entity?.status_emoji === "✅");
+}
+
 function friendPopupHTML(friend) {
     const isBiz = friend.role === "business";
     const avatarInner = friend.avatar_url
         ? `<img src="${escapeHTML(friend.avatar_url)}" alt="" onerror="this.remove()">`
         : escapeHTML(getInitials(friend.full_name));
 
-    const verifiedBadge = isBiz && friend.is_verified
+    const verifiedBadge = isSocialEntityVerified(friend)
         ? `<span class="verified-check" title="Entidade Verificada">✓</span>`
         : "";
 
@@ -475,7 +479,7 @@ function showFriendsOnMap(friends) {
         const labelName = isBiz ? f.full_name : f.full_name.trim().split(/\s+/)[0];
         const isHangout = !isBiz && hangoutIds.has(f.id);
         const isBlurred = !isBiz && f.privacy_mode === "blurred";
-        const verifiedHtml = isBiz && f.is_verified ? `<span class="verified-check">✓</span>` : "";
+        const verifiedHtml = isSocialEntityVerified(f) ? `<span class="verified-check">✓</span>` : "";
 
         const bubbleText = isBiz
             ? `🏛️ ${escapeHTML(f.business_type || "Entidade")}`
