@@ -1,5 +1,5 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios + Amigos & Entidades Verificadas)
+// MAPA (MapLibre GL JS - Satélite 3D & Mapa Noturno 3D + Relevo + Edifícios + Amigos & Bump Radar)
 // ==========================================
 
 window.onEventMarkerClick = null;
@@ -146,6 +146,8 @@ const markerById = new Map();
 let friendMarkers = [];
 const friendMarkerById = new Map();
 let activeRadarCoords = null;
+let activeTrailCoords = [];
+let showTodayTrailOnMap = false;
 
 function ensureRadarLineLayer() {
     if (!map.getSource("friend-radar")) {
@@ -174,6 +176,60 @@ function ensureRadarLineLayer() {
             }
         });
     }
+
+    if (!map.getSource("my-today-trail")) {
+        map.addSource("my-today-trail", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] }
+        });
+        map.addLayer({
+            id: "my-today-trail-line",
+            type: "line",
+            source: "my-today-trail",
+            paint: {
+                "line-color": "#10b981",
+                "line-width": 5,
+                "line-opacity": 0.85
+            }
+        });
+    }
+    updateTrailLayerData();
+}
+
+function updateTrailLayerData() {
+    if (!map.getSource("my-today-trail")) return;
+    if (showTodayTrailOnMap && activeTrailCoords.length >= 2) {
+        map.getSource("my-today-trail").setData({
+            type: "Feature",
+            geometry: {
+                type: "LineString",
+                coordinates: activeTrailCoords
+            }
+        });
+    } else {
+        map.getSource("my-today-trail").setData({ type: "FeatureCollection", features: [] });
+    }
+}
+
+function setTodayTrailCoords(coords, visible) {
+    activeTrailCoords = coords || [];
+    if (typeof visible === "boolean") showTodayTrailOnMap = visible;
+    updateTrailLayerData();
+}
+
+function triggerMapBumpShockwave(lng, lat, emoji = "👊") {
+    if (typeof lng !== "number" || typeof lat !== "number") return;
+    const el = document.createElement("div");
+    el.className = "bump-shockwave-marker";
+    el.innerHTML = `
+        <div class="bump-shockwave-ring"></div>
+        <div class="bump-shockwave-core">${emoji}</div>
+    `;
+    const shockMarker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([lng, lat])
+        .addTo(map);
+
+    setTimeout(() => shockMarker.remove(), 1600);
 }
 
 function drawFriendRadarLine(fromLngLat, toLngLat) {
@@ -344,7 +400,8 @@ function getInitials(name) {
     return name.trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
 }
 
-function formatLastSeen(isoDate) {
+function formatLastSeen(isoDate, isLiveNow = false) {
+    if (isLiveNow) return "Online agora";
     if (!isoDate) return "Agora mesmo";
     const diffMin = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
     if (diffMin < 2) return "Online agora";
@@ -388,11 +445,13 @@ function friendPopupHTML(friend) {
             ? `📍 ${escapeHTML(friend.current_place)}`
             : `${friend.status_emoji || "📍"} ${escapeHTML(friend.status_text || "No LocalSpot")}`);
 
-    const seenLine = formatLastSeen(friend.last_seen);
+    const isLiveNow = typeof window.isFriendLiveOnline === "function" && window.isFriendLiveOnline(friend.id);
+    const seenLine = formatLastSeen(friend.last_seen, isLiveNow);
     const directions = `https://www.google.com/maps/dir/?api=1&destination=${friend.last_lat},${friend.last_lng}`;
     const batLabel = !isBiz ? formatBattery(friend.battery_level, friend.is_charging) : null;
     const spdLabel = !isBiz ? formatSpeed(friend.speed_kmh) : null;
     const bumps = friend.bump_count || 0;
+    const tier = !isBiz && typeof window.getFriendshipTier === "function" ? window.getFriendshipTier(bumps) : null;
 
     let distText = "";
     if (userPosition && typeof friend.last_lat === "number" && typeof friend.last_lng === "number") {
@@ -411,6 +470,7 @@ function friendPopupHTML(friend) {
                 <div class="avatar-circle lg${isBiz ? " business-avatar" : ""}">${avatarInner}</div>
                 <h4>${escapeHTML(friend.full_name)}${verifiedBadge}</h4>
                 <span class="friend-popup-status${isBiz ? " business-status" : ""}">${placeOrStatus}${privacyHint}</span>
+                ${tier ? `<div style="margin-top:4px;"><span class="friendship-tier-pill">${tier.badge}</span></div>` : ""}
             </div>
             ${!isBiz ? `
                 <div class="friend-telemetry-row">
@@ -422,13 +482,18 @@ function friendPopupHTML(friend) {
             <div class="friend-popup-meta">${isBiz ? "🏢 Sede / Localização" : "🟢 " + seenLine}${distText}</div>
             <div class="friend-bump-actions">
                 ${!isBiz
-                    ? `<button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Fazer Bump!</button>
-                       <button type="button" class="btn-wave" onclick="window.openFriendChat('${friend.id}')">💬 Chat / Bombs</button>`
+                    ? `<button type="button" class="btn-bump" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')">👊 Bump!</button>
+                       <button type="button" class="btn-wave" onclick="window.sendWhereAreYouPing('${friend.id}')">👀 Onde estás?</button>`
                     : `<button type="button" class="btn-wave" onclick="window.toggleFollowFromList('${friend.id}', '${escapeHTML(friend.full_name)}')">✓ A seguir</button>
                        <a href="${directions}" target="_blank" rel="noopener" class="btn-wave" style="text-decoration:none;">🧭 Direções</a>`
                 }
             </div>
-            ${!isBiz ? `<a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter com ${escapeHTML(friend.full_name.split(" ")[0])}</a>` : ""}
+            ${!isBiz ? `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
+                    <button type="button" class="btn-wave" style="width:100%;" onclick="window.openFriendChat('${friend.id}')">💬 Chat / Bombs</button>
+                    <a href="${directions}" target="_blank" rel="noopener" class="popup-dir-btn" style="width:100%;">🧭 Ir ter</a>
+                </div>
+            ` : ""}
         </div>`;
 }
 
@@ -475,7 +540,8 @@ function showFriendsOnMap(friends) {
             ? `<img src="${escapeHTML(f.avatar_url)}" alt="" onerror="this.remove()">`
             : escapeHTML(getInitials(f.full_name));
 
-        const isRecent = !isBiz && f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000;
+        const isLiveNow = !isBiz && typeof window.isFriendLiveOnline === "function" && window.isFriendLiveOnline(f.id);
+        const isRecent = isLiveNow || (!isBiz && f.last_seen && (Date.now() - new Date(f.last_seen).getTime()) < 30 * 60000);
         const labelName = isBiz ? f.full_name : f.full_name.trim().split(/\s+/)[0];
         const isHangout = !isBiz && hangoutIds.has(f.id);
         const isBlurred = !isBiz && f.privacy_mode === "blurred";
@@ -505,7 +571,7 @@ function showFriendsOnMap(friends) {
             offset: [0, -44],
             closeButton: false,
             focusAfterOpen: false,
-            maxWidth: '290px'
+            maxWidth: '295px'
         }).setHTML(friendPopupHTML(f));
 
         el.addEventListener("click", () => {
@@ -603,6 +669,9 @@ function locateUser() {
             pos => {
                 userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+                if (typeof window.recordExplorationPoint === "function") {
+                    window.recordExplorationPoint(userPosition.lat, userPosition.lng);
+                }
                 if (typeof window.syncMyLiveLocation === "function") {
                     window.syncMyLiveLocation(userPosition.lat, userPosition.lng, speedKmh);
                 }
