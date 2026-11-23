@@ -1,31 +1,30 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-PT">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalSpot · Eventos perto de ti</title>
-    <link rel="icon" href="assets/images/logo.png">
+    <title>LocalSpot — Eventos & Mapa Social 3D</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- ECRÃ DE AUTENTICAÇÃO OBRIGATÓRIA -->
+    <!-- Ecrã de Autenticação -->
     <div id="authOverlay" class="auth-overlay">
         <div class="auth-card">
             <div class="auth-brand">
-                <img src="assets/images/logo.png" alt="LocalSpot" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍',style:'font-size:32px'}))">
-                <h2>LocalSpot</h2>
+                <span class="brand-pin">📍</span>
+                <h1>LocalSpot</h1>
+                <p>Descobre eventos locais, segue entidades e liga-te aos teus amigos no mapa 3D.</p>
             </div>
-            <p class="auth-subtitle">Inicia sessão ou cria um perfil para explorar, criar e participar em eventos perto de ti.</p>
 
             <div class="auth-tabs">
                 <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
                 <button type="button" id="tabRegister" class="auth-tab">Criar Conta</button>
             </div>
 
-            <!-- FORMULÁRIO LOGIN -->
-            <form id="loginForm">
+            <!-- Formulário de Login -->
+            <form id="loginForm" class="auth-form">
                 <label for="loginEmail">E-mail</label>
                 <input type="email" id="loginEmail" placeholder="exemplo@email.com" required>
 
@@ -33,55 +32,65 @@
                 <input type="password" id="loginPassword" placeholder="••••••••" required>
 
                 <p id="loginError" class="form-error hidden"></p>
-                <button type="submit" id="loginSubmitBtn" class="submit-button">Entrar no LocalSpot</button>
+                <button type="submit" id="loginSubmitBtn" class="btn-primary-full">Entrar no LocalSpot</button>
             </form>
 
-            <!-- FORMULÁRIO REGISTO -->
-            <form id="registerForm" class="hidden">
-                <label for="regAccountType">Tipo de Perfil *</label>
-                <select id="regAccountType" required>
-                    <option value="user">👤 Utilizador Normal (Explorar, participar e criar)</option>
-                    <option value="business">🏢 Domínio Público (Empresa, Loja, Restaurante)</option>
+            <!-- Formulário de Registo -->
+            <form id="registerForm" class="auth-form hidden">
+                <label for="regAccountType">Tipo de Conta</label>
+                <select id="regAccountType">
+                    <option value="user">👤 Utilizador Pessoal (Eventos & Amigos)</option>
+                    <option value="business">🏛️ Empresa / Domínio Público (Câmara, Associação, Loja...)</option>
                 </select>
 
                 <div id="businessTypeGroup" class="hidden">
-                    <label for="regBusinessType">Categoria do Estabelecimento *</label>
+                    <label for="regBusinessType">Setor / Tipologia da Entidade</label>
                     <select id="regBusinessType">
-                        <option value="Empresa">🏢 Empresa</option>
-                        <option value="Loja">🏪 Loja / Comércio Local</option>
-                        <option value="Restaurante">🍽️ Restaurante / Café</option>
-                        <option value="Associação">🤝 Associação / Clube</option>
+                        <option value="Câmara Municipal / Junta">🏛️ Câmara Municipal / Junta</option>
+                        <option value="Associação / Coletividade">🤝 Associação / Coletividade</option>
+                        <option value="Restauração / Café">🍽️ Restauração / Café</option>
+                        <option value="Cultura / Espetáculos">🎭 Cultura / Espetáculos</option>
+                        <option value="Desporto / Ginásio">🏟️ Desporto / Ginásio</option>
+                        <option value="Empresa / Comércio" selected>🏢 Empresa / Comércio</option>
+                        <option value="Educação / Universidade">🎓 Educação / Universidade</option>
+                        <option value="Serviços / Instituição">💼 Serviços / Instituição</option>
                     </select>
                 </div>
 
-                <label for="regName" id="regNameLabel">Nome completo *</label>
-                <input type="text" id="regName" maxlength="80" placeholder="Ex: João Silva" required>
+                <label id="regNameLabel" for="regName">Nome completo *</label>
+                <input type="text" id="regName" placeholder="Ex: João Silva" required>
 
                 <label for="regEmail">E-mail *</label>
                 <input type="email" id="regEmail" placeholder="exemplo@email.com" required>
 
                 <label for="regPassword">Palavra-passe (mín. 6 caracteres) *</label>
-                <input type="password" id="regPassword" minlength="6" placeholder="••••••••" required>
+                <input type="password" id="regPassword" placeholder="••••••••" minlength="6" required>
 
                 <p id="registerError" class="form-error hidden"></p>
-                <button type="submit" id="registerSubmitBtn" class="submit-button">Criar Perfil</button>
+                <button type="submit" id="registerSubmitBtn" class="btn-primary-full">Criar Perfil</button>
             </form>
         </div>
     </div>
 
-    <!-- CABEÇALHO -->
+    <!-- Cabeçalho -->
     <header class="header">
-        <a class="logo" href="./" aria-label="LocalSpot – início">
-            <img src="assets/images/logo.png" alt="LocalSpot Logo" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍'}))">
-            <h1>LocalSpot</h1>
-        </a>
-        <nav aria-label="Navegação principal">
+        <div class="header-left">
+            <span class="logo-icon">📍</span>
+            <div>
+                <h1 class="logo-title">LocalSpot</h1>
+                <span class="logo-sub">Eventos & Mapa Social 3D</span>
+            </div>
+        </div>
+
+        <nav>
+            <button type="button" id="aboutButton" class="btn-soft">Sobre</button>
+
             <div class="notif-wrap">
-                <button type="button" id="notifBtn" class="btn-icon hidden" title="Notificações" aria-label="Notificações">
+                <button type="button" id="notifBtn" class="btn-soft hidden" title="Notificações">
                     🔔 <span id="notifBadge" class="notif-badge hidden">0</span>
                 </button>
                 <div id="notifDropdown" class="notif-dropdown hidden">
-                    <div class="notif-dropdown-head">
+                    <div class="notif-dropdown-header">
                         <strong>Notificações</strong>
                         <button type="button" id="markAllReadBtn" class="btn-link small">Marcar lidas</button>
                     </div>
@@ -89,138 +98,119 @@
                 </div>
             </div>
 
-            <button type="button" id="userBadge" class="user-badge hidden" title="Abrir o meu perfil"></button>
             <button type="button" id="adminPanelBtn" class="btn-admin hidden">🛡️ Admin</button>
-            <button type="button" id="aboutButton" class="btn-link">Sobre</button>
-            <button type="button" id="locationButton" class="btn-soft">📍 <span>Localização</span></button>
-            <button type="button" id="logoutButton" class="btn-logout hidden" title="Terminar sessão">Sair</button>
+            <button type="button" id="userBadge" class="user-badge hidden" title="Abrir A Minha Conta"></button>
+            <button type="button" id="addEventButton" class="btn-primary-sm">+ Criar Evento</button>
+            <button type="button" id="logoutButton" class="btn-logout hidden">Sair</button>
         </nav>
     </header>
 
-    <!-- CONTEÚDO PRINCIPAL -->
-    <main class="main" id="main" data-view="list">
-        <aside class="sidebar" aria-label="Lista e filtros de eventos">
-            <div class="sidebar-body">
-                <div class="sidebar-header">
-                    <h2>Descobre o que acontece perto de ti</h2>
-                    <p>Encontra eventos, atividades e oportunidades na tua zona.</p>
+    <!-- Área Principal -->
+    <main id="main" data-view="list">
+        <!-- Painel Lateral de Pesquisa e Lista -->
+        <aside class="sidebar">
+            <div class="filters-box">
+                <div class="search-row">
+                    <input type="search" id="searchInput" placeholder="Pesquisar eventos, locais, entidades...">
+                    <button type="button" id="locationButton" class="btn-loc" title="Ordenar por proximidade">
+                        📍 <span>Perto de mim</span>
+                    </button>
                 </div>
 
-                <div class="search">
-                    <label for="searchInput" class="sr-only">Procurar eventos</label>
-                    <input type="search" id="searchInput" placeholder="🔎 Procurar por nome, local ou organizador..." autocomplete="off">
+                <div id="categoryChips" class="chips-row"></div>
+
+                <div class="filter-grid">
+                    <select id="districtFilter" aria-label="Filtrar por distrito">
+                        <option value="all">Todos os distritos</option>
+                    </select>
+
+                    <select id="periodFilter" aria-label="Filtrar por data">
+                        <option value="all">Qualquer data</option>
+                        <option value="today">Hoje</option>
+                        <option value="weekend">Este fim de semana</option>
+                        <option value="week">Próximos 7 dias</option>
+                    </select>
+
+                    <select id="sortFilter" aria-label="Ordenar por">
+                        <option value="date">Ordenar: Data</option>
+                        <option value="distance">Ordenar: Distância</option>
+                        <option value="name">Ordenar: Nome (A-Z)</option>
+                    </select>
                 </div>
 
-                <div class="chips" id="categoryChips" role="group" aria-label="Filtrar por categoria"></div>
-
-                <div class="filters">
-                    <div class="field" style="grid-column: span 2;">
-                        <label for="districtFilter">Distrito</label>
-                        <select id="districtFilter"></select>
-                    </div>
-                    <div class="field">
-                        <label for="periodFilter">Quando</label>
-                        <select id="periodFilter">
-                            <option value="all">Qualquer data</option>
-                            <option value="upcoming">A partir de hoje</option>
-                            <option value="week">Próximos 7 dias</option>
-                            <option value="month">Próximos 30 dias</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="radiusSlider">Raio máx.: <span id="radiusValue">Sem limite</span></label>
-                        <input type="range" id="radiusSlider" min="5" max="100" value="100" class="slider">
-                    </div>
-                    <div class="field" style="grid-column: span 2;">
-                        <label for="sortFilter">Ordenar por</label>
-                        <select id="sortFilter">
-                            <option value="date">Data (mais próximos primeiro)</option>
-                            <option value="distance">Proximidade a mim</option>
-                            <option value="popular">Mais populares (inscritos)</option>
-                            <option value="name">Nome (A–Z)</option>
-                        </select>
-                    </div>
+                <div class="radius-row">
+                    <label for="radiusSlider">Distância máxima: <strong id="radiusValue">Sem limite</strong></label>
+                    <input type="range" id="radiusSlider" min="5" max="100" step="5" value="100">
                 </div>
 
                 <div class="quick-toggles">
-                    <button type="button" id="favoritesToggle" class="btn-toggle" aria-pressed="false">☆ Favoritos</button>
-                    <button type="button" id="freeOnlyToggle" class="btn-toggle" aria-pressed="false">🎟️ Gratuitos</button>
-                    <button type="button" id="followingOnlyToggle" class="btn-toggle" aria-pressed="false">👥 A seguir</button>
-                </div>
-
-                <div class="events-container">
-                    <div class="events-title">
-                        <h3>Eventos</h3>
-                        <span id="eventCount" aria-live="polite">0</span>
-                        <button type="button" id="resetFilters" class="btn-link small hidden">Limpar filtros</button>
-                    </div>
-                    <div id="eventsList"></div>
-                    <div id="emptyState" class="empty hidden">
-                        <p class="empty-icon">🔍</p>
-                        <p><strong>Nenhum evento encontrado</strong></p>
-                        <p>Experimenta alterar os filtros.</p>
-                    </div>
+                    <button type="button" id="favoritesToggle" class="toggle-pill">☆ Favoritos</button>
+                    <button type="button" id="freeOnlyToggle" class="toggle-pill">💶 Gratuitos</button>
+                    <button type="button" id="followingOnlyToggle" class="toggle-pill">🏛️ A Seguir</button>
+                    <button type="button" id="resetFilters" class="btn-link small">Limpar</button>
                 </div>
             </div>
 
-            <div class="sidebar-footer">
-                <button type="button" id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+            <div class="results-bar">
+                <span><strong id="eventCount">0</strong> eventos encontrados</span>
+            </div>
+
+            <div id="eventsList" class="events-list"></div>
+
+            <div id="emptyState" class="empty-state hidden">
+                <p>😕 Nenhum evento encontrado com estes filtros.</p>
             </div>
         </aside>
 
-        <section class="map-container" aria-label="Mapa de eventos">
+        <!-- Mapa Interativo 3D -->
+        <section class="map-container">
+            <div id="map"></div>
+
             <div class="map-floating-controls">
-                <button type="button" id="mapStyleToggle" class="map-ctrl-btn" title="Alternar entre Satélite 3D e Mapa Noturno 3D">🗺️ Mapa Noturno</button>
-                <button type="button" id="mapPitchToggle" class="map-ctrl-btn" title="Alternar inclinação 3D / 2D">📐 Vista 2D</button>
+                <button type="button" id="mapStyleToggle" class="map-ctrl-btn">🗺️ Mapa Noturno</button>
+                <button type="button" id="mapPitchToggle" class="map-ctrl-btn">📐 Vista 2D</button>
             </div>
 
-            <div id="pickBanner" class="pick-banner hidden" role="status">
+            <!-- Banner de Escolha de Local no Mapa -->
+            <div id="pickBanner" class="pick-banner hidden">
                 <div class="pick-banner-top">
-                    <span>📍 Clica no mapa ou pesquisa uma morada</span>
-                    <button type="button" id="cancelPick" class="pick-cancel-btn">Cancelar</button>
+                    <span>📍 Clica no mapa para marcar o local do evento</span>
+                    <button type="button" id="cancelPickBtn" class="btn-logout">Cancelar</button>
                 </div>
                 <div class="pick-search-row">
-                    <input type="text" id="pickAddressInput" placeholder="Ex: Parque Verde Coimbra, Avenida da Liberdade...">
-                    <button type="button" id="pickAddressBtn">Ir</button>
+                    <input type="text" id="pickSearchInput" placeholder="Pesquisar morada ou localidade (ex: Cantanhede)...">
+                    <button type="button" id="pickSearchBtn" class="btn-primary-sm">Ir</button>
                 </div>
             </div>
-            <div id="map"></div>
         </section>
 
-        <!-- BOTÃO FLUTUANTE MOBILE -->
         <button type="button" id="mobileViewToggle" class="mobile-view-toggle">🗺️ Ver Mapa</button>
     </main>
 
-    <!-- MODAL: CRIAR / EDITAR EVENTO -->
-    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <!-- Modal: Criar / Editar Evento -->
+    <div id="eventModal" class="modal hidden" aria-hidden="true">
         <div class="modal-content">
-            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
-            <h2 id="eventModalTitle">Adicionar evento</h2>
+            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">&times;</button>
+            <h2 id="eventModalTitle">Criar Novo Evento</h2>
 
-            <form id="eventForm" novalidate>
-                <div class="location-box">
-                    <p id="selectedCoordinates">📍 Nenhuma localização selecionada no mapa</p>
-                    <button type="button" id="changeLocationButton" class="btn-soft">Alterar no mapa</button>
-                </div>
+            <form id="eventForm">
+                <label for="eventName">Nome do Evento *</label>
+                <input type="text" id="eventName" placeholder="Ex: Torneio de Futsal / Concerto Acústico" required>
 
-                <label for="eventName">Nome do evento *</label>
-                <input type="text" id="eventName" maxlength="80" placeholder="Ex: Torneio de Futebol" required>
-
-                <label for="eventDescription">Descrição</label>
-                <textarea id="eventDescription" maxlength="500" rows="3" placeholder="Descreve o evento, requisitos ou programa..."></textarea>
-
-                <div class="form-row">
+                <div class="form-row-2">
                     <div>
                         <label for="eventCategory">Categoria *</label>
                         <select id="eventCategory" required></select>
                     </div>
                     <div>
-                        <label for="eventPrice">Entrada / Preço</label>
-                        <input type="text" id="eventPrice" maxlength="30" placeholder="Gratuito (ou ex: 5 €)">
+                        <label for="eventFormDistrict">Distrito *</label>
+                        <select id="eventFormDistrict" required>
+                            <option value="">Seleciona...</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="form-row">
+                <div class="form-row-2">
                     <div>
                         <label for="eventDate">Data *</label>
                         <input type="date" id="eventDate" required>
@@ -231,185 +221,189 @@
                     </div>
                 </div>
 
-                <label for="eventLocation">Local (nome do sítio) *</label>
-                <input type="text" id="eventLocation" maxlength="80" placeholder="Ex: Parque da Cidade" required>
+                <label for="eventLocation">Morada / Local *</label>
+                <input type="text" id="eventLocation" placeholder="Ex: Praça Marquês de Marialva, Cantanhede" required>
 
-                <div class="form-row">
+                <div class="coords-box">
+                    <span id="selectedCoordinates">Nenhum local escolhido no mapa.</span>
+                    <button type="button" id="changeLocationButton" class="btn-soft">📍 Marcar no Mapa</button>
+                </div>
+
+                <div class="form-row-2">
                     <div>
-                        <label for="eventFormDistrict">Distrito *</label>
-                        <select id="eventFormDistrict" required></select>
+                        <label for="eventMaxParticipants">Lotação Máxima (opcional)</label>
+                        <input type="number" id="eventMaxParticipants" min="1" placeholder="Ex: 50">
                     </div>
                     <div>
-                        <label for="eventLimit">Limite de vagas</label>
-                        <input type="number" id="eventLimit" min="1" placeholder="Ilimitado">
+                        <label for="eventPrice">Preço / Entrada</label>
+                        <input type="text" id="eventPrice" placeholder="Ex: Gratuito ou 5€">
                     </div>
                 </div>
 
-                <label for="eventExternalUrl">Website / Bilheteira / Instagram (opcional)</label>
-                <input type="text" id="eventExternalUrl" maxlength="160" placeholder="https://...">
+                <label for="eventExternalUrl">Link Externo / Bilheteira (opcional)</label>
+                <input type="url" id="eventExternalUrl" placeholder="https://...">
 
-                <label for="eventImage">Fotografia (opcional)</label>
-                <input type="file" id="eventImage" accept="image/png, image/jpeg, image/webp">
-                <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização da fotografia">
+                <label for="eventDescription">Descrição</label>
+                <textarea id="eventDescription" rows="3" placeholder="Detalhes, programa, requisitos..."></textarea>
 
-                <p id="formError" class="form-error hidden" role="alert"></p>
-                <button type="submit" id="eventSubmitBtn" class="submit-button">Publicar evento</button>
+                <label for="eventImage">Imagem de Capa (opcional)</label>
+                <input type="file" id="eventImage" accept="image/*">
+                <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização">
+
+                <p id="formError" class="form-error hidden"></p>
+                <button type="submit" id="eventSubmitBtn" class="btn-primary-full">Publicar Evento no Mapa</button>
             </form>
         </div>
     </div>
 
-    <!-- MODAL: DETALHES DO EVENTO, INSCRITOS, AVALIAÇÕES E COMENTÁRIOS -->
-    <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <!-- Modal: Detalhes do Evento -->
+    <div id="detailModal" class="modal hidden" aria-hidden="true">
         <div class="modal-content detail-modal-content">
-            <button type="button" id="closeDetail" class="close-button" aria-label="Fechar">×</button>
-            <img id="detailImage" class="detail-cover" src="" alt="">
+            <button type="button" id="closeDetail" class="close-button" aria-label="Fechar">&times;</button>
 
-            <div class="detail-header-row">
-                <span id="detailCategory" class="category"></span>
-                <span id="detailPriceBadge" class="price-badge"></span>
-                <span id="detailOrganizer" class="organizer-tag"></span>
-                <button type="button" id="detailFollowBtn" class="follow-btn hidden">+ Seguir</button>
+            <div class="detail-hero">
+                <img id="detailImage" src="" alt="Capa do evento">
+                <span id="detailCategory" class="detail-cat-badge"></span>
+                <span id="detailPriceBadge" class="detail-price-badge"></span>
             </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-top:8px;">
-                <h2 id="detailTitle" style="margin: 0;"></h2>
-                <span id="detailRatingBadge" class="rating-badge hidden"></span>
+            <div class="detail-org-row">
+                <div id="detailOrganizer" class="organizer-tag"></div>
+                <button type="button" id="detailFollowBtn" class="btn-soft hidden">+ Seguir</button>
+            </div>
+
+            <div class="detail-title-row">
+                <h2 id="detailTitle"></h2>
+                <span id="detailRatingBadge" class="rating-pill hidden"></span>
             </div>
 
             <p id="detailDescription" class="detail-desc"></p>
 
-            <div class="detail-meta-grid">
-                <div class="detail-meta-item">
-                    <small>Data e Hora</small>
-                    <strong id="detailDateTime"></strong>
-                </div>
-                <div class="detail-meta-item">
-                    <small>Localização</small>
-                    <strong id="detailLocation"></strong>
-                </div>
-                <div class="detail-meta-item">
-                    <small>Participação</small>
-                    <strong id="detailVacancies"></strong>
-                </div>
+            <div class="detail-info-grid">
+                <div><strong>📅 Data e Hora</strong><span id="detailDateTime"></span></div>
+                <div><strong>📍 Localização</strong><span id="detailLocation"></span></div>
+                <div><strong>👥 Participação</strong><span id="detailVacancies"></span></div>
             </div>
 
-            <a id="detailExternalLink" href="#" target="_blank" rel="noopener" class="external-link-banner hidden">🌐 Aceder à página oficial / bilheteira →</a>
+            <a id="detailExternalLink" href="#" target="_blank" rel="noopener" class="ext-link-banner hidden">
+                🔗 Aceder à página oficial / bilheteira externa
+            </a>
 
-            <div class="detail-actions-bar">
-                <button type="button" id="detailEnrollBtn" class="register-btn" style="margin:0;">✋ Inscrever-me</button>
-                <button type="button" id="detailTicketBtn" class="btn-ticket hidden">🎟️ Bilhete QR</button>
+            <div class="detail-main-actions">
+                <button type="button" id="detailEnrollBtn" class="register-btn">✋ Inscrever-me</button>
+                <button type="button" id="detailTicketBtn" class="btn-ticket hidden">🎟️ Ver Bilhete QR</button>
+            </div>
+
+            <div class="detail-secondary-actions">
+                <a id="detailCalendarBtn" href="#" target="_blank" rel="noopener" class="btn-soft">📅 Google Calendar</a>
+                <button type="button" id="detailIcsBtn" class="btn-soft">📥 Ficheiro .ics</button>
                 <button type="button" id="detailShareBtn" class="btn-soft">🔗 Partilhar</button>
-                <a id="detailDirectionsBtn" href="#" target="_blank" rel="noopener" class="btn-soft" style="text-decoration:none; text-align:center;">🧭 Direções</a>
+                <a id="detailDirectionsBtn" href="#" target="_blank" rel="noopener" class="btn-soft">🧭 Direções</a>
+                <button type="button" id="detailReportBtn" class="btn-soft">🚩 Denunciar</button>
             </div>
 
-            <div class="detail-secondary-links">
-                <a id="detailCalendarBtn" href="#" target="_blank" rel="noopener" class="btn-link small">📅 Google Calendar</a>
-                <button type="button" id="detailIcsBtn" class="btn-link small">📥 Descarregar .ICS (Apple/Outlook)</button>
-                <button type="button" id="detailReportBtn" class="btn-link small" style="color:var(--muted); margin-left:auto;">🚩 Denunciar</button>
-            </div>
-
-            <div id="detailOwnerActions" class="detail-owner-actions hidden">
-                <button type="button" id="detailEditBtn" class="btn-edit">✏️ Editar</button>
+            <div id="detailOwnerActions" class="owner-detail-bar hidden">
+                <button type="button" id="detailEditBtn" class="edit-btn">✏️ Editar</button>
                 <button type="button" id="detailDuplicateBtn" class="btn-soft">📋 Duplicar</button>
-                <button type="button" id="detailDeleteBtn" class="btn-danger-outline">🗑 Apagar</button>
+                <button type="button" id="detailDeleteBtn" class="delete-btn">🗑️ Eliminar</button>
             </div>
 
-            <!-- AVALIAÇÕES PÓS-EVENTO -->
+            <!-- Inscritos -->
+            <div class="detail-section">
+                <div class="section-head-row">
+                    <h4>👥 Inscritos</h4>
+                    <button type="button" id="exportCsvBtn" class="btn-link small hidden">📥 Exportar CSV</button>
+                </div>
+                <div id="detailAttendeesList" class="attendees-wrap"></div>
+            </div>
+
+            <!-- Avaliações (após o evento terminar) -->
             <div id="detailReviewsSection" class="detail-section hidden">
-                <h3>⭐ Avaliações dos Participantes</h3>
+                <h4>⭐ Avaliações do Evento</h4>
                 <form id="reviewForm" class="review-form hidden">
-                    <select id="reviewRating" aria-label="Classificação">
-                        <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
-                        <option value="4">⭐⭐⭐⭐ (4/5)</option>
-                        <option value="3">⭐⭐⭐ (3/5)</option>
-                        <option value="2">⭐⭐ (2/5)</option>
-                        <option value="1">⭐ (1/5)</option>
+                    <select id="reviewRating">
+                        <option value="5">⭐⭐⭐⭐⭐ (5 - Excelente)</option>
+                        <option value="4">⭐⭐⭐⭐ (4 - Muito Bom)</option>
+                        <option value="3">⭐⭐⭐ (3 - Bom)</option>
+                        <option value="2">⭐⭐ (2 - Razoável)</option>
+                        <option value="1">⭐ (1 - Fraco)</option>
                     </select>
-                    <input type="text" id="reviewText" maxlength="200" placeholder="Como foi a experiência?">
+                    <input type="text" id="reviewCommentInput" placeholder="Deixa a tua opinião sobre o evento...">
                     <button type="submit" class="btn-primary-sm">Avaliar</button>
                 </form>
-                <div id="detailReviewsList" class="comments-list"></div>
+                <div id="detailReviewsList"></div>
             </div>
 
+            <!-- Comentários -->
             <div class="detail-section">
-                <h3>👥 Participantes Inscritos (<span id="detailAttendeesCount">0</span>)</h3>
-                <div id="detailAttendeesList" class="attendees-pills"></div>
-            </div>
-
-            <div class="detail-section">
-                <h3>💬 Comentários e Dúvidas</h3>
+                <h4>💬 Comentários e Dúvidas</h4>
+                <div id="detailCommentsList"></div>
                 <form id="commentForm" class="comment-form">
-                    <input type="text" id="commentInput" maxlength="250" placeholder="Escreve uma pergunta ou comentário sobre este evento..." required>
+                    <input type="text" id="commentInput" placeholder="Escreve um comentário..." required>
                     <button type="submit" class="btn-primary-sm">Enviar</button>
                 </form>
-                <div id="detailCommentsList" class="comments-list"></div>
             </div>
         </div>
     </div>
 
-    <!-- MODAL: BILHETE DIGITAL / QR CODE -->
-    <div id="ticketModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content ticket-modal-content">
-            <button type="button" id="closeTicket" class="close-button" aria-label="Fechar">×</button>
+    <!-- Modal: Bilhete Digital QR -->
+    <div id="ticketModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="width:360px; text-align:center;">
+            <button type="button" id="closeTicket" class="close-button" aria-label="Fechar">&times;</button>
             <div class="ticket-card">
-                <span class="ticket-badge">🎟️ PASSE DE ENTRADA LOCALSPOT</span>
-                <h2 id="ticketEventName"></h2>
-                <p id="ticketDateTime" class="muted"></p>
-                <p id="ticketLocation" class="muted"></p>
-                <div class="qr-box">
-                    <canvas id="ticketQrCanvas" width="160" height="160"></canvas>
-                </div>
-                <strong id="ticketCodeText" class="ticket-code"></strong>
-                <p id="ticketUserName" style="margin:6px 0 0; font-size:13px;"></p>
+                <span class="ticket-brand">🎟️ BILHETE DIGITAL LOCALSPOT</span>
+                <h3 id="ticketEventName"></h3>
+                <p id="ticketDateTime"></p>
+                <p id="ticketLocation"></p>
+                <div id="ticketQrCanvas" class="ticket-qr-wrap"></div>
+                <code id="ticketCodeText" class="ticket-code"></code>
+                <p id="ticketUserName" class="ticket-holder"></p>
             </div>
         </div>
     </div>
 
-    <!-- MODAL: DENUNCIAR EVENTO -->
-    <div id="reportModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 440px;">
-            <button type="button" id="closeReport" class="close-button" aria-label="Fechar">×</button>
-            <h2>🚩 Denunciar Evento</h2>
-            <p class="muted" style="font-size:13px; margin-top:-6px;">Ajuda-nos a manter o LocalSpot seguro e atualizado.</p>
+    <!-- Modal: Denunciar Evento -->
+    <div id="reportModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="width:400px;">
+            <button type="button" id="closeReport" class="close-button" aria-label="Fechar">&times;</button>
+            <h3>🚩 Denunciar Evento</h3>
             <form id="reportForm">
-                <label for="reportReason">Motivo *</label>
-                <select id="reportReason" required>
-                    <option value="Informação falsa ou enganosa">Informação falsa ou enganosa</option>
-                    <option value="Evento cancelado ou duplicado">Evento cancelado ou duplicado</option>
-                    <option value="Spam ou publicidade abusiva">Spam ou publicidade abusiva</option>
+                <label for="reportReason">Motivo</label>
+                <select id="reportReason">
+                    <option value="Informação falsa ou incorreta">Informação falsa ou incorreta</option>
+                    <option value="Evento duplicado ou spam">Evento duplicado ou spam</option>
                     <option value="Conteúdo impróprio">Conteúdo impróprio</option>
+                    <option value="Outro motivo">Outro motivo</option>
                 </select>
-                <label for="reportDetails">Detalhes adicionais (opcional)</label>
-                <textarea id="reportDetails" rows="3" maxlength="250" placeholder="Explica brevemente o problema..."></textarea>
-                <button type="submit" class="submit-button" style="background:var(--danger);">Enviar Denúncia</button>
+                <label for="reportDetails">Detalhes adicionais</label>
+                <textarea id="reportDetails" rows="3" placeholder="Explica brevemente o problema..."></textarea>
+                <button type="submit" class="btn-primary-full">Enviar Denúncia</button>
             </form>
         </div>
     </div>
 
-    <!-- MODAL: PERFIL DO UTILIZADOR -->
-    <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 580px;">
-            <button type="button" id="closeProfile" class="close-button" aria-label="Fechar">×</button>
-            <h2>👤 O Meu Perfil</h2>
-            <p id="profileEmailDisplay" class="muted" style="margin-top: -10px; font-size: 13px;"></p>
+    <!-- Modal: A Minha Conta / Perfil -->
+    <div id="profileModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" id="closeProfile" class="close-button" aria-label="Fechar">&times;</button>
+            <h2>A Minha Conta</h2>
+            <p id="profileEmailDisplay" class="muted" style="font-size:13px; margin:-6px 0 12px;"></p>
 
-            <form id="profileUpdateForm" class="profile-edit-box">
-                <div class="form-row">
-                    <div>
-                        <label for="profileNameInput">Nome apresentado</label>
-                        <input type="text" id="profileNameInput" maxlength="80" required>
-                    </div>
-                    <div>
-                        <label for="profileBioInput">Biografia / Descrição curta</label>
-                        <input type="text" id="profileBioInput" maxlength="140" placeholder="Ex: Organizador de torneios locais">
-                    </div>
-                </div>
-                <button type="submit" class="btn-primary-sm" style="margin-top: 8px;">Guardar alterações do perfil</button>
-            </form>
+            <div class="profile-edit-box">
+                <form id="profileUpdateForm">
+                    <label for="profileNameInput">Nome de exibição *</label>
+                    <input type="text" id="profileNameInput" required>
 
-            <div class="auth-tabs" style="margin-top: 16px; grid-template-columns: repeat(3, 1fr);">
-                <button type="button" id="tabMyEnrollments" class="auth-tab active">Inscrições</button>
-                <button type="button" id="tabMyCreated" class="auth-tab">Criados</button>
+                    <label for="profileBioInput">Bio / Sobre mim</label>
+                    <input type="text" id="profileBioInput" placeholder="Uma breve descrição...">
+
+                    <button type="submit" class="btn-primary-full">Guardar Perfil</button>
+                </form>
+            </div>
+
+            <div class="auth-tabs" style="margin:14px 0;">
+                <button type="button" id="tabMyEnrollments" class="auth-tab active">Minhas Inscrições</button>
+                <button type="button" id="tabMyCreated" class="auth-tab">Meus Eventos</button>
                 <button type="button" id="tabMyFollowing" class="auth-tab">A Seguir</button>
             </div>
 
@@ -419,61 +413,60 @@
         </div>
     </div>
 
-    <!-- MODAL: PAINEL ADMIN -->
-    <div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 650px;">
-            <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">×</button>
+    <!-- Modal: Painel de Administração -->
+    <div id="adminModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="width:580px;">
+            <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">&times;</button>
             <h2>🛡️ Painel de Administração</h2>
-            <p class="muted" style="margin-top: -8px;">Gestão de utilizadores, permissões e moderação de denúncias.</p>
 
-            <div class="admin-stats" style="grid-template-columns: repeat(4, 1fr);">
-                <div class="stat-box">
-                    <span id="statTotalUsers">0</span>
-                    <small>Utilizadores</small>
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <strong id="statTotalUsers">0</strong>
+                    <span>Contas Totais</span>
                 </div>
-                <div class="stat-box">
-                    <span id="statBusinessUsers">0</span>
-                    <small>Domínios Públicos</small>
+                <div class="admin-stat-card">
+                    <strong id="statBusinessUsers">0</strong>
+                    <span>Entidades (Verif.)</span>
                 </div>
-                <div class="stat-box">
-                    <span id="statTotalEvents">0</span>
-                    <small>Eventos Ativos</small>
+                <div class="admin-stat-card">
+                    <strong id="statTotalEvents">0</strong>
+                    <span>Eventos</span>
                 </div>
-                <div class="stat-box">
-                    <span id="statTotalReports" style="color:var(--danger);">0</span>
-                    <small>Denúncias</small>
+                <div class="admin-stat-card">
+                    <strong id="statTotalReports">0</strong>
+                    <span>Denúncias</span>
                 </div>
             </div>
 
-            <div class="auth-tabs" style="margin-top: 16px;">
-                <button type="button" id="tabAdminUsers" class="auth-tab active">Utilizadores Registados</button>
-                <button type="button" id="tabAdminReports" class="auth-tab">Denúncias Pendentes</button>
+            <div class="auth-tabs" style="margin-bottom:12px;">
+                <button type="button" id="tabAdminUsers" class="auth-tab active">👥 Utilizadores & Verificação</button>
+                <button type="button" id="tabAdminReports" class="auth-tab">🚩 Denúncias</button>
             </div>
 
-            <div id="adminUsersList" class="admin-users-list"></div>
-            <div id="adminReportsList" class="admin-users-list hidden"></div>
+            <div id="adminUsersList" class="profile-events-list"></div>
+            <div id="adminReportsList" class="profile-events-list hidden"></div>
         </div>
     </div>
 
-    <!-- MODAL: SOBRE -->
-    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content">
-            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
-            <h2 id="aboutTitle">Sobre o LocalSpot</h2>
-            <p>O LocalSpot liga utilizadores locais a empresas, lojas, restaurantes e associações num mapa 3D interativo.</p>
-            <ul style="line-height: 1.8; color: var(--muted); font-size: 14px; padding-left: 18px;">
-                <li><strong>Utilizadores Normais:</strong> Exploram atividades, inscrevem-se com bilhete QR, avaliam, seguem organizadores e criam eventos comunitários.</li>
-                <li><strong>Domínios Públicos:</strong> Empresas, lojas e restaurantes divulgam eventos oficiais com selo do estabelecimento.</li>
-                <li><strong>Administradores:</strong> Gerenciam utilizadores, atribuem cargos e moderam denúncias na plataforma.</li>
-            </ul>
+    <!-- Modal: Sobre o Projeto -->
+    <div id="aboutModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="width:430px;">
+            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">&times;</button>
+            <h2>📍 Sobre o LocalSpot</h2>
+            <p style="font-size:13.5px; line-height:1.6; color:var(--muted);">
+                O <strong>LocalSpot</strong> é uma plataforma web desenvolvida no âmbito da Prova de Aptidão Profissional (PAP) do curso <strong>Técnico de Gestão e Programação de Sistemas Informáticos</strong> na Escola Técnico Profissional de Cantanhede.
+            </p>
+            <p style="font-size:13px; line-height:1.6; color:var(--muted);">
+                Une a descoberta de eventos locais em mapa 3D interativo, bilhética digital com QR Code, acompanhamento de entidades oficiais verificadas e interação social em tempo real entre amigos.
+            </p>
         </div>
     </div>
 
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <!-- Toast de Feedback -->
+    <div id="toast" class="toast"></div>
 
-    <!-- SDK do Supabase e MapLibre -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
