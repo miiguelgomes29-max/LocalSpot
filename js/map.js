@@ -217,10 +217,10 @@ function setTodayTrailCoords(coords, visible) {
     updateTrailLayerData();
 }
 
-function triggerMapBumpShockwave(lng, lat, emoji = "👊") {
+function triggerMapBumpShockwave(lng, lat, emoji = "👊", isSuper = false) {
     if (typeof lng !== "number" || typeof lat !== "number") return;
     const el = document.createElement("div");
-    el.className = "bump-shockwave-marker";
+    el.className = `bump-shockwave-marker${isSuper ? " super" : ""}`;
     el.innerHTML = `
         <div class="bump-shockwave-ring"></div>
         <div class="bump-shockwave-core">${emoji}</div>
@@ -229,7 +229,7 @@ function triggerMapBumpShockwave(lng, lat, emoji = "👊") {
         .setLngLat([lng, lat])
         .addTo(map);
 
-    setTimeout(() => shockMarker.remove(), 1600);
+    setTimeout(() => shockMarker.remove(), isSuper ? 2000 : 1600);
 }
 
 function drawFriendRadarLine(fromLngLat, toLngLat) {
@@ -476,7 +476,7 @@ function friendPopupHTML(friend) {
                 <div class="friend-telemetry-row">
                     ${batLabel ? `<span class="telemetry-chip">${batLabel}</span>` : ""}
                     <span class="telemetry-chip">${spdLabel}</span>
-                    <span class="telemetry-chip bump-streak">👊 ${bumps} Bumps</span>
+                    <span class="telemetry-chip bump-streak">👊 ${bumps} pts</span>
                 </div>
             ` : (friend.bio ? `<p style="font-size:12px; color:var(--muted); margin:4px 0 8px;">${escapeHTML(friend.bio)}</p>` : "")}
             <div class="friend-popup-meta">${isBiz ? "🏢 Sede / Localização" : "🟢 " + seenLine}${distText}</div>
