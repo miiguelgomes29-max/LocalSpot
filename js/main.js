@@ -113,11 +113,13 @@ let editingEventId = null;
 let detailEventId = null;
 let currentList = [];
 
-// Estado Social Bump
+// Estado Social Bump & Chat
 window.friendsList = [];
 let friendshipRecords = new Map();
 let incomingFriendRequests = [];
 let sentFriendRequestIds = new Set();
+let animatedIncomingFriendshipIds = new Set();
+let lastChatMessageByFriend = new Map();
 let allEnrollmentsMap = new Map();
 let activeChatFriendId = null;
 let unreadMessagesBySender = new Map();
@@ -229,7 +231,7 @@ window.getMapSocialEntities = () => {
     return [...window.friendsList, ...followedVisibleEntities];
 };
 
-// ---------- Som & Notificação de Segundo Plano do Bump ----------
+// ---------- Som & Notificação de Segundo Plano ----------
 function playBumpSound(isSuper = false) {
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -255,12 +257,135 @@ function playBumpSound(isSuper = false) {
     } catch (e) {}
 }
 
+function playFriendWooshSound(isIncoming = false) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = "sine";
+        if (isIncoming) {
+            osc.frequency.setValueAtTime(340, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(680, ctx.currentTime + 0.16);
+            osc.frequency.exponentialRampToValueAtTime(520, ctx.currentTime + 0.32);
+        } else {
+            osc.frequency.setValueAtTime(280, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(760, ctx.currentTime + 0.26);
+        }
+
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.34);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.36);
+    } catch (e) {}
+}
+
 function sendBackgroundBumpNotification(title, body) {
     if (document.hidden && "Notification" in window && Notification.permission === "granted") {
         try {
             new Notification(title, { body });
         } catch (e) {}
     }
+}
+
+// ==========================================
+// ANIMAÇÕES DE PEDIDO DE AMIZADE (ENVIO & RECEBIDO COM FOTO)
+// ==========================================
+function triggerFriendSentAnimation(targetUser) {
+    if (navigator.vibrate) {
+        try { navigator.vibrate([60, 40, 90]); } catch (e) {}
+    }
+    playFriendWooshSound(false);
+
+    const existing = document.querySelector(".friend-anim-overlay");
+    if (existing) existing.remove();
+
+    const name = targetUser?.full_name || "Utilizador";
+    const avatarUrl = targetUser?.avatar_url || null;
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+
+    const overlay = document.createElement("div");
+    overlay.className = "friend-anim-overlay sent-mode";
+    overlay.innerHTML = `
+        <div class="friend-sent-stage">
+            <div class="friend-sent-avatar-wrap">
+                ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(initials)}
+            </div>
+            <div class="friend-sent-plane">✈️</div>
+            <div class="friend-sent-pill">👊 Pedido enviado para ${escapeHTML(name)}!</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.remove(), 1750);
+}
+
+function triggerFriendRequestAnimation(senderUser, friendshipId) {
+    if (!senderUser) return;
+    if (navigator.vibrate) {
+        try { navigator.vibrate([120, 60, 160, 60, 200]); } catch (e) {}
+    }
+    playFriendWooshSound(true);
+
+    const existing = document.querySelector(".friend-anim-overlay");
+    if (existing) existing.remove();
+
+    const name = senderUser.full_name || "Novo Amigo";
+    const avatarUrl = senderUser.avatar_url || null;
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+    const bioLine = senderUser.bio
+        ? escapeHTML(senderUser.bio)
+        : `${senderUser.status_emoji || "📍"} ${escapeHTML(senderUser.status_text || "Quer ligar-se contigo no LocalSpot!")}`;
+
+    const overlay = document.createElement("div");
+    overlay.className = "friend-anim-overlay";
+    overlay.innerHTML = `
+        <div class="friend-req-burst-card">
+            <span style="display:inline-block; background:rgba(236,72,153,0.2); border:1px solid rgba(236,72,153,0.5); color:#fbcfe8; font-size:11px; font-weight:800; padding:4px 12px; border-radius:999px; margin-bottom:14px;">
+                ✨ NOVO PEDIDO DE AMIZADE
+            </span>
+            <div class="friend-req-photo-ring">
+                <div class="friend-req-photo-inner">
+                    ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(initials)}
+                </div>
+                <div class="friend-req-badge-fist">👊</div>
+            </div>
+            <h2 style="margin:0 0 6px; font-size:21px;">${escapeHTML(name)}</h2>
+            <p style="margin:0; font-size:13px; color:#cbd5e1;">${bioLine}</p>
+            <div class="friend-req-actions-row">
+                <button type="button" id="animAcceptReqBtn" class="btn-bump" style="padding:10px; font-size:13.5px;">✅ Aceitar</button>
+                <button type="button" id="animLaterReqBtn" class="btn-soft" style="padding:10px; font-size:13px;">Ver Depois</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const autoCloseTimer = setTimeout(() => {
+        if (overlay.parentElement) overlay.remove();
+    }, 9000);
+
+    $("animLaterReqBtn").onclick = () => {
+        clearTimeout(autoCloseTimer);
+        overlay.remove();
+    };
+
+    $("animAcceptReqBtn").onclick = async () => {
+        clearTimeout(autoCloseTimer);
+        overlay.remove();
+        if (friendshipId) {
+            await window.acceptFriendRequest(friendshipId, senderUser.id);
+        } else {
+            await loadSocialData();
+            const match = incomingFriendRequests.find(r => String(r.user.id) === String(senderUser.id));
+            if (match) {
+                await window.acceptFriendRequest(match.friendshipId, senderUser.id);
+            }
+        }
+    };
 }
 
 // ---------- Toast Notifications ----------
@@ -414,7 +539,7 @@ function showWelcomeSplash(isBusiness = false) {
                 <div class="welcome-feature-pills">
                     <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
                     <span class="welcome-feat-chip">👊 Amigos & Bumps</span>
-                    <span class="welcome-feat-chip">🏛️ Entidades Locais</span>
+                    <span class="welcome-feat-chip">💬 Chat em Tempo Real</span>
                 </div>
                 <div class="welcome-loader-track">
                     <div class="welcome-loader-fill"></div>
@@ -793,7 +918,7 @@ async function finishOnboardingWizard() {
 }
 
 // ==========================================
-// INJEÇÃO DA UI SOCIAL & BUMP
+// INJEÇÃO DA UI SOCIAL, AMIGOS & CHAT
 // ==========================================
 function ensureSocialUI() {
     const nav = document.querySelector(".header nav");
@@ -803,7 +928,7 @@ function ensureSocialUI() {
         friendsBtn.type = "button";
         friendsBtn.id = "friendsNavBtn";
         friendsBtn.className = "btn-friends-nav hidden";
-        friendsBtn.innerHTML = `👊 Amigos <span id="friendsReqBadge" class="friends-req-badge hidden">0</span>`;
+        friendsBtn.innerHTML = `👊 Amigos & Chat <span id="friendsReqBadge" class="friends-req-badge hidden">0</span>`;
         nav.insertBefore(friendsBtn, notifBtn);
     }
 
@@ -982,19 +1107,24 @@ function ensureSocialUI() {
             <div class="modal-content">
                 <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
                 <div style="display:flex; justify-content:space-between; align-items:center; padding-right:34px; margin-bottom:4px;">
-                    <h2 style="margin:0;">👊 Amigos & Bump</h2>
+                    <h2 style="margin:0;">👊 Amigos & Chat</h2>
                     <button type="button" id="enableBgNotifBumpBtn" class="btn-soft" style="font-size:11.5px; padding:5px 9px;">🔔 Alertas</button>
                 </div>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Bump = 1 pt • Super Bump (abanão mútuo em 5s) = 2 pts ⚡</p>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Conversa em tempo real, envia pedidos de amizade e faz Bumps! ⚡</p>
                 
-                <div class="auth-tabs" style="margin-bottom:14px;">
-                    <button type="button" id="tabFriendsList" class="auth-tab active">👥 Meus Amigos (<span id="friendsTabCount">0</span>)</button>
-                    <button type="button" id="tabFriendsAdd" class="auth-tab">🔍 Procurar / Pedidos (<span id="requestsTabCount">0</span>)</button>
+                <div class="auth-tabs three-cols" style="margin-bottom:14px;">
+                    <button type="button" id="tabFriendsList" class="auth-tab active">👥 Amigos (<span id="friendsTabCount">0</span>)</button>
+                    <button type="button" id="tabFriendsChats" class="auth-tab">💬 Conversas <span id="chatsTabUnreadBadge" class="friends-req-badge hidden">0</span></button>
+                    <button type="button" id="tabFriendsAdd" class="auth-tab">🔍 Adicionar (<span id="requestsTabCount">0</span>)</button>
                 </div>
 
                 <div id="panelFriendsList">
                     <div id="bumpLeaderboardSection"></div>
                     <div id="friendsContainerList"></div>
+                </div>
+
+                <div id="panelFriendsChats" class="hidden">
+                    <div id="chatsListContainer"></div>
                 </div>
 
                 <div id="panelFriendsAdd" class="hidden">
@@ -1055,7 +1185,7 @@ function ensureSocialUI() {
         chatModal.className = "modal hidden";
         chatModal.setAttribute("aria-hidden", "true");
         chatModal.innerHTML = `
-            <div class="modal-content" style="width:440px;">
+            <div class="modal-content" style="width:450px;">
                 <button type="button" id="closeFriendChatModal" class="close-button" aria-label="Fechar">&times;</button>
                 <div id="chatFriendHeader" style="display:flex; align-items:center; gap:10px; margin-bottom:10px;"></div>
                 
@@ -1066,6 +1196,13 @@ function ensureSocialUI() {
                     <button type="button" class="emoji-bomb-btn" data-bomb="😂">😂</button>
                     <button type="button" class="emoji-bomb-btn" data-bomb="🎉">🎉</button>
                     <button type="button" class="emoji-bomb-btn" data-bomb="👀">👀</button>
+                </div>
+
+                <div id="chatQuickRepliesBar" class="chat-quick-replies">
+                    <button type="button" class="chat-quick-pill" data-msg="📍 Onde estás?">📍 Onde estás?</button>
+                    <button type="button" class="chat-quick-pill" data-msg="👊 Bora dar Bump!">👊 Bora dar Bump!</button>
+                    <button type="button" class="chat-quick-pill" data-msg="☕ Vamos tomar café?">☕ Café?</button>
+                    <button type="button" class="chat-quick-pill" data-msg="🎉 Vou a um evento, vens?">🎉 Bora a um evento?</button>
                 </div>
 
                 <div id="chatMessagesBox" class="chat-messages-box"></div>
@@ -1133,7 +1270,7 @@ function bindSocialEvents() {
         friendsNavBtn.dataset.bound = "1";
         friendsNavBtn.addEventListener("click", async () => {
             openModal(friendsModal);
-            await loadSocialData();
+            await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
         });
     }
 
@@ -1147,7 +1284,7 @@ function bindSocialEvents() {
             }
             const perm = await Notification.requestPermission();
             if (perm === "granted") {
-                showToast("🔔 Alertas de Bump ativados mesmo em segundo plano!", "success");
+                showToast("🔔 Alertas ativados mesmo em segundo plano!", "success");
             }
         });
     }
@@ -1252,22 +1389,33 @@ function bindSocialEvents() {
         });
     }
 
+    const quickRepliesBar = $("chatQuickRepliesBar");
+    if (quickRepliesBar && !quickRepliesBar.dataset.bound) {
+        quickRepliesBar.dataset.bound = "1";
+        quickRepliesBar.addEventListener("click", async e => {
+            const pill = e.target.closest(".chat-quick-pill");
+            if (!pill || !activeChatFriendId) return;
+            await sendDirectMessage(activeChatFriendId, pill.dataset.msg, "text");
+        });
+    }
+
     const tabList = $("tabFriendsList");
+    const tabChats = $("tabFriendsChats");
     const tabAdd = $("tabFriendsAdd");
     if (tabList && !tabList.dataset.bound) {
         tabList.dataset.bound = "1";
-        tabList.addEventListener("click", () => {
-            tabList.classList.add("active");
-            tabAdd.classList.remove("active");
-            $("panelFriendsList").classList.remove("hidden");
-            $("panelFriendsAdd").classList.add("hidden");
+        const switchFriendsTab = (activeId) => {
+            ["tabFriendsList", "tabFriendsChats", "tabFriendsAdd"].forEach(id => $(id).classList.toggle("active", id === activeId));
+            $("panelFriendsList").classList.toggle("hidden", activeId !== "tabFriendsList");
+            $("panelFriendsChats").classList.toggle("hidden", activeId !== "tabFriendsChats");
+            $("panelFriendsAdd").classList.toggle("hidden", activeId !== "tabFriendsAdd");
+        };
+        tabList.addEventListener("click", () => switchFriendsTab("tabFriendsList"));
+        tabChats.addEventListener("click", async () => {
+            switchFriendsTab("tabFriendsChats");
+            await loadRecentChatSummaries();
         });
-        tabAdd.addEventListener("click", () => {
-            tabAdd.classList.add("active");
-            tabList.classList.remove("active");
-            $("panelFriendsAdd").classList.remove("hidden");
-            $("panelFriendsList").classList.add("hidden");
-        });
+        tabAdd.addEventListener("click", () => switchFriendsTab("tabFriendsAdd"));
     }
 
     const searchBtn = $("friendSearchBtn");
@@ -1446,7 +1594,6 @@ async function performSmartBumpAction(fromShake = false) {
         return;
     }
 
-    // Se vier de abanão físico, valida modo de privacidade (respeita Fantasma e Borrão)
     if (fromShake) {
         const myPrivacy = currentProfile?.privacy_mode || "precise";
         if (myPrivacy !== "precise" || currentProfile?.ghost_mode) {
@@ -1480,7 +1627,6 @@ async function performSmartBumpAction(fromShake = false) {
         return;
     }
 
-    // Clique manual no botão "👊 Bump!" do mapa
     if (userPosition) {
         const nearbyFriend = window.friendsList.find(f =>
             !f.ghost_mode &&
@@ -1658,6 +1804,8 @@ logoutButton.addEventListener("click", async () => {
     myFollowersList = [];
     window.friendsList = [];
     onlineUserIds.clear();
+    animatedIncomingFriendshipIds.clear();
+    lastChatMessageByFriend.clear();
     if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
     ["friendsNavBtn", "entityNetworkNavBtn", "bumpShakeMapBtn", "iosShakePermMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
         if ($(id)) $(id).classList.add("hidden");
@@ -1729,7 +1877,8 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
         loadMyFollowers(),
         loadNotifications(),
         loadUnreadMessagesCount(),
-        loadSocialData()
+        loadSocialData({ animateInitialRequests: true }),
+        loadRecentChatSummaries()
     ]);
     await loadEventsFromSupabase();
     startLiveSocialSync();
@@ -1835,7 +1984,7 @@ async function initAuth() {
 }
 
 // ==========================================
-// SISTEMA DE AMIZADES & PÓDIO BUMP
+// SISTEMA DE AMIZADES, CONVERSAS & PÓDIO BUMP
 // ==========================================
 window.updateHangoutBanner = (hangoutNames, firstFriend) => {
     const banner = $("hangoutBanner");
@@ -1871,7 +2020,90 @@ async function loadUnreadMessagesCount() {
     } catch (e) {}
 }
 
-async function loadSocialData() {
+async function loadRecentChatSummaries() {
+    if (!currentUser || !isNormalUserAccount()) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from("friend_messages")
+            .select("*")
+            .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+            .order("created_at", { ascending: false })
+            .limit(100);
+
+        if (!error && data) {
+            lastChatMessageByFriend = new Map();
+            data.forEach(m => {
+                const otherId = String(m.sender_id) === String(currentUser.id)
+                    ? String(m.receiver_id)
+                    : String(m.sender_id);
+                if (!lastChatMessageByFriend.has(otherId)) {
+                    lastChatMessageByFriend.set(otherId, m);
+                }
+            });
+            renderChatsTabContent();
+        }
+    } catch (e) {}
+}
+
+function renderChatsTabContent() {
+    const container = $("chatsListContainer");
+    if (!container) return;
+
+    if (!window.friendsList.length) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:24px 12px; color:var(--muted);">
+                <p style="font-size:28px; margin:0 0 8px;">💬</p>
+                <p style="margin:0 0 12px; font-size:13.5px;">Adiciona amigos para começares a conversar em tempo real!</p>
+                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos</button>
+            </div>
+        `;
+        return;
+    }
+
+    const sortedFriends = [...window.friendsList].sort((a, b) => {
+        const msgA = lastChatMessageByFriend.get(String(a.id));
+        const msgB = lastChatMessageByFriend.get(String(b.id));
+        const timeA = msgA ? new Date(msgA.created_at).getTime() : 0;
+        const timeB = msgB ? new Date(msgB.created_at).getTime() : 0;
+        return timeB - timeA;
+    });
+
+    container.innerHTML = sortedFriends.map(f => {
+        const key = String(f.id);
+        const lastMsg = lastChatMessageByFriend.get(key);
+        const unread = unreadMessagesBySender.get(key) || 0;
+        const isLive = onlineUserIds.has(key);
+
+        let preview = `${f.status_emoji || "📍"} ${f.status_text || "Toca para iniciar conversa"}`;
+        let timeLabel = "";
+
+        if (lastMsg) {
+            const prefix = String(lastMsg.sender_id) === String(currentUser.id) ? "Tu: " : "";
+            preview = lastMsg.msg_type === "emoji_bomb"
+                ? `${prefix}Chuva de ${lastMsg.content}`
+                : `${prefix}${lastMsg.content}`;
+            timeLabel = new Date(lastMsg.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        return `
+            <div class="chat-thread-row${unread > 0 ? " unread" : ""}" onclick="window.openFriendChat('${f.id}')">
+                <div class="friend-row-left" style="flex:1; min-width:0;">
+                    ${renderAvatarChip(f, "")}
+                    <div class="friend-row-info" style="flex:1; min-width:0;">
+                        <strong>${escapeHTML(f.full_name)} ${isLive ? '<small style="color:#10b981;">●</small>' : ""}</strong>
+                        <span style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(preview)}</span>
+                    </div>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    ${timeLabel ? `<small style="display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px;">${timeLabel}</small>` : ""}
+                    ${unread > 0 ? `<span class="friends-req-badge">${unread}</span>` : `<span style="font-size:12px; color:var(--muted);">💬</span>`}
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+async function loadSocialData({ animateInitialRequests = false, triggerAnimForSenderId = null } = {}) {
     if (!currentUser) return;
 
     if (!isNormalUserAccount()) {
@@ -1945,8 +2177,26 @@ async function loadSocialData() {
             })
             .filter(Boolean);
 
+        // Dispara animação com a foto do utilizador se houver pedido novo
+        if (triggerAnimForSenderId) {
+            const targetReq = incomingFriendRequests.find(r => String(r.user.id) === String(triggerAnimForSenderId));
+            if (targetReq && !animatedIncomingFriendshipIds.has(String(targetReq.friendshipId))) {
+                animatedIncomingFriendshipIds.add(String(targetReq.friendshipId));
+                triggerFriendRequestAnimation(targetReq.user, targetReq.friendshipId);
+            }
+        } else if (animateInitialRequests && incomingFriendRequests.length > 0) {
+            const firstReq = incomingFriendRequests[0];
+            if (!animatedIncomingFriendshipIds.has(String(firstReq.friendshipId))) {
+                animatedIncomingFriendshipIds.add(String(firstReq.friendshipId));
+                setTimeout(() => {
+                    triggerFriendRequestAnimation(firstReq.user, firstReq.friendshipId);
+                }, 3300);
+            }
+        }
+
         updateSocialBadges();
         renderFriendsModalContent();
+        renderChatsTabContent();
         if (typeof showFriendsOnMap === "function") {
             showFriendsOnMap(window.getMapSocialEntities());
         }
@@ -1962,6 +2212,11 @@ function updateSocialBadges() {
     if (navBadge) {
         navBadge.textContent = badgeTotal;
         navBadge.classList.toggle("hidden", badgeTotal === 0);
+    }
+    const chatTabBadge = $("chatsTabUnreadBadge");
+    if (chatTabBadge) {
+        chatTabBadge.textContent = totalUnreadMsgs;
+        chatTabBadge.classList.toggle("hidden", totalUnreadMsgs === 0);
     }
     if ($("friendsTabCount")) $("friendsTabCount").textContent = window.friendsList.length;
     if ($("requestsTabCount")) $("requestsTabCount").textContent = incomingFriendRequests.length;
@@ -2100,9 +2355,9 @@ async function searchUsersAndEntities() {
                 : `<button type="button" class="btn-primary-sm" onclick="window.toggleFollowFromSearch('${u.id}', '${escapeHTML(u.full_name)}')">+ Seguir</button>`;
         } else {
             if (friendIds.has(String(u.id))) {
-                actionBtn = `<span class="category">✓ Amigos</span>`;
+                actionBtn = `<button type="button" class="btn-soft" onclick="window.openFriendChat('${u.id}')">💬 Conversar</button>`;
             } else if (sentFriendRequestIds.has(u.id)) {
-                actionBtn = `<span class="muted" style="font-size:12px;">Pedido enviado</span>`;
+                actionBtn = `<span class="muted" style="font-size:12px;">✈️ Pedido enviado</span>`;
             } else {
                 actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">👊 Adicionar Amigo</button>`;
             }
@@ -2142,7 +2397,7 @@ window.sendFriendRequest = async (targetId, targetName) => {
 
     const { data: targetProf } = await supabaseClient
         .from("profiles")
-        .select("role")
+        .select("*")
         .eq("id", targetId)
         .maybeSingle();
 
@@ -2151,11 +2406,15 @@ window.sendFriendRequest = async (targetId, targetName) => {
         return;
     }
 
-    const { error } = await supabaseClient.from("friendships").insert([{
-        requester_id: currentUser.id,
-        addressee_id: targetId,
-        status: "pending"
-    }]);
+    const { data: insertedRow, error } = await supabaseClient
+        .from("friendships")
+        .insert([{
+            requester_id: currentUser.id,
+            addressee_id: targetId,
+            status: "pending"
+        }])
+        .select()
+        .maybeSingle();
 
     if (error) {
         showToast("Pedido já enviado ou erro de ligação.", "error");
@@ -2163,13 +2422,37 @@ window.sendFriendRequest = async (targetId, targetName) => {
     }
 
     sentFriendRequestIds.add(targetId);
+
+    // Dispara imediatamente a animação de envio com a foto do destinatário
+    triggerFriendSentAnimation(targetProf);
+
+    // Envia Broadcast imediato para que o destinatário veja a animação com a foto em tempo real
+    if (bumpBroadcastChannel) {
+        bumpBroadcastChannel.send({
+            type: "broadcast",
+            event: "friend_request_received",
+            payload: {
+                friendshipId: insertedRow?.id || null,
+                sender: {
+                    id: currentUser.id,
+                    full_name: currentProfile.full_name,
+                    avatar_url: currentProfile.avatar_url || null,
+                    bio: currentProfile.bio || "",
+                    status_emoji: currentProfile.status_emoji || "📍",
+                    status_text: currentProfile.status_text || "No LocalSpot"
+                },
+                receiverId: targetId
+            }
+        });
+    }
+
     await createNotification(
         targetId,
         null,
         "Novo pedido de amizade 👊",
         `${currentProfile.full_name} quer adicionar-te aos amigos no LocalSpot!`
     );
-    showToast(`Pedido de amizade enviado a ${targetName}!`, "success");
+
     if ($("friendSearchInput") && $("friendSearchInput").value.trim()) {
         searchUsersAndEntities();
     }
@@ -2194,10 +2477,10 @@ window.acceptFriendRequest = async (friendshipId, requesterId) => {
         requesterId,
         null,
         "Pedido de amizade aceite! 🎉",
-        `${currentProfile.full_name} aceitou o teu pedido. Já são amigos!`
+        `${currentProfile.full_name} aceitou o teu pedido. Já podem conversar e dar Bump!`
     );
-    showToast("Novo amigo adicionado!", "success");
-    await loadSocialData();
+    triggerBumpVisual("🎉", "Novo amigo adicionado! Já podem conversar 💬");
+    await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
     filterEvents();
 };
 
@@ -2215,7 +2498,7 @@ window.removeFriend = async (friendId, friendName) => {
         .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${currentUser.id})`);
 
     showToast(`${friendName} removido dos amigos.`);
-    await loadSocialData();
+    await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
     renderProfileLists();
     filterEvents();
 };
@@ -2412,7 +2695,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     const lastIncoming = recentIncomingBumpTs.get(friendKey) || 0;
     const isMutualSuper = (now - lastIncoming) <= 5000;
 
-    // Cooldown de 60s apenas se NÃO for resposta mútua (Super Bump) nos primeiros 5s
     if (!isMutualSuper) {
         const lastBumpTs = bumpCooldownMap.get(friendKey) || 0;
         const elapsedSec = Math.floor((now - lastBumpTs) / 1000);
@@ -2430,7 +2712,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     const nextCount = (fRow?.bump_count || friend.bump_count || 0) + pointsToAdd;
     const nextSuperCount = (fRow?.super_bump_count || friend.super_bump_count || 0) + (isMutualSuper ? 1 : 0);
 
-    // Tenta usar RPC atómica do Supabase se existir, com fallback direto para friendships
     let finalScore = nextCount;
     try {
         const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("registrar_bump", {
@@ -2598,7 +2879,7 @@ async function loadChatHistory(friendId) {
         .select("*")
         .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`)
         .order("created_at", { ascending: true })
-        .limit(50);
+        .limit(60);
 
     if (error) {
         box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Sem mensagens disponíveis.</p>`;
@@ -2615,11 +2896,15 @@ async function loadChatHistory(friendId) {
     unreadMessagesBySender.delete(String(friendId));
     updateSocialBadges();
     renderFriendsModalContent();
+    renderChatsTabContent();
 
     if (!data || data.length === 0) {
         box.innerHTML = `<p class="muted" style="font-size:12.5px; text-align:center; margin-top:80px;">Envia a primeira mensagem! 💬</p>`;
         return;
     }
+
+    lastChatMessageByFriend.set(String(friendId), data[data.length - 1]);
+    renderChatsTabContent();
 
     box.innerHTML = data.map(m => {
         const isMine = String(m.sender_id) === String(currentUser.id);
@@ -2639,12 +2924,21 @@ async function loadChatHistory(friendId) {
 
 async function sendDirectMessage(receiverId, content, msgType = "text") {
     if (!currentUser) return;
-    await supabaseClient.from("friend_messages").insert([{
-        sender_id: currentUser.id,
-        receiver_id: receiverId,
-        content,
-        msg_type: msgType
-    }]);
+    const { data } = await supabaseClient
+        .from("friend_messages")
+        .insert([{
+            sender_id: currentUser.id,
+            receiver_id: receiverId,
+            content,
+            msg_type: msgType
+        }])
+        .select()
+        .maybeSingle();
+
+    if (data) {
+        lastChatMessageByFriend.set(String(receiverId), data);
+        renderChatsTabContent();
+    }
 
     if (String(activeChatFriendId) === String(receiverId)) {
         await loadChatHistory(receiverId);
@@ -2842,9 +3136,23 @@ function startLiveSocialSync() {
             const stateObj = bumpBroadcastChannel.presenceState();
             onlineUserIds = new Set(Object.keys(stateObj));
             renderFriendsModalContent();
+            renderChatsTabContent();
             if (typeof showFriendsOnMap === "function") {
                 showFriendsOnMap(window.getMapSocialEntities());
             }
+        })
+        .on("broadcast", { event: "friend_request_received" }, ({ payload }) => {
+            if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
+            const fid = payload.friendshipId ? String(payload.friendshipId) : null;
+            if (fid && animatedIncomingFriendshipIds.has(fid)) return;
+            if (fid) animatedIncomingFriendshipIds.add(fid);
+
+            triggerFriendRequestAnimation(payload.sender, payload.friendshipId);
+            sendBackgroundBumpNotification(
+                "👊 Novo pedido de amizade!",
+                `${payload.sender?.full_name || "Alguém"} quer adicionar-te aos amigos no LocalSpot!`
+            );
+            loadSocialData();
         })
         .on("broadcast", { event: "bump_shockwave" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
@@ -2924,7 +3232,18 @@ function startLiveSocialSync() {
                 if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
             }
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => {
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "friendships" }, payload => {
+            const row = payload.new;
+            if (row && String(row.addressee_id) === String(currentUser.id) && row.status === "pending") {
+                loadSocialData({ triggerAnimForSenderId: row.requester_id });
+            } else {
+                loadSocialData();
+            }
+        })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "friendships" }, () => {
+            loadSocialData();
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships" }, () => {
             loadSocialData();
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "follows" }, async () => {
@@ -2941,7 +3260,7 @@ function startLiveSocialSync() {
                 if (notif.title && notif.title.includes("Bump")) {
                     const isSuper = notif.title.includes("SUPER");
                     triggerBumpVisual(isSuper ? "⚡" : "👊", notif.title, isSuper);
-                } else {
+                } else if (!notif.title?.includes("pedido de amizade")) {
                     showToast(notif.title || "Nova notificação!");
                 }
             }
@@ -2949,6 +3268,8 @@ function startLiveSocialSync() {
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "friend_messages" }, payload => {
             const msg = payload.new;
             if (!msg || String(msg.receiver_id) !== String(currentUser.id)) return;
+
+            lastChatMessageByFriend.set(String(msg.sender_id), msg);
 
             if (msg.msg_type === "emoji_bomb") {
                 launchEmojiBombAnimation(msg.content);
@@ -2962,7 +3283,9 @@ function startLiveSocialSync() {
                 unreadMessagesBySender.set(String(msg.sender_id), (unreadMessagesBySender.get(String(msg.sender_id)) || 0) + 1);
                 updateSocialBadges();
                 renderFriendsModalContent();
+                renderChatsTabContent();
                 showToast(`💬 ${senderName}: ${msg.content}`);
+                sendBackgroundBumpNotification(`💬 Mensagem de ${senderName}`, msg.content);
             }
         })
         .subscribe();
@@ -3539,22 +3862,17 @@ function renderProfileLists() {
                     <strong>🏛️ ${escapeHTML(name)}</strong>
                     <span>Entidade seguida</span>
                 </div>
-                <button type="button" class="btn-logout" onclick="window.toggleFollowFromList('${id}', '${escapeHTML(name)}')">Deixar de seguir</button>
+                <button type="button" class="btn-logout" onclick="toggleFollowOrganizer('${id}', '${escapeHTML(name)}').then(renderProfileLists)">Deixar de seguir</button>
             </div>
         `).join("")
-        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhuma empresa ou entidade pública.</p>`;
+        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhuma empresa ou entidade.</p>`;
 }
 
-window.toggleFollowFromList = async (id, name) => {
-    await toggleFollowOrganizer(id, name);
-    renderProfileLists();
-};
-
 // ==========================================
-// PAINEL DE ADMINISTRAÇÃO & VERIFICAÇÃO DE ENTIDADES
+// PAINEL DO ADMINISTRADOR (GERIR CONTAS & VERIFICAR ENTIDADES)
 // ==========================================
 adminPanelBtn.addEventListener("click", async () => {
-    if (!currentProfile || currentProfile.role !== "admin") return;
+    if (!isAdminAccount()) return;
     openModal(adminModal);
     await loadAdminDashboard();
 });
@@ -3562,436 +3880,970 @@ adminPanelBtn.addEventListener("click", async () => {
 $("closeAdmin").addEventListener("click", () => closeModalEl(adminModal));
 adminModal.addEventListener("mousedown", e => { if (e.target === adminModal) closeModalEl(adminModal); });
 
-$("tabAdminUsers").addEventListener("click", () => {
-    $("tabAdminUsers").classList.add("active");
-    $("tabAdminReports").classList.remove("active");
-    $("adminUsersList").classList.remove("hidden");
-    $("adminReportsList").classList.add("hidden");
-});
-
-$("tabAdminReports").addEventListener("click", () => {
-    $("tabAdminReports").classList.add("active");
-    $("tabAdminUsers").classList.remove("active");
-    $("adminReportsList").classList.remove("hidden");
-    $("adminUsersList").classList.add("hidden");
-});
-
 async function loadAdminDashboard() {
-    $("adminUsersList").innerHTML = "<p class='muted'>A carregar contas...</p>";
-    $("adminReportsList").innerHTML = "<p class='muted'>A carregar denúncias...</p>";
+    const listEl = $("adminUsersList");
+    const statsEl = $("adminStatsGrid");
+    listEl.innerHTML = `<p class="muted">A carregar contas...</p>`;
 
-    const [usersRes, reportsRes] = await Promise.all([
-        supabaseClient.from("profiles").select("*").order("created_at", { ascending: false }),
-        supabaseClient.from("reports").select("*").order("created_at", { ascending: false })
-    ]);
+    const { data: profiles, error } = await supabaseClient
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    const users = usersRes.data || [];
-    const reports = reportsRes.data || [];
+    if (error || !profiles) {
+        listEl.innerHTML = `<p class="form-error">Erro ao carregar utilizadores.</p>`;
+        return;
+    }
 
-    $("statTotalUsers").textContent = users.length;
-    $("statBusinessUsers").textContent = users.filter(u => u.role === "business").length;
-    $("statTotalEvents").textContent = events.length;
-    $("statTotalReports").textContent = reports.length;
+    const totalUsers = profiles.length;
+    const totalBusinesses = profiles.filter(p => p.role === "business").length;
+    const verifiedEntities = profiles.filter(p => isEntityVerified(p)).length;
+    const totalEvents = events.length;
 
-    $("adminUsersList").innerHTML = users.map(u => {
-        const isSelf = u.id === currentUser.id;
-        const isBiz = u.role === "business";
-        const isVer = isEntityVerified(u);
+    statsEl.innerHTML = `
+        <div class="admin-stat-card"><strong>${totalUsers}</strong><span>Contas</span></div>
+        <div class="admin-stat-card"><strong>${totalBusinesses}</strong><span>Entidades</span></div>
+        <div class="admin-stat-card"><strong>${verifiedEntities}</strong><span>Verificadas</span></div>
+        <div class="admin-stat-card"><strong>${totalEvents}</strong><span>Eventos</span></div>
+    `;
+
+    listEl.innerHTML = profiles.map(p => {
+        const isSelf = currentUser && p.id === currentUser.id;
+        const isBiz = p.role === "business";
+        const isVer = isEntityVerified(p);
         const typeLabel = isBiz
-            ? `👔 Empresa (${u.business_type || "Geral"})`
-            : (u.role === "admin" ? "🛡️ Admin" : "👤 Utilizador");
+            ? `👔 ${escapeHTML(p.business_type || "Empresa / Domínio Público")}`
+            : (p.role === "admin" ? "🛡️ Administrador" : "👤 Utilizador Normal");
 
         return `
             <div class="admin-user-row">
                 <div class="admin-user-info">
-                    <strong>${escapeHTML(u.full_name)}${isVer ? '<span class="verified-check" title="Verificada">✓</span>' : ""}</strong>
-                    <span>${escapeHTML(u.email)} · ${escapeHTML(typeLabel)}</span>
+                    <strong>${escapeHTML(p.full_name || "Sem nome")}${verifiedBadgeHTML(p)} ${isSelf ? "<small>(Tu)</small>" : ""}</strong>
+                    <span>${escapeHTML(p.email)} · ${typeLabel}</span>
                 </div>
                 <div class="admin-row-controls">
                     ${isBiz ? `
-                        <button type="button" class="${isVer ? "btn-unverify" : "btn-verify"}" onclick="window.toggleEntityVerification('${u.id}', ${!isVer}, '${escapeHTML(u.full_name)}')">
-                            ${isVer ? "✓ Verificada" : "Verificar ✓"}
+                        <button type="button" class="${isVer ? "btn-unverify" : "btn-verify"}" onclick="window.toggleEntityVerification('${p.id}', ${isVer})">
+                            ${isVer ? "✅ Verificada" : "Verificar"}
                         </button>
                     ` : ""}
-                    <select onchange="window.adminChangeRole('${u.id}', this.value)" ${isSelf ? "disabled" : ""}>
-                        <option value="user" ${u.role === "user" ? "selected" : ""}>Utilizador</option>
-                        <option value="business" ${u.role === "business" ? "selected" : ""}>Empresa</option>
-                        <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option>
+                    <select class="admin-role-select" onchange="window.changeUserRole('${p.id}', this.value)" ${isSelf ? "disabled" : ""}>
+                        <option value="user" ${p.role === "user" ? "selected" : ""}>Utilizador</option>
+                        <option value="business" ${p.role === "business" ? "selected" : ""}>Empresa / Público</option>
+                        <option value="admin" ${p.role === "admin" ? "selected" : ""}>Admin</option>
                     </select>
                 </div>
             </div>
         `;
     }).join("");
-
-    $("adminReportsList").innerHTML = reports.length
-        ? reports.map(r => {
-            const ev = events.find(x => String(x.id) === String(r.event_id));
-            return `
-                <div class="admin-user-row">
-                    <div class="admin-user-info">
-                        <strong>🚩 ${escapeHTML(r.reason)} — ${ev ? escapeHTML(ev.name) : "Evento #" + r.event_id}</strong>
-                        <span>Por ${escapeHTML(r.reporter_name || "Utilizador")}: ${escapeHTML(r.details || "Sem detalhes")}</span>
-                    </div>
-                    <div class="admin-row-controls">
-                        ${ev ? `<button type="button" class="delete-btn" onclick="window.adminDeleteReportedEvent('${ev.id}', '${r.id}')">Apagar Evento</button>` : ""}
-                        <button type="button" class="btn-soft" onclick="window.adminDismissReport('${r.id}')">Arquivar</button>
-                    </div>
-                </div>
-            `;
-        }).join("")
-        : `<p class="muted" style="font-size:13px;">Nenhuma denúncia pendente.</p>`;
 }
 
-window.toggleEntityVerification = async (targetUserId, verifyState, entityName) => {
-    const updateData = {
-        status_emoji: verifyState ? "✅" : "🏢"
-    };
+window.toggleEntityVerification = async (userId, currentlyVerified) => {
+    if (!isAdminAccount()) return;
+    const nextVerified = !currentlyVerified;
+    const nextEmoji = nextVerified ? "✅" : "🏢";
 
-    const { error } = await supabaseClient
+    let { error } = await supabaseClient
         .from("profiles")
-        .update(updateData)
-        .eq("id", targetUserId);
+        .update({ is_verified: nextVerified, status_emoji: nextEmoji })
+        .eq("id", userId);
 
     if (error) {
-        showToast("Erro ao atualizar estado de verificação.", "error");
+        const fallback = await supabaseClient
+            .from("profiles")
+            .update({ status_emoji: nextEmoji })
+            .eq("id", userId);
+        error = fallback.error;
+    }
+
+    if (error) {
+        showToast("Erro ao atualizar verificação.", "error");
         return;
     }
 
     await supabaseClient
         .from("events")
-        .update({ creator_verified: verifyState })
-        .eq("creator_id", targetUserId);
+        .update({ creator_verified: nextVerified })
+        .eq("creator_id", userId);
 
-    if (verifyState) {
-        await createNotification(
-            targetUserId,
-            null,
-            "✅ Entidade Oficial Verificada!",
-            `A sua conta "${entityName}" recebeu o selo de verificação oficial no LocalSpot.`
-        );
-    }
+    await createNotification(
+        userId,
+        null,
+        nextVerified ? "✅ Entidade Oficial Verificada!" : "Estado de verificação atualizado",
+        nextVerified
+            ? "A sua entidade recebeu o selo oficial de verificação no LocalSpot!"
+            : "O selo de verificação da sua conta foi alterado pelo administrador."
+    );
 
-    showToast(verifyState ? `${entityName} verificada com sucesso! ✅` : `Selo removido de ${entityName}.`, "success");
-    await loadEventsFromSupabase();
+    showToast(nextVerified ? "Selo oficial atribuído!" : "Selo removido.", "success");
     await loadAdminDashboard();
+    await loadEventsFromSupabase();
 };
 
-window.adminChangeRole = async (targetUserId, newRole) => {
-    const { error } = await supabaseClient
-        .from("profiles")
-        .update({ role: newRole })
-        .eq("id", targetUserId);
+window.changeUserRole = async (userId, newRole) => {
+    if (!isAdminAccount()) return;
+    const businessType = newRole === "business" ? "Empresa / Domínio Público" : null;
+    const { error } = await supabaseClient.from("profiles").update({ role: newRole, business_type: businessType }).eq("id", userId);
 
     if (error) {
-        showToast("Erro ao alterar cargo.", "error");
+        showToast("Erro ao atualizar tipo de conta.", "error");
         return;
     }
+
     showToast("Tipo de conta atualizado!", "success");
     await loadAdminDashboard();
 };
 
-window.adminDeleteReportedEvent = async (eventId, reportId) => {
-    await supabaseClient.from("events").delete().eq("id", eventId);
-    await supabaseClient.from("reports").delete().eq("id", reportId);
-    events = events.filter(x => String(x.id) !== String(eventId));
-    filterEvents();
-    showToast("Evento denunciado eliminado.", "success");
-    await loadAdminDashboard();
-};
-
-window.adminDismissReport = async reportId => {
-    await supabaseClient.from("reports").delete().eq("id", reportId);
-    showToast("Denúncia arquivada.");
-    await loadAdminDashboard();
-};
-
 // ==========================================
-// INICIALIZAÇÃO DE FILTROS E CATEGORIAS
+// FILTROS, PESQUISA E RENDERIZAÇÃO DA LISTA
 // ==========================================
-Object.entries(DISTRICTS).forEach(([key, label]) => {
-    const opt1 = document.createElement("option");
-    opt1.value = key;
-    opt1.textContent = label;
-    districtFilter.appendChild(opt1);
-
-    const opt2 = document.createElement("option");
-    opt2.value = key;
-    opt2.textContent = label;
-    $("eventFormDistrict").appendChild(opt2);
-});
-
-const eventCategorySelect = $("eventCategory");
-function buildCategoryUI() {
-    const allChip = document.createElement("button");
-    allChip.type = "button";
-    allChip.className = "chip active";
-    allChip.dataset.cat = "all";
-    allChip.textContent = "Todos";
-    categoryChips.appendChild(allChip);
-
-    Object.entries(CATEGORIES).forEach(([key, info]) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "chip";
-        chip.dataset.cat = key;
-        chip.textContent = `${info.emoji} ${info.label}`;
-        categoryChips.appendChild(chip);
-
+function populateDistricts() {
+    DISTRITOS.forEach(d => {
         const opt = document.createElement("option");
-        opt.value = key;
-        opt.textContent = `${info.emoji} ${info.label}`;
-        eventCategorySelect.appendChild(opt);
+        opt.value = d;
+        opt.textContent = d;
+        districtFilter.appendChild(opt);
     });
 }
-buildCategoryUI();
 
-function saveFavorites() { saveJSON(STORAGE_FAVS, [...favorites]); }
+function getFilteredEvents() {
+    const query = state.search.trim().toLowerCase();
 
-window.toggleFavorite = id => {
-    const key = String(id);
-    const added = !favorites.has(key);
-    added ? favorites.add(key) : favorites.delete(key);
-    saveFavorites();
-    filterEvents();
-    showToast(added ? "Adicionado aos favoritos ★" : "Removido dos favoritos");
-};
+    return events
+        .map(ev => ({
+            ...ev,
+            distance: userPosition
+                ? distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude)
+                : null
+        }))
+        .filter(ev => {
+            if (state.category !== "all" && ev.category !== state.category) return false;
+            if (state.district !== "all" && ev.distrito !== state.district) return false;
+            if (state.onlyFavorites && !favorites.has(String(ev.id))) return false;
+            if (state.onlyFree && !isEventFree(ev)) return false;
+            if (state.onlyFollowing && (!ev.creatorId || !myFollowing.has(String(ev.creatorId)))) return false;
 
-function isPast(ev) { return eventDateTime(ev) < new Date(); }
+            if (state.period === "upcoming" && isEventPast(ev)) return false;
+            if (state.period === "today" && !isEventToday(ev)) return false;
+            if (state.period === "week" && !isEventThisWeek(ev)) return false;
+            if (state.period === "past" && !isEventPast(ev)) return false;
 
-function matchesPeriod(ev, period) {
-    if (period === "all") return true;
-    const dt = eventDateTime(ev);
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday);
-    endOfToday.setDate(endOfToday.getDate() + 1);
+            if (ev.distance !== null && state.radius < 300 && ev.distance > state.radius) return false;
 
-    if (period === "today") return dt >= startOfToday && dt < endOfToday;
-    if (period === "week") {
-        const end = new Date(startOfToday);
-        end.setDate(end.getDate() + 7);
-        return dt >= startOfToday && dt < end;
-    }
-    if (period === "weekend") {
-        const day = startOfToday.getDay();
-        const satOffset = day === 0 ? -1 : 6 - day;
-        const sat = new Date(startOfToday);
-        sat.setDate(sat.getDate() + satOffset);
-        const mon = new Date(sat);
-        mon.setDate(mon.getDate() + 2);
-        return dt >= sat && dt < mon;
-    }
-    return true;
+            if (query) {
+                const text = `${ev.name} ${ev.location} ${ev.distrito} ${ev.description} ${ev.category} ${ev.creatorName || ""}`.toLowerCase();
+                if (!text.includes(query)) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            if (state.sort === "distance" && a.distance !== null && b.distance !== null) {
+                return a.distance - b.distance;
+            }
+            if (state.sort === "popular") {
+                return (b.enrolled || 0) - (a.enrolled || 0);
+            }
+            return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
+        });
 }
 
-function eventDistance(ev) {
-    if (!userPosition || typeof ev.latitude !== "number") return null;
-    return distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude);
-}
-
-function formatDistance(km) {
-    if (km === null) return "";
-    return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace(".", ",")} km`;
-}
-
-// ==========================================
-// RENDERIZAÇÃO DE CARTÕES E LISTA DE EVENTOS
-// ==========================================
 function canManageEvent(ev) {
     if (!currentUser || !currentProfile) return false;
-    if (currentProfile.role === "admin") return true;
+    if (isAdminAccount()) return true;
     return ev.creatorId && String(ev.creatorId) === String(currentUser.id);
 }
 
-function createEventCard(ev) {
-    const cat = CATEGORIES[ev.category];
-    const past = isPast(ev);
-    const fav = favorites.has(String(ev.id));
-    const enrolled = myEnrollments.has(String(ev.id));
-    const dist = eventDistance(ev);
-
-    const card = document.createElement("div");
-    card.className = "event-card" + (past ? " past" : "") + (String(ev.id) === String(activeId) ? " active" : "");
-    card.dataset.id = ev.id;
-
-    const currentEnrolled = ev.enrolled || 0;
-    const max = ev.maxParticipants;
-    const isFull = max && currentEnrolled >= max;
-
-    let vagasLabel = max ? `${currentEnrolled}/${max} vagas` : `${currentEnrolled} inscritos`;
-    if (isFull) vagasLabel += " (Esgotado)";
-
-    let enrollBtnHtml = "";
-    if (!past) {
-        if (enrolled) {
-            enrollBtnHtml = `<button type="button" class="register-btn registered" data-action="enroll">✓ Inscrito</button>`;
-        } else if (isFull) {
-            enrollBtnHtml = `<button type="button" class="register-btn" disabled>Esgotado</button>`;
-        } else {
-            enrollBtnHtml = `<button type="button" class="register-btn" data-action="enroll">✋ Inscrever-me</button>`;
-        }
-    } else {
-        enrollBtnHtml = `<button type="button" class="register-btn" disabled>Terminado</button>`;
-    }
-
-    let organizerBadge = "";
-    if (ev.creatorName) {
-        const isNormalUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
-        const isAdmin = ev.creatorRole === "admin" || ev.creatorType === "Admin";
-        const badgeIcon = isAdmin ? "🛡️" : (isNormalUser ? "👤" : "🏢");
-        const prefix = !isNormalUser && !isAdmin && ev.creatorType ? `${ev.creatorType} · ` : "";
-        const verifiedHtml = !isNormalUser && !isAdmin && ev.creatorVerified
-            ? `<span class="verified-check" title="Entidade Verificada">✓</span>`
-            : "";
-        const tagClass = isAdmin ? " admin-tag" : (isNormalUser ? " user-tag" : "");
-        organizerBadge = `<div class="organizer-tag${tagClass}">${badgeIcon} ${escapeHTML(prefix)}${escapeHTML(ev.creatorName)}${verifiedHtml}</div>`;
-    }
-
-    const friendsGoing = window.getFriendsGoingToEvent(ev.id);
-    const friendsBadge = friendsGoing.length
-        ? `<div class="friends-going-badge">👊 ${friendsGoing.length === 1 ? escapeHTML(friendsGoing[0].full_name) + " vai" : friendsGoing.length + " amigos vão"}</div>`
-        : "";
-
-    const ownerControls = canManageEvent(ev)
-        ? `<div class="owner-card-bar">
-               <button type="button" class="edit-btn" data-action="edit">✏️ Editar</button>
-               <button type="button" class="delete-btn" data-action="delete">🗑️ Eliminar</button>
-           </div>`
-        : "";
-
-    card.innerHTML = `
-        <div class="event-image-wrap">
-            <img src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="${escapeHTML(ev.name)}" class="event-image"
-                 loading="lazy" onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
-            ${past ? '<span class="badge-past">Terminado</span>' : ""}
-            <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
-            <button type="button" class="fav-btn${fav ? " on" : ""}" data-action="fav" title="Favorito">${fav ? "★" : "☆"}</button>
-        </div>
-        <div class="event-meta">
-            <span class="category">${cat ? cat.emoji + " " + cat.label : escapeHTML(ev.category)}</span>
-        </div>
-        <h4>${escapeHTML(ev.name)}</h4>
-        ${organizerBadge}
-        ${friendsBadge}
-        <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
-        <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}${dist !== null ? ` · <strong>${formatDistance(dist)}</strong>` : ""}</p>
-        <div class="registration-info">👥 ${vagasLabel}</div>
-        <div class="card-actions-grid">
-            ${enrollBtnHtml}
-            <button type="button" class="details-btn" data-action="details">Detalhes</button>
-        </div>
-        ${ownerControls}
-    `;
-
-    card.addEventListener("click", e => {
-        const actionBtn = e.target.closest("[data-action]");
-        if (actionBtn) {
-            e.stopPropagation();
-            const act = actionBtn.dataset.action;
-            if (act === "fav") window.toggleFavorite(ev.id);
-            else if (act === "enroll") window.toggleEnrollment(ev.id);
-            else if (act === "details") window.openEventDetails(ev.id);
-            else if (act === "edit") startEditingEvent(ev.id);
-            else if (act === "delete") deleteEventById(ev.id);
-            return;
-        }
-        selectEvent(ev.id);
-        if (window.innerWidth <= 820) setMobileView("map");
-    });
-
-    return card;
-}
-
 function renderList(list) {
+    currentList = list;
+    const total = list.length;
+    eventCount.textContent = total === 1 ? "1 evento encontrado" : `${total} eventos encontrados`;
+    emptyState.classList.toggle("hidden", total > 0);
     eventsList.innerHTML = "";
-    eventCount.textContent = list.length;
-    emptyState.classList.toggle("hidden", list.length > 0);
-    list.forEach(ev => eventsList.appendChild(createEventCard(ev)));
+
+    list.forEach(ev => {
+        const isFav = favorites.has(String(ev.id));
+        const isRegistered = myEnrollments.has(String(ev.id));
+        const past = isEventPast(ev);
+        const full = ev.maxParticipants && ev.enrolled >= ev.maxParticipants;
+        const canManage = canManageEvent(ev);
+        const friendsGoing = window.getFriendsGoingToEvent(ev.id);
+
+        const distText = ev.distance !== null
+            ? ` · <strong>${ev.distance < 1 ? Math.round(ev.distance * 1000) + " m" : ev.distance.toFixed(1) + " km"}</strong>`
+            : "";
+
+        let regBtnText = "Inscrever-me";
+        if (past) regBtnText = "Evento terminado";
+        else if (isRegistered) regBtnText = "✓ Inscrito";
+        else if (full) regBtnText = "Lotação esgotada";
+
+        const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
+        const isOrgAdm = ev.creatorRole === "admin" || ev.creatorType === "Admin";
+        const orgTagClass = isOrgAdm ? "admin-tag" : (isOrgBiz ? "" : "user-tag");
+        const orgPrefix = isOrgAdm ? "🛡️" : (isOrgBiz ? "🏛️" : "👤");
+        const orgVerBadge = (isOrgBiz && ev.creatorVerified) ? `<span class="verified-check">✓</span>` : "";
+
+        const card = document.createElement("article");
+        card.className = "event-card" + (String(ev.id) === String(activeId) ? " active" : "");
+        card.dataset.id = ev.id;
+        card.innerHTML = `
+            <div class="event-image-wrap">
+                <img class="event-image" src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="${escapeHTML(ev.name)}" loading="lazy" onerror="this.src='${DEFAULT_IMAGE}'">
+                ${past ? `<span class="badge-past">Terminado</span>` : ""}
+                <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
+                <button class="fav-btn ${isFav ? "on" : ""}" data-fav="${ev.id}" title="Guardar favorito" aria-label="Guardar favorito">
+                    ${isFav ? "★" : "☆"}
+                </button>
+            </div>
+            <div class="event-meta">
+                <span class="category" style="--cat:${getCategoryColor(ev.category)}">
+                    ${getCategoryEmoji(ev.category)} ${escapeHTML(ev.category)}
+                </span>
+            </div>
+            <h4>${escapeHTML(ev.name)}</h4>
+            <div class="organizer-tag ${orgTagClass}">${orgPrefix} ${escapeHTML(ev.creatorName)}${orgVerBadge}</div>
+            ${friendsGoing.length > 0 ? `<div class="friends-going-badge">👊 ${friendsGoing.map(f => escapeHTML(f.full_name.split(" ")[0])).join(", ")} vai</div>` : ""}
+            <p>📅 ${escapeHTML(formatEventDate(ev))} às ${escapeHTML(ev.time)}</p>
+            <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(ev.distrito)}${distText}</p>
+            <div class="registration-info">
+                👥 ${ev.enrolled || 0}${ev.maxParticipants ? " / " + ev.maxParticipants : ""} inscritos
+            </div>
+            <div class="card-actions-grid">
+                <button type="button" class="register-btn ${isRegistered ? "registered" : ""}" onclick="event.stopPropagation(); window.toggleEnrollment('${ev.id}')" ${past || (!isRegistered && full) ? "disabled" : ""}>
+                    ${regBtnText}
+                </button>
+                <button type="button" class="details-btn" onclick="event.stopPropagation(); window.openEventDetails('${ev.id}')">
+                    Detalhes
+                </button>
+            </div>
+            ${canManage ? `
+                <div class="owner-card-bar">
+                    <button type="button" class="edit-btn" onclick="event.stopPropagation(); window.openEditEvent('${ev.id}')">✏️ Editar</button>
+                    <button type="button" class="delete-btn" onclick="event.stopPropagation(); window.deleteEvent('${ev.id}')">🗑️ Eliminar</button>
+                </div>
+            ` : ""}
+        `;
+
+        card.addEventListener("click", e => {
+            if (e.target.closest("button")) return;
+            selectEvent(ev.id);
+            if (window.innerWidth <= 820) setMobileView("map");
+        });
+
+        eventsList.appendChild(card);
+    });
 }
 
-function selectEvent(id, { scrollCard = false } = {}) {
+function filterEvents() {
+    const filtered = getFilteredEvents();
+    renderList(filtered);
+    showEventsOnMap(filtered);
+}
+
+function selectEvent(id, { scroll = false } = {}) {
     activeId = id;
-    document.querySelectorAll(".event-card").forEach(el => {
-        el.classList.toggle("active", String(el.dataset.id) === String(id));
+    document.querySelectorAll(".event-card").forEach(c => {
+        c.classList.toggle("active", String(c.dataset.id) === String(id));
     });
-    if (scrollCard) {
+    focusEventOnMap(id);
+
+    if (scroll) {
         const card = document.querySelector(`.event-card[data-id="${id}"]`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-    focusEvent(id);
 }
 
-window.onEventMarkerClick = id => {
-    selectEvent(id, { scrollCard: true });
+window.handleMarkerClick = id => {
+    selectEvent(id, { scroll: true });
 };
 
-function filterEvents() {
-    const q = state.search.trim().toLowerCase();
+// ==========================================
+// DETALHES DO EVENTO, BILHETE QR, PARTILHA, AVALIAÇÕES E COMENTÁRIOS
+// ==========================================
+function updateDetailSocialButton(ev) {
+    const followBtn = $("detailFollowBtn");
+    if (!followBtn) return;
 
-    currentList = events.filter(ev => {
-        if (state.category !== "all" && ev.category !== state.category) return false;
-        if (state.district !== "all" && ev.distrito !== state.district) return false;
-        if (state.onlyFavorites && !favorites.has(String(ev.id))) return false;
-        if (state.onlyFollowing && !myFollowing.has(String(ev.creatorId))) return false;
-        if (state.onlyFree) {
-            const p = (ev.price || "Gratuito").toLowerCase();
-            if (!p.includes("gratuito") && !p.includes("grátis") && p !== "0" && p !== "0€") return false;
+    if (!ev.creatorId || !currentUser || String(ev.creatorId) === String(currentUser.id)) {
+        followBtn.classList.add("hidden");
+        return;
+    }
+
+    const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
+    const isOrgUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
+
+    if (isOrgBiz) {
+        followBtn.classList.remove("hidden");
+        const isFollowing = myFollowing.has(String(ev.creatorId));
+        followBtn.textContent = isFollowing ? "✓ A seguir" : "+ Seguir";
+        followBtn.onclick = async () => {
+            await toggleFollowOrganizer(ev.creatorId, ev.creatorName);
+            updateDetailSocialButton(ev);
+        };
+    } else if (isOrgUser && isNormalUserAccount()) {
+        followBtn.classList.remove("hidden");
+        const isFriend = window.friendsList.some(f => String(f.id) === String(ev.creatorId));
+        const isSent = sentFriendRequestIds.has(ev.creatorId);
+
+        if (isFriend) {
+            followBtn.textContent = "💬 Conversar";
+            followBtn.onclick = () => {
+                closeModalEl(detailModal);
+                window.openFriendChat(ev.creatorId);
+            };
+        } else if (isSent) {
+            followBtn.textContent = "✈️ Pedido enviado";
+            followBtn.onclick = null;
+        } else {
+            followBtn.textContent = "👊 Adicionar Amigo";
+            followBtn.onclick = () => window.sendFriendRequest(ev.creatorId, ev.creatorName);
         }
-        if (!matchesPeriod(ev, state.period)) return false;
-
-        if (state.radius < 100 && userPosition) {
-            const dist = eventDistance(ev);
-            if (dist !== null && dist > state.radius) return false;
-        }
-
-        if (q) {
-            const hay = `${ev.name} ${ev.location} ${ev.description} ${ev.creatorName} ${districtLabel(ev.distrito)}`.toLowerCase();
-            if (!hay.includes(q)) return false;
-        }
-        return true;
-    });
-
-    currentList.sort((a, b) => {
-        if (state.sort === "name") return a.name.localeCompare(b.name, "pt");
-        if (state.sort === "distance" && userPosition) {
-            return (eventDistance(a) ?? Infinity) - (eventDistance(b) ?? Infinity);
-        }
-        return eventDateTime(a) - eventDateTime(b);
-    });
-
-    renderList(currentList);
-    showEventsOnMap(currentList);
+    } else {
+        followBtn.classList.add("hidden");
+    }
 }
 
-// ---------- Eventos dos Filtros ----------
-searchInput.addEventListener("input", e => { state.search = e.target.value; filterEvents(); });
+window.openEventDetails = async id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev) return;
 
-categoryChips.addEventListener("click", e => {
-    const btn = e.target.closest(".chip");
-    if (!btn) return;
-    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
-    btn.classList.add("active");
-    state.category = btn.dataset.cat;
+    detailEventId = ev.id;
+    const isRegistered = myEnrollments.has(String(ev.id));
+    const isFav = favorites.has(String(ev.id));
+    const past = isEventPast(ev);
+    const full = ev.maxParticipants && ev.enrolled >= ev.maxParticipants;
+    const canManage = canManageEvent(ev);
+
+    $("detailHeroImg").src = ev.image || DEFAULT_IMAGE;
+    $("detailHeroImg").onerror = () => { $("detailHeroImg").src = DEFAULT_IMAGE; };
+    $("detailCategory").textContent = `${getCategoryEmoji(ev.category)} ${ev.category}`;
+    $("detailPrice").textContent = ev.price || "Gratuito";
+
+    const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
+    const isOrgAdm = ev.creatorRole === "admin" || ev.creatorType === "Admin";
+    const orgTagClass = isOrgAdm ? "admin-tag" : (isOrgBiz ? "" : "user-tag");
+    const orgPrefix = isOrgAdm ? "🛡️" : (isOrgBiz ? "🏛️" : "👤");
+    const orgVerBadge = (isOrgBiz && ev.creatorVerified) ? `<span class="verified-check">✓</span>` : "";
+
+    $("detailOrganizer").className = `organizer-tag ${orgTagClass}`;
+    $("detailOrganizer").innerHTML = `${orgPrefix} Organizado por ${escapeHTML(ev.creatorName)}${orgVerBadge}`;
+    $("detailTitle").textContent = ev.name;
+    $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
+    $("detailDateTime").textContent = `${formatEventDate(ev)} às ${ev.time}`;
+    $("detailLocation").textContent = `${ev.location} (${ev.distrito})`;
+    $("detailCapacity").textContent = `${ev.enrolled || 0}${ev.maxParticipants ? " / " + ev.maxParticipants : " inscritos"}`;
+
+    updateDetailSocialButton(ev);
+
+    const extLink = $("detailExternalLink");
+    if (ev.externalUrl) {
+        extLink.href = ev.externalUrl;
+        extLink.classList.remove("hidden");
+    } else {
+        extLink.classList.add("hidden");
+    }
+
+    const regBtn = $("detailRegisterBtn");
+    regBtn.className = `register-btn ${isRegistered ? "registered" : ""}`;
+    regBtn.disabled = past || (!isRegistered && full);
+    regBtn.textContent = past ? "Evento terminado" : (isRegistered ? "✓ Inscrito (Cancelar)" : (full ? "Lotação esgotada" : "Inscrever-me neste evento"));
+    regBtn.onclick = () => window.toggleEnrollment(ev.id);
+
+    const ticketBtn = $("detailTicketBtn");
+    ticketBtn.classList.toggle("hidden", !isRegistered);
+    ticketBtn.onclick = () => window.openTicketModal(ev.id);
+
+    const favBtn = $("detailFavBtn");
+    favBtn.textContent = isFav ? "★ Guardado" : "☆ Guardar";
+    favBtn.onclick = () => {
+        toggleFavorite(ev.id);
+        favBtn.textContent = favorites.has(String(ev.id)) ? "★ Guardado" : "☆ Guardar";
+    };
+
+    $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
+    $("detailCalendarBtn").onclick = () => downloadEventICS(ev);
+    $("detailShareBtn").onclick = () => shareEventLink(ev);
+    $("detailReportBtn").onclick = () => openReportModal(ev);
+
+    const ownerBar = $("detailOwnerBar");
+    ownerBar.classList.toggle("hidden", !canManage);
+    $("detailEditBtn").onclick = () => { closeModalEl(detailModal); window.openEditEvent(ev.id); };
+    $("detailDeleteBtn").onclick = () => { closeModalEl(detailModal); window.deleteEvent(ev.id); };
+
+    $("reviewForm").classList.toggle("hidden", !past);
+
+    openModal(detailModal);
+    await Promise.all([
+        loadEventAttendees(ev.id),
+        loadEventComments(ev.id),
+        loadEventReviews(ev.id)
+    ]);
+};
+
+$("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
+detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) closeModalEl(detailModal); });
+
+window.openTicketModal = id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev || !currentUser || !currentProfile) return;
+
+    const code = `LS-${String(ev.id).slice(0, 6).toUpperCase()}-${currentUser.id.slice(0, 6).toUpperCase()}`;
+    const qrPayload = encodeURIComponent(`LocalSpot Ticket | ${code} | ${ev.name} | ${currentProfile.full_name}`);
+
+    $("ticketEventTitle").textContent = ev.name;
+    $("ticketEventMeta").textContent = `📅 ${formatEventDate(ev)} às ${ev.time} · 📍 ${ev.location}`;
+    $("ticketQrImage").src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrPayload}`;
+    $("ticketCodeText").textContent = code;
+    $("ticketHolderName").textContent = `Participante: ${currentProfile.full_name}`;
+
+    openModal(ticketModal);
+};
+
+$("closeTicket").addEventListener("click", () => closeModalEl(ticketModal));
+ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) closeModalEl(ticketModal); });
+
+function downloadEventICS(ev) {
+    const dtStart = `${ev.date.replace(/-/g, "")}T${ev.time.replace(":", "")}00`;
+    const icsContent = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//LocalSpot//Eventos//PT",
+        "BEGIN:VEVENT",
+        `SUMMARY:${ev.name}`,
+        `DTSTART:${dtStart}`,
+        `LOCATION:${ev.location}, ${ev.distrito}`,
+        `DESCRIPTION:${(ev.description || "").replace(/\n/g, " ")}`,
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${ev.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Ficheiro de calendário (.ics) transferido!", "success");
+}
+
+async function shareEventLink(ev) {
+    const shareUrl = `${window.location.origin}${window.location.pathname}?event=${ev.id}`;
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: ev.name, text: `Vê este evento no LocalSpot: ${ev.name}`, url: shareUrl });
+            return;
+        } catch (e) {}
+    }
+    try {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Link do evento copiado para a área de transferência!", "success");
+    } catch (e) {
+        showToast(`Link: ${shareUrl}`);
+    }
+}
+
+function checkSharedEventUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get("event");
+    if (sharedId) {
+        const exists = events.find(e => String(e.id) === String(sharedId));
+        if (exists) {
+            selectEvent(exists.id, { scroll: true });
+            window.openEventDetails(exists.id);
+        }
+    }
+}
+
+function openReportModal(ev) {
+    $("reportEventName").textContent = `A denunciar: ${ev.name}`;
+    $("reportDetails").value = "";
+    openModal(reportModal);
+}
+
+$("closeReport").addEventListener("click", () => closeModalEl(reportModal));
+reportModal.addEventListener("mousedown", e => { if (e.target === reportModal) closeModalEl(reportModal); });
+
+$("reportForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !detailEventId) return;
+
+    const { error } = await supabaseClient.from("event_reports").insert([{
+        event_id: detailEventId,
+        reporter_id: currentUser.id,
+        reason: $("reportReason").value,
+        details: $("reportDetails").value.trim()
+    }]);
+
+    if (error) {
+        showToast("Não foi possível registar a denúncia.", "error");
+        return;
+    }
+
+    closeModalEl(reportModal);
+    showToast("Denúncia enviada à equipa de moderação.", "success");
+});
+
+// Participantes, Comentários e Avaliações
+async function loadEventAttendees(eventId) {
+    const listEl = $("detailAttendeesList");
+    listEl.innerHTML = `<span class="muted">A carregar participantes...</span>`;
+
+    const { data, error } = await supabaseClient
+        .from("enrollments")
+        .select("user_id, user_name")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        listEl.innerHTML = `<span class="muted">Ainda sem inscritos. Sê o primeiro!</span>`;
+        return;
+    }
+
+    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
+
+    listEl.innerHTML = data.map(row => {
+        const isFriend = friendIds.has(String(row.user_id));
+        return `<span class="attendee-pill ${isFriend ? "friend-attendee" : ""}">${isFriend ? "👊" : "👤"} ${escapeHTML(row.user_name || "Participante")}</span>`;
+    }).join("");
+}
+
+async function loadEventComments(eventId) {
+    const listEl = $("detailCommentsList");
+    listEl.innerHTML = `<span class="muted">A carregar comentários...</span>`;
+
+    const { data, error } = await supabaseClient
+        .from("event_comments")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Sem comentários ainda. Deixa a tua mensagem!</p>`;
+        return;
+    }
+
+    listEl.innerHTML = data.map(c => {
+        const canDel = currentUser && (String(c.user_id) === String(currentUser.id) || isAdminAccount());
+        return `
+            <div class="comment-item">
+                <div class="comment-head">
+                    <strong>${escapeHTML(c.user_name)}</strong>
+                    ${canDel ? `<button type="button" class="btn-link small" onclick="window.deleteComment(${c.id})">Apagar</button>` : ""}
+                </div>
+                <p>${escapeHTML(c.content)}</p>
+            </div>
+        `;
+    }).join("");
+}
+
+$("commentForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !currentProfile || !detailEventId) return;
+
+    const input = $("commentInput");
+    const content = input.value.trim();
+    if (!content) return;
+
+    const { error } = await supabaseClient.from("event_comments").insert([{
+        event_id: detailEventId,
+        user_id: currentUser.id,
+        user_name: currentProfile.full_name,
+        content
+    }]);
+
+    if (error) {
+        showToast("Erro ao publicar comentário.", "error");
+        return;
+    }
+
+    const ev = events.find(x => String(x.id) === String(detailEventId));
+    if (ev) {
+        await createNotification(
+            ev.creatorId,
+            ev.id,
+            `Novo comentário em "${ev.name}"`,
+            `${currentProfile.full_name}: "${content.slice(0, 60)}"`
+        );
+    }
+
+    input.value = "";
+    await loadEventComments(detailEventId);
+    showToast("Comentário publicado!", "success");
+});
+
+window.deleteComment = async commentId => {
+    await supabaseClient.from("event_comments").delete().eq("id", commentId);
+    if (detailEventId) await loadEventComments(detailEventId);
+};
+
+async function loadEventReviews(eventId) {
+    const listEl = $("detailReviewsList");
+    const badgeEl = $("detailRatingBadge");
+
+    const { data, error } = await supabaseClient
+        .from("event_reviews")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+        badgeEl.classList.add("hidden");
+        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Ainda sem avaliações para este evento.</p>`;
+        return;
+    }
+
+    const avg = (data.reduce((sum, r) => sum + Number(r.rating), 0) / data.length).toFixed(1);
+    badgeEl.textContent = `⭐ ${avg} (${data.length})`;
+    badgeEl.classList.remove("hidden");
+
+    listEl.innerHTML = data.map(r => `
+        <div class="comment-item">
+            <div class="comment-head">
+                <strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong>
+            </div>
+            ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
+        </div>
+    `).join("");
+}
+
+$("reviewForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!currentUser || !currentProfile || !detailEventId) return;
+
+    const rating = Number($("reviewRating").value);
+    const comment = $("reviewComment").value.trim();
+
+    const { error } = await supabaseClient.from("event_reviews").upsert([{
+        event_id: detailEventId,
+        user_id: currentUser.id,
+        user_name: currentProfile.full_name,
+        rating,
+        comment
+    }], { onConflict: "event_id,user_id" });
+
+    if (error) {
+        showToast("Erro ao guardar avaliação.", "error");
+        return;
+    }
+
+    $("reviewComment").value = "";
+    await loadEventReviews(detailEventId);
+    showToast("Avaliação registada! Obrigado.", "success");
+});
+
+// ==========================================
+// CRIAR, EDITAR E ELIMINAR EVENTOS
+// ==========================================
+function openModal(el) {
+    el.classList.remove("hidden");
+    el.setAttribute("aria-hidden", "false");
+}
+
+function closeModalEl(el) {
+    el.classList.add("hidden");
+    el.setAttribute("aria-hidden", "true");
+}
+
+function updateCoordsDisplay() {
+    if (pendingLocation) {
+        coordsText.innerHTML = `<span class="ok">📍 ${pendingLocation.lat.toFixed(5)}, ${pendingLocation.lng.toFixed(5)}</span>`;
+    } else {
+        coordsText.textContent = "Localização ainda não selecionada";
+    }
+}
+
+addEventButton.addEventListener("click", () => {
+    if (!currentUser) return;
+    editingEventId = null;
+    $("eventModalTitle").textContent = "Novo Evento";
+    $("submitEventBtn").textContent = "Publicar Evento";
+    eventForm.reset();
+    $("eventPrice").value = "Gratuito";
+    imagePreview.classList.add("hidden");
+    formError.classList.add("hidden");
+    pendingLocation = null;
+    updateCoordsDisplay();
+    openModal(modal);
+});
+
+window.openEditEvent = id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev || !canManageEvent(ev)) return;
+
+    editingEventId = ev.id;
+    $("eventModalTitle").textContent = "Editar Evento";
+    $("submitEventBtn").textContent = "Guardar Alterações";
+    formError.classList.add("hidden");
+
+    $("eventName").value = ev.name;
+    $("eventCategory").value = ev.category;
+    $("eventDistrito").value = ev.distrito;
+    $("eventDate").value = ev.date;
+    $("eventTime").value = ev.time;
+    $("eventLocation").value = ev.location;
+    $("eventMaxParticipants").value = ev.maxParticipants || "";
+    $("eventPrice").value = ev.price || "Gratuito";
+    $("eventExternalUrl").value = ev.externalUrl || "";
+    $("eventDescription").value = ev.description || "";
+
+    pendingLocation = { lat: ev.latitude, lng: ev.longitude };
+    updateCoordsDisplay();
+
+    if (ev.image) {
+        imagePreview.src = ev.image;
+        imagePreview.classList.remove("hidden");
+    } else {
+        imagePreview.classList.add("hidden");
+    }
+
+    openModal(modal);
+};
+
+window.deleteEvent = async id => {
+    const ev = events.find(x => String(x.id) === String(id));
+    if (!ev || !canManageEvent(ev)) return;
+    if (!confirm(`Tens a certeza que queres eliminar "${ev.name}"?`)) return;
+
+    const { error } = await supabaseClient.from("events").delete().eq("id", ev.id);
+    if (error) {
+        showToast("Erro ao eliminar evento.", "error");
+        return;
+    }
+
+    events = events.filter(x => String(x.id) !== String(id));
+    filterEvents();
+    showToast("Evento eliminado com sucesso.");
+};
+
+closeModal.addEventListener("click", () => {
+    closeModalEl(modal);
+    stopLocationPicking();
+});
+
+modal.addEventListener("mousedown", e => {
+    if (e.target === modal) {
+        closeModalEl(modal);
+        stopLocationPicking();
+    }
+});
+
+changeLocationButton.addEventListener("click", () => {
+    closeModalEl(modal);
+    pickBanner.classList.remove("hidden");
+    if (window.innerWidth <= 820) setMobileView("map");
+
+    startLocationPicking(coords => {
+        pendingLocation = coords;
+        updateCoordsDisplay();
+        pickBanner.classList.add("hidden");
+        openModal(modal);
+    });
+});
+
+$("cancelPickButton").addEventListener("click", () => {
+    stopLocationPicking();
+    pickBanner.classList.add("hidden");
+    openModal(modal);
+});
+
+$("pickSearchBtn").addEventListener("click", async () => {
+    const q = $("pickSearchInput").value.trim();
+    if (!q) return;
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        map.flyTo({ center: [lng, lat], zoom: 16 });
+        showToast(`Mapa centrado em ${data[0].display_name.split(",")[0]}`);
+    } else {
+        showToast("Morada não encontrada.", "error");
+    }
+});
+
+eventImageInput.addEventListener("change", () => {
+    const file = eventImageInput.files[0];
+    if (!file) {
+        imagePreview.classList.add("hidden");
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+        imagePreview.src = reader.result;
+        imagePreview.classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+});
+
+async function uploadEventImage(file) {
+    const ext = file.name.split(".").pop() || "jpg";
+    const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
+    const { error } = await supabaseClient.storage
+        .from("event-images")
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+    if (error) throw error;
+    const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
+    return data.publicUrl;
+}
+
+eventForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    formError.classList.add("hidden");
+
+    if (!pendingLocation) {
+        formError.textContent = "Por favor, escolhe a localização do evento no mapa.";
+        formError.classList.remove("hidden");
+        return;
+    }
+
+    const submitBtn = $("submitEventBtn");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "A guardar...";
+
+    try {
+        const existing = editingEventId ? events.find(x => String(x.id) === String(editingEventId)) : null;
+        let imageUrl = existing ? existing.image : DEFAULT_IMAGE;
+
+        const file = eventImageInput.files[0];
+        if (file) {
+            try {
+                imageUrl = await uploadEventImage(file);
+            } catch (uploadErr) {
+                imageUrl = imagePreview.src || DEFAULT_IMAGE;
+            }
+        }
+
+        const maxVal = $("eventMaxParticipants").value;
+        const creatorType = isBusinessAccount()
+            ? (currentProfile?.business_type || "Empresa / Domínio Público")
+            : (isAdminAccount() ? "Admin" : "Utilizador");
+
+        const payload = {
+            name: $("eventName").value.trim(),
+            category: $("eventCategory").value,
+            distrito: $("eventDistrito").value,
+            date: $("eventDate").value,
+            time: $("eventTime").value,
+            location: $("eventLocation").value.trim(),
+            latitude: pendingLocation.lat,
+            longitude: pendingLocation.lng,
+            max_participants: maxVal ? parseInt(maxVal, 10) : null,
+            price: $("eventPrice").value.trim() || "Gratuito",
+            external_url: $("eventExternalUrl").value.trim() || null,
+            description: $("eventDescription").value.trim(),
+            image: imageUrl
+        };
+
+        if (editingEventId) {
+            const { data, error } = await supabaseClient
+                .from("events")
+                .update(payload)
+                .eq("id", editingEventId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            const updated = mapDbEvent(data);
+            const idx = events.findIndex(x => String(x.id) === String(editingEventId));
+            if (idx !== -1) events[idx] = updated;
+            showToast("Evento atualizado com sucesso!", "success");
+        } else {
+            payload.creator_id = currentUser.id;
+            payload.creator_name = currentProfile?.full_name || "Organizador";
+            payload.creator_type = creatorType;
+            payload.creator_role = currentProfile?.role || "user";
+            payload.creator_verified = isEntityVerified(currentProfile);
+            payload.enrolled = 0;
+
+            const { data, error } = await supabaseClient
+                .from("events")
+                .insert([payload])
+                .select()
+                .single();
+
+            if (error) throw error;
+            const created = mapDbEvent(data);
+            events.push(created);
+            await notifyFollowersOfNewEvent(created);
+            showToast("Evento publicado no mapa!", "success");
+        }
+
+        closeModalEl(modal);
+        stopLocationPicking();
+        filterEvents();
+    } catch (err) {
+        formError.textContent = err.message || "Erro ao guardar evento.";
+        formError.classList.remove("hidden");
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = editingEventId ? "Guardar Alterações" : "Publicar Evento";
+    }
+});
+
+// ==========================================
+// FAVORITOS, EXPORTAÇÃO E EVENTOS DE INTERFACE
+// ==========================================
+function toggleFavorite(id) {
+    const strId = String(id);
+    if (favorites.has(strId)) {
+        favorites.delete(strId);
+        showToast("Removido dos favoritos.");
+    } else {
+        favorites.add(strId);
+        showToast("Guardado nos favoritos ★");
+    }
+    saveJSON(STORAGE_FAVS, [...favorites]);
+    filterEvents();
+}
+
+eventsList.addEventListener("click", e => {
+    const favBtn = e.target.closest("[data-fav]");
+    if (favBtn) {
+        e.stopPropagation();
+        toggleFavorite(favBtn.dataset.fav);
+    }
+});
+
+searchInput.addEventListener("input", () => {
+    state.search = searchInput.value;
     filterEvents();
 });
 
-districtFilter.addEventListener("change", e => { state.district = e.target.value; filterEvents(); });
-periodFilter.addEventListener("change", e => { state.period = e.target.value; filterEvents(); });
-sortFilter.addEventListener("change", e => { state.sort = e.target.value; filterEvents(); });
+categoryChips.addEventListener("click", e => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    state.category = chip.dataset.category;
+    filterEvents();
+});
 
-radiusSlider.addEventListener("input", async e => {
-    state.radius = Number(e.target.value);
-    radiusValue.textContent = state.radius >= 100 ? "Sem limite" : `${state.radius} km`;
-    if (state.radius < 100 && !userPosition) {
-        try { await locateUser(); } catch (err) { showToast(err.message, "error"); }
-    }
+districtFilter.addEventListener("change", () => {
+    state.district = districtFilter.value;
+    filterEvents();
+});
+
+periodFilter.addEventListener("change", () => {
+    state.period = periodFilter.value;
+    filterEvents();
+});
+
+radiusSlider.addEventListener("input", () => {
+    state.radius = Number(radiusSlider.value);
+    radiusValue.textContent = state.radius >= 300 ? "Todo o país" : `${state.radius} km`;
+    filterEvents();
+});
+
+sortFilter.addEventListener("change", () => {
+    state.sort = sortFilter.value;
     filterEvents();
 });
 
 favoritesToggle.addEventListener("click", () => {
     state.onlyFavorites = !state.onlyFavorites;
     favoritesToggle.classList.toggle("on", state.onlyFavorites);
-    favoritesToggle.textContent = state.onlyFavorites ? "★ Favoritos" : "☆ Favoritos";
     filterEvents();
 });
 
@@ -4021,819 +4873,85 @@ resetFiltersBtn.addEventListener("click", () => {
     searchInput.value = "";
     districtFilter.value = "all";
     periodFilter.value = "all";
-    radiusSlider.value = "100";
-    radiusValue.textContent = "Sem limite";
+    radiusSlider.value = 100;
+    radiusValue.textContent = "100 km";
     sortFilter.value = "date";
     favoritesToggle.classList.remove("on");
-    favoritesToggle.textContent = "☆ Favoritos";
     freeOnlyToggle.classList.remove("on");
     followingOnlyToggle.classList.remove("on");
-    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.cat === "all"));
-
+    categoryChips.querySelectorAll(".chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.category === "all");
+    });
     filterEvents();
-    fitToEvents(currentList);
 });
 
 locationButton.addEventListener("click", async () => {
-    const labelSpan = locationButton.querySelector("span");
     locationButton.disabled = true;
-    labelSpan.textContent = "A localizar…";
+    locationButton.innerHTML = `<span>⏳</span> A localizar...`;
     try {
         await locateUser();
         sortFilter.value = "distance";
         state.sort = "distance";
         filterEvents();
-        showToast("A mostrar eventos mais perto de ti!", "success");
+        showToast("Localização obtida! Ordenado por distância.", "success");
     } catch (err) {
         showToast(err.message, "error");
     } finally {
         locationButton.disabled = false;
-        labelSpan.textContent = "Perto de mim";
+        locationButton.innerHTML = `<span aria-hidden="true">📍</span> Perto de mim`;
     }
 });
 
-// ==========================================
-// MODAIS E GESTÃO DE EVENTOS
-// ==========================================
-function openModal(el) {
-    el.classList.remove("hidden");
-    el.setAttribute("aria-hidden", "false");
-}
-
-function closeModalEl(el) {
-    el.classList.add("hidden");
-    el.setAttribute("aria-hidden", "true");
-}
-
-function showFormError(msg) {
-    formError.textContent = msg;
-    formError.classList.remove("hidden");
-}
-
-function clearFormError() {
-    formError.textContent = "";
-    formError.classList.add("hidden");
-}
-
-function resetEventForm() {
-    editingEventId = null;
-    $("eventModalTitle").textContent = "Criar Novo Evento";
-    $("eventSubmitBtn").textContent = "Publicar Evento no Mapa";
-    eventForm.reset();
-    $("eventDate").value = new Date().toISOString().slice(0, 10);
-    $("eventTime").value = "18:00";
-    pendingLocation = null;
-    coordsText.textContent = "Nenhum local escolhido no mapa.";
-    coordsText.classList.remove("ok");
-    imagePreview.src = "";
-    imagePreview.classList.add("hidden");
-    clearFormError();
-}
-
-function startPickFlow() {
-    closeModalEl(modal);
-    pickBanner.classList.remove("hidden");
-    if (window.innerWidth <= 820) setMobileView("map");
-
-    pickLocation(latlng => {
-        pendingLocation = latlng;
-        setTempMarker(latlng);
-        pickBanner.classList.add("hidden");
-        coordsText.textContent = `Local escolhido: ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
-        coordsText.classList.add("ok");
-        openModal(modal);
-    });
-}
-
-$("pickSearchBtn").addEventListener("click", async () => {
-    const query = $("pickSearchInput").value.trim();
-    if (!query) return;
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pt&limit=1&q=${encodeURIComponent(query)}`);
-        const results = await res.json();
-        if (results && results.length > 0) {
-            const lat = parseFloat(results[0].lat);
-            const lon = parseFloat(results[0].lon);
-            flyToCoordinates(lon, lat, 15.5);
-            showToast(`Mapa centrado em: ${results[0].display_name.split(",")[0]}`);
-        } else {
-            showToast("Morada não encontrada em Portugal.", "error");
-        }
-    } catch (e) {
-        showToast("Erro na pesquisa de morada.", "error");
-    }
-});
-
-addEventButton.addEventListener("click", () => {
-    if (!currentUser) {
-        showToast("Inicia sessão para criar um evento.", "error");
-        return;
-    }
-    resetEventForm();
-    openModal(modal);
-});
-
-changeLocationButton.addEventListener("click", startPickFlow);
-
-$("cancelPickBtn").addEventListener("click", () => {
-    cancelPick();
-    pickBanner.classList.add("hidden");
-    openModal(modal);
-});
-
-closeModal.addEventListener("click", () => {
-    closeModalEl(modal);
-    clearTempMarker();
-    resetEventForm();
-});
-
-modal.addEventListener("mousedown", e => {
-    if (e.target === modal) {
-        closeModalEl(modal);
-        clearTempMarker();
-        resetEventForm();
-    }
-});
-
-eventImageInput.addEventListener("change", () => {
-    const file = eventImageInput.files[0];
-    if (!file) {
-        imagePreview.classList.add("hidden");
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-        imagePreview.src = reader.result;
-        imagePreview.classList.remove("hidden");
-    };
-    reader.readAsDataURL(file);
-});
-
-function startEditingEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !canManageEvent(ev)) return;
-
-    editingEventId = ev.id;
-    $("eventModalTitle").textContent = "Editar Evento";
-    $("eventSubmitBtn").textContent = "Guardar Alterações";
-
-    $("eventName").value = ev.name;
-    $("eventCategory").value = ev.category;
-    $("eventFormDistrict").value = ev.distrito;
-    $("eventDate").value = ev.date;
-    $("eventTime").value = ev.time;
-    $("eventLocation").value = ev.location;
-    $("eventMaxParticipants").value = ev.maxParticipants || "";
-    $("eventPrice").value = ev.price || "Gratuito";
-    $("eventExternalUrl").value = ev.externalUrl || "";
-    $("eventDescription").value = ev.description || "";
-
-    pendingLocation = { lat: ev.latitude, lng: ev.longitude };
-    coordsText.textContent = `Local atual: ${ev.latitude.toFixed(5)}, ${ev.longitude.toFixed(5)}`;
-    coordsText.classList.add("ok");
-
-    if (ev.image && ev.image !== DEFAULT_IMAGE) {
-        imagePreview.src = ev.image;
-        imagePreview.classList.remove("hidden");
-    } else {
-        imagePreview.classList.add("hidden");
-    }
-
-    clearFormError();
-    openModal(modal);
-}
-
-function duplicateEvent(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev) return;
-
-    resetEventForm();
-    $("eventModalTitle").textContent = "Duplicar Evento";
-    $("eventName").value = `${ev.name} (Cópia)`;
-    $("eventCategory").value = ev.category;
-    $("eventFormDistrict").value = ev.distrito;
-    $("eventLocation").value = ev.location;
-    $("eventMaxParticipants").value = ev.maxParticipants || "";
-    $("eventPrice").value = ev.price || "Gratuito";
-    $("eventExternalUrl").value = ev.externalUrl || "";
-    $("eventDescription").value = ev.description || "";
-
-    pendingLocation = { lat: ev.latitude, lng: ev.longitude };
-    coordsText.textContent = `Local copiado: ${ev.latitude.toFixed(5)}, ${ev.longitude.toFixed(5)}`;
-    coordsText.classList.add("ok");
-
-    openModal(modal);
-}
-
-async function deleteEventById(id) {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !canManageEvent(ev)) return;
-
-    if (!confirm(`Tens a certeza que queres eliminar o evento "${ev.name}"?`)) return;
-
-    const { error } = await supabaseClient.from("events").delete().eq("id", ev.id);
-    if (error) {
-        showToast("Erro ao eliminar evento.", "error");
+$("exportCsvBtn").addEventListener("click", () => {
+    if (!currentList.length) {
+        showToast("Não existem eventos visíveis para exportar.", "error");
         return;
     }
 
-    events = events.filter(x => String(x.id) !== String(id));
-    if (String(activeId) === String(id)) activeId = null;
-    closeModalEl(detailModal);
-    filterEvents();
-    showToast(`Evento "${ev.name}" eliminado.`);
-}
-
-async function uploadEventImage(file) {
-    const ext = file.name.split(".").pop() || "jpg";
-    const fileName = `${currentUser.id}/${Date.now()}.${ext}`;
-
-    const { error } = await supabaseClient.storage
-        .from("event-images")
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-
-    if (error) throw error;
-
-    const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
-    return data.publicUrl;
-}
-
-eventForm.addEventListener("submit", async e => {
-    e.preventDefault();
-    clearFormError();
-
-    if (!currentUser || !currentProfile) {
-        showFormError("Tens de ter sessão iniciada.");
-        return;
-    }
-
-    const name = $("eventName").value.trim();
-    const category = $("eventCategory").value;
-    const distrito = $("eventFormDistrict").value;
-    const date = $("eventDate").value;
-    const time = $("eventTime").value;
-    const location = $("eventLocation").value.trim();
-    const maxRaw = $("eventMaxParticipants").value;
-    const maxParticipants = maxRaw ? parseInt(maxRaw, 10) : null;
-    const price = $("eventPrice").value.trim() || "Gratuito";
-    const externalUrl = $("eventExternalUrl").value.trim() || null;
-    const description = $("eventDescription").value.trim();
-
-    if (!name || !category || !distrito || !date || !time || !location) {
-        showFormError("Preenche todos os campos obrigatórios (*).");
-        return;
-    }
-    if (!pendingLocation) {
-        showFormError("Escolhe o local do evento no mapa.");
-        return;
-    }
-
-    const submitBtn = $("eventSubmitBtn");
-    submitBtn.disabled = true;
-    submitBtn.textContent = "A guardar...";
-
-    try {
-        let imageUrl = null;
-        if (editingEventId) {
-            const existing = events.find(x => String(x.id) === String(editingEventId));
-            imageUrl = existing ? existing.image : DEFAULT_IMAGE;
-        } else {
-            imageUrl = DEFAULT_IMAGE;
-        }
-
-        const file = eventImageInput.files[0];
-        if (file) {
-            try {
-                imageUrl = await uploadEventImage(file);
-            } catch (uploadErr) {
-                showToast("Imagem não enviada (verifica o bucket 'event-images').", "error");
-            }
-        }
-
-        const isBiz = currentProfile.role === "business";
-        const isAdm = currentProfile.role === "admin";
-        const creatorTypeVal = isBiz
-            ? (currentProfile.business_type || "Empresa")
-            : (isAdm ? "Admin" : "Utilizador");
-
-        const payload = {
-            name,
-            category,
-            distrito,
-            date,
-            time,
-            location,
-            latitude: pendingLocation.lat,
-            longitude: pendingLocation.lng,
-            max_participants: maxParticipants,
-            price,
-            external_url: externalUrl,
-            description,
-            image: imageUrl
-        };
-
-        if (editingEventId) {
-            const { data, error } = await supabaseClient
-                .from("events")
-                .update(payload)
-                .eq("id", editingEventId)
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            const updated = mapDbEvent(data);
-            const idx = events.findIndex(x => String(x.id) === String(editingEventId));
-            if (idx !== -1) events[idx] = updated;
-
-            clearTempMarker();
-            closeModalEl(modal);
-            resetEventForm();
-            filterEvents();
-            selectEvent(updated.id, { scrollCard: true });
-            showToast(`Evento "${updated.name}" atualizado!`, "success");
-        } else {
-            payload.creator_id = currentUser.id;
-            payload.creator_name = currentProfile.full_name;
-            payload.creator_type = creatorTypeVal;
-            payload.creator_role = currentProfile.role;
-            payload.creator_verified = isEntityVerified(currentProfile);
-            payload.enrolled = 0;
-
-            const { data, error } = await supabaseClient
-                .from("events")
-                .insert([payload])
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            const created = mapDbEvent(data);
-            events.push(created);
-
-            await notifyFollowersOfNewEvent(created);
-
-            clearTempMarker();
-            closeModalEl(modal);
-            resetEventForm();
-            filterEvents();
-            selectEvent(created.id, { scrollCard: true });
-            showToast(`Evento "${created.name}" publicado com sucesso!`, "success");
-        }
-    } catch (err) {
-        showFormError("Erro ao guardar evento: " + err.message);
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = editingEventId ? "Guardar Alterações" : "Publicar Evento no Mapa";
-    }
-});
-
-// ==========================================
-// DETALHES DO EVENTO, BILHETE QR, AVALIAÇÕES & COMENTÁRIOS
-// ==========================================
-function buildGoogleCalendarUrl(ev) {
-    const startDt = eventDateTime(ev);
-    const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
-    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const params = new URLSearchParams({
-        action: "TEMPLATE",
-        text: ev.name,
-        dates: `${fmt(startDt)}/${fmt(endDt)}`,
-        details: ev.description || "",
-        location: `${ev.location}, ${districtLabel(ev.distrito)}`
-    });
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
-
-function downloadEventIcs(ev) {
-    const startDt = eventDateTime(ev);
-    const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
-    const fmt = d => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const ics = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//LocalSpot//PT",
-        "BEGIN:VEVENT",
-        `UID:localspot-${ev.id}@localspot.pt`,
-        `DTSTAMP:${fmt(new Date())}`,
-        `DTSTART:${fmt(startDt)}`,
-        `DTEND:${fmt(endDt)}`,
-        `SUMMARY:${ev.name}`,
-        `DESCRIPTION:${(ev.description || "").replace(/\n/g, "\\n")}`,
-        `LOCATION:${ev.location}, ${districtLabel(ev.distrito)}`,
-        "END:VEVENT",
-        "END:VCALENDAR"
-    ].join("\r\n");
-
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${ev.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.ics`;
-    link.click();
-}
-
-function updateDetailSocialButton(ev) {
-    const followBtn = $("detailFollowBtn");
-    if (!ev.creatorId || !currentUser || String(ev.creatorId) === String(currentUser.id)) {
-        followBtn.classList.add("hidden");
-        return;
-    }
-
-    const creatorIsNormalUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
-    const creatorIsAdmin = ev.creatorRole === "admin" || ev.creatorType === "Admin";
-
-    if (creatorIsAdmin) {
-        followBtn.classList.add("hidden");
-        return;
-    }
-
-    if (creatorIsNormalUser) {
-        if (!isNormalUserAccount()) {
-            followBtn.classList.add("hidden");
-            return;
-        }
-        followBtn.classList.remove("hidden");
-        const isAlreadyFriend = window.friendsList.some(f => String(f.id) === String(ev.creatorId));
-        const isPending = sentFriendRequestIds.has(ev.creatorId);
-
-        if (isAlreadyFriend) {
-            followBtn.textContent = "✓ Amigos";
-            followBtn.onclick = () => {
-                closeModalEl(detailModal);
-                window.openFriendChat(ev.creatorId);
-            };
-        } else if (isPending) {
-            followBtn.textContent = "⏳ Pedido enviado";
-            followBtn.onclick = null;
-        } else {
-            followBtn.textContent = "👊 Adicionar Amigo";
-            followBtn.onclick = () => window.sendFriendRequest(ev.creatorId, ev.creatorName);
-        }
-    } else {
-        followBtn.classList.remove("hidden");
-        const isFollowing = myFollowing.has(String(ev.creatorId));
-        followBtn.textContent = isFollowing ? "✓ A Seguir" : "+ Seguir";
-        followBtn.onclick = async () => {
-            await toggleFollowOrganizer(ev.creatorId, ev.creatorName);
-            updateDetailSocialButton(ev);
-        };
-    }
-}
-
-window.openEventDetails = async id => {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev) return;
-
-    detailEventId = ev.id;
-    const cat = CATEGORIES[ev.category];
-    const past = isPast(ev);
-    const enrolled = myEnrollments.has(String(ev.id));
-
-    $("detailImage").src = ev.image || DEFAULT_IMAGE;
-    $("detailImage").onerror = function() { this.onerror = null; this.src = DEFAULT_IMAGE; };
-    $("detailCategory").textContent = cat ? `${cat.emoji} ${cat.label}` : ev.category;
-    $("detailPriceBadge").textContent = ev.price || "Gratuito";
-    $("detailTitle").textContent = ev.name;
-    $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
-    $("detailDateTime").textContent = formatEventDate(ev);
-    $("detailLocation").textContent = `${ev.location} (${districtLabel(ev.distrito)})`;
-
-    const isNormalUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
-    const isAdmin = ev.creatorRole === "admin" || ev.creatorType === "Admin";
-    const badgeIcon = isAdmin ? "🛡️" : (isNormalUser ? "👤" : "🏢");
-    const prefix = !isNormalUser && !isAdmin && ev.creatorType ? `${ev.creatorType} · ` : "";
-    const verifiedHtml = !isNormalUser && !isAdmin && ev.creatorVerified
-        ? `<span class="verified-check" title="Entidade Verificada">✓</span>`
-        : "";
-    $("detailOrganizer").innerHTML = `${badgeIcon} Organizado por ${escapeHTML(prefix)}${escapeHTML(ev.creatorName || "LocalSpot")}${verifiedHtml}`;
-
-    updateDetailSocialButton(ev);
-
-    const extLink = $("detailExternalLink");
-    if (ev.externalUrl) {
-        extLink.href = ev.externalUrl;
-        extLink.classList.remove("hidden");
-    } else {
-        extLink.classList.add("hidden");
-    }
-
-    const currentEnrolled = ev.enrolled || 0;
-    const max = ev.maxParticipants;
-    const isFull = max && currentEnrolled >= max;
-    $("detailVacancies").textContent = max ? `${currentEnrolled} / ${max} vagas` : `${currentEnrolled} inscritos (Ilimitado)`;
-
-    const enrollBtn = $("detailEnrollBtn");
-    const ticketBtn = $("detailTicketBtn");
-    enrollBtn.disabled = false;
-    enrollBtn.className = "register-btn";
-    ticketBtn.classList.add("hidden");
-
-    if (past) {
-        enrollBtn.textContent = "Evento Terminado";
-        enrollBtn.disabled = true;
-    } else if (enrolled) {
-        enrollBtn.textContent = "✓ Inscrito (Cancelar)";
-        enrollBtn.classList.add("registered");
-        ticketBtn.classList.remove("hidden");
-        ticketBtn.onclick = () => window.openTicketModal(ev.id);
-    } else if (isFull) {
-        enrollBtn.textContent = "Lotação Esgotada";
-        enrollBtn.disabled = true;
-    } else {
-        enrollBtn.textContent = "✋ Inscrever-me neste Evento";
-    }
-    enrollBtn.onclick = () => window.toggleEnrollment(ev.id);
-
-    $("detailCalendarBtn").href = buildGoogleCalendarUrl(ev);
-    $("detailIcsBtn").onclick = () => downloadEventIcs(ev);
-    $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
-    $("detailShareBtn").onclick = () => {
-        const shareUrl = `${window.location.origin}${window.location.pathname}?event=${ev.id}`;
-        navigator.clipboard?.writeText(shareUrl);
-        showToast("Link do evento copiado!", "success");
-    };
-    $("detailReportBtn").onclick = () => openModal(reportModal);
-
-    const canEdit = canManageEvent(ev);
-    $("detailOwnerActions").classList.toggle("hidden", !canEdit);
-    $("exportCsvBtn").classList.toggle("hidden", !canEdit);
-
-    if (canEdit) {
-        $("detailEditBtn").onclick = () => { closeModalEl(detailModal); startEditingEvent(ev.id); };
-        $("detailDuplicateBtn").onclick = () => { closeModalEl(detailModal); duplicateEvent(ev.id); };
-        $("detailDeleteBtn").onclick = () => deleteEventById(ev.id);
-    }
-
-    const reviewsSec = $("detailReviewsSection");
-    if (past) {
-        reviewsSec.classList.remove("hidden");
-        $("reviewForm").classList.toggle("hidden", !enrolled);
-    } else {
-        reviewsSec.classList.add("hidden");
-    }
-
-    openModal(detailModal);
-    await Promise.all([
-        loadAttendees(ev),
-        loadReviews(ev.id),
-        loadComments(ev.id)
+    const headers = ["Nome", "Categoria", "Organizador", "Distrito", "Local", "Data", "Hora", "Preço", "Inscritos"];
+    const rows = currentList.map(ev => [
+        `"${(ev.name || "").replace(/"/g, '""')}"`,
+        `"${ev.category}"`,
+        `"${(ev.creatorName || "").replace(/"/g, '""')}"`,
+        `"${ev.distrito}"`,
+        `"${(ev.location || "").replace(/"/g, '""')}"`,
+        ev.date,
+        ev.time,
+        `"${ev.price || "Gratuito"}"`,
+        ev.enrolled || 0
     ]);
-};
 
-$("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
-detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) closeModalEl(detailModal); });
-
-// ---------- Bilhete Digital QR ----------
-window.openTicketModal = id => {
-    const ev = events.find(x => String(x.id) === String(id));
-    if (!ev || !currentUser || !currentProfile) return;
-
-    const code = `LS-${ev.id}-${currentUser.id.slice(0, 6).toUpperCase()}`;
-    $("ticketEventName").textContent = ev.name;
-    $("ticketDateTime").textContent = `📅 ${formatEventDate(ev)}`;
-    $("ticketLocation").textContent = `📍 ${ev.location} · ${districtLabel(ev.distrito)}`;
-    $("ticketCodeText").textContent = code;
-    $("ticketUserName").textContent = `Titular: ${currentProfile.full_name}`;
-
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(code)}`;
-    $("ticketQrCanvas").innerHTML = `<img src="${qrUrl}" alt="QR Code" width="160" height="160" style="display:block;">`;
-
-    openModal(ticketModal);
-};
-
-$("closeTicket").addEventListener("click", () => closeModalEl(ticketModal));
-ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) closeModalEl(ticketModal); });
-
-// ---------- Denunciar Evento ----------
-$("closeReport").addEventListener("click", () => closeModalEl(reportModal));
-reportModal.addEventListener("mousedown", e => { if (e.target === reportModal) closeModalEl(reportModal); });
-
-$("reportForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    if (!currentUser || !detailEventId) return;
-    const reason = $("reportReason").value;
-    const details = $("reportDetails").value.trim();
-
-    const { error } = await supabaseClient.from("reports").insert([{
-        event_id: detailEventId,
-        reporter_id: currentUser.id,
-        reporter_name: currentProfile?.full_name || "Utilizador",
-        reason,
-        details
-    }]);
-
-    if (error) {
-        showToast("Erro ao enviar denúncia.", "error");
-        return;
-    }
-
-    $("reportForm").reset();
-    closeModalEl(reportModal);
-    showToast("Denúncia registada. Obrigado por ajudares a manter a comunidade segura!", "success");
+    const csv = "\uFEFF" + [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `localspot-eventos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Lista exportada em CSV!", "success");
 });
 
-// ---------- Lista de Inscritos & Exportar CSV ----------
-async function loadAttendees(ev) {
-    const container = $("detailAttendeesList");
-    container.innerHTML = `<span class="muted">A carregar inscritos...</span>`;
-
-    const { data, error } = await supabaseClient
-        .from("enrollments")
-        .select("user_id, user_name, created_at")
-        .eq("event_id", ev.id)
-        .order("created_at", { ascending: true });
-
-    if (error || !data || data.length === 0) {
-        container.innerHTML = `<span class="muted" style="font-size:13px;">Ainda sem participantes inscritos.</span>`;
-        $("exportCsvBtn").onclick = () => showToast("Não há inscritos para exportar.");
-        return;
-    }
-
-    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
-    container.innerHTML = data.map(row => {
-        const isFriend = friendIds.has(String(row.user_id));
-        return `<span class="attendee-pill${isFriend ? " friend-attendee" : ""}">${isFriend ? "👊 " : "👤 "}${escapeHTML(row.user_name || "Participante")}</span>`;
-    }).join("");
-
-    $("exportCsvBtn").onclick = () => {
-        const rows = [["Nome", "Data de Inscrição"]];
-        data.forEach(r => rows.push([r.user_name || "Participante", new Date(r.created_at).toLocaleString("pt-PT")]));
-        const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
-        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `inscritos_${ev.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.csv`;
-        link.click();
-    };
-}
-
-// ---------- Avaliações ----------
-async function loadReviews(eventId) {
-    const listEl = $("detailReviewsList");
-    const badgeEl = $("detailRatingBadge");
-
-    const { data, error } = await supabaseClient
-        .from("reviews")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-
-    if (error || !data || data.length === 0) {
-        badgeEl.classList.add("hidden");
-        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Ainda sem avaliações.</p>`;
-        return;
-    }
-
-    const avg = (data.reduce((acc, r) => acc + r.rating, 0) / data.length).toFixed(1);
-    badgeEl.textContent = `⭐ ${avg} (${data.length})`;
-    badgeEl.classList.remove("hidden");
-
-    listEl.innerHTML = data.map(r => `
-        <div class="comment-item">
-            <div class="comment-head">
-                <strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong>
-            </div>
-            ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
-        </div>
-    `).join("");
-}
-
-$("reviewForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    if (!currentUser || !detailEventId) return;
-    const rating = parseInt($("reviewRating").value, 10);
-    const comment = $("reviewCommentInput").value.trim();
-
-    const { error } = await supabaseClient.from("reviews").upsert({
-        event_id: detailEventId,
-        user_id: currentUser.id,
-        user_name: currentProfile?.full_name || "Participante",
-        rating,
-        comment
-    }, { onConflict: "event_id,user_id" });
-
-    if (error) {
-        showToast("Erro ao guardar avaliação.", "error");
-        return;
-    }
-
-    $("reviewCommentInput").value = "";
-    showToast("Avaliação publicada! ⭐", "success");
-    await loadReviews(detailEventId);
-});
-
-// ---------- Comentários ----------
-async function loadComments(eventId) {
-    const listEl = $("detailCommentsList");
-    listEl.innerHTML = `<p class="muted" style="font-size:13px;">A carregar comentários...</p>`;
-
-    const { data, error } = await supabaseClient
-        .from("comments")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: true });
-
-    if (error || !data || data.length === 0) {
-        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Ainda não existem comentários.</p>`;
-        return;
-    }
-
-    listEl.innerHTML = data.map(c => {
-        const canDel = currentUser && (String(c.user_id) === String(currentUser.id) || currentProfile?.role === "admin");
-        const dateStr = new Date(c.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-        return `
-            <div class="comment-item">
-                <div class="comment-head">
-                    <strong>${escapeHTML(c.user_name || "Utilizador")}</strong>
-                    <span class="muted" style="font-size:11px;">
-                        ${dateStr}
-                        ${canDel ? `<button type="button" class="btn-link small" style="color:#f87171; margin-left:6px;" onclick="window.deleteComment('${c.id}')">Apagar</button>` : ""}
-                    </span>
-                </div>
-                <p>${escapeHTML(c.content)}</p>
-            </div>
-        `;
-    }).join("");
-}
-
-window.deleteComment = async commentId => {
-    const { error } = await supabaseClient.from("comments").delete().eq("id", commentId);
-    if (!error && detailEventId) {
-        await loadComments(detailEventId);
-        showToast("Comentário eliminado.");
-    }
-};
-
-$("commentForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    if (!currentUser || !detailEventId) return;
-
-    const input = $("commentInput");
-    const content = input.value.trim();
-    if (!content) return;
-
-    const { error } = await supabaseClient
-        .from("comments")
-        .insert([{
-            event_id: detailEventId,
-            user_id: currentUser.id,
-            user_name: currentProfile?.full_name || "Utilizador",
-            content
-        }]);
-
-    if (error) {
-        showToast("Erro ao publicar comentário.", "error");
-        return;
-    }
-
-    const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (ev) {
-        await createNotification(
-            ev.creatorId,
-            ev.id,
-            `Novo comentário em "${ev.name}"`,
-            `${currentProfile.full_name}: ${content}`
-        );
-    }
-
-    input.value = "";
-    await loadComments(detailEventId);
-    showToast("Comentário publicado!", "success");
-});
-
-// ---------- Sobre & Atalhos ----------
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
 $("closeAbout").addEventListener("click", () => closeModalEl(aboutModal));
 aboutModal.addEventListener("mousedown", e => { if (e.target === aboutModal) closeModalEl(aboutModal); });
 
 document.addEventListener("keydown", e => {
-    if (e.key !== "Escape") return;
-    if (!aboutModal.classList.contains("hidden")) closeModalEl(aboutModal);
-    if (!detailModal.classList.contains("hidden")) closeModalEl(detailModal);
-    if (!ticketModal.classList.contains("hidden")) closeModalEl(ticketModal);
-    if (!reportModal.classList.contains("hidden")) closeModalEl(reportModal);
-    if (!profileModal.classList.contains("hidden")) closeModalEl(profileModal);
-    if (!adminModal.classList.contains("hidden")) closeModalEl(adminModal);
-    if ($("friendsModal") && !$("friendsModal").classList.contains("hidden")) closeModalEl($("friendsModal"));
-    if ($("entityNetworkModal") && !$("entityNetworkModal").classList.contains("hidden")) closeModalEl($("entityNetworkModal"));
-    if ($("friendChatModal") && !$("friendChatModal").classList.contains("hidden")) {
-        activeChatFriendId = null;
-        closeModalEl($("friendChatModal"));
-    }
-    if (!modal.classList.contains("hidden")) {
-        closeModalEl(modal);
-        clearTempMarker();
-        resetEventForm();
+    if (e.key === "Escape") {
+        [modal, detailModal, ticketModal, reportModal, aboutModal, adminModal, profileModal].forEach(closeModalEl);
+        if ($("friendsModal")) closeModalEl($("friendsModal"));
+        if ($("entityNetworkModal")) closeModalEl($("entityNetworkModal"));
+        if ($("friendChatModal")) {
+            activeChatFriendId = null;
+            closeModalEl($("friendChatModal"));
+        }
+        if ($("quickMoodPopover")) $("quickMoodPopover").classList.add("hidden");
+        stopLocationPicking();
+        pickBanner.classList.add("hidden");
     }
 });
 
-function checkSharedEventUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const sharedEventId = params.get("event");
-    if (sharedEventId && events.some(e => String(e.id) === String(sharedEventId))) {
-        selectEvent(sharedEventId, { scrollCard: true });
-        window.openEventDetails(sharedEventId);
-    }
-}
-
+// Inicialização
+populateDistricts();
+initMap();
 initAuth();
