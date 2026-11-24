@@ -124,10 +124,13 @@ let unreadMessagesBySender = new Map();
 let onlineUserIds = new Set();
 let typingTimer = null;
 let lastShakeTime = 0;
+let shakeSensorBound = false;
 let locationSyncInterval = null;
 let geoWatchId = null;
 let realtimeChannel = null;
 let bumpBroadcastChannel = null;
+const bumpCooldownMap = new Map();
+const recentIncomingBumpTs = new Map();
 
 // Estado de Exploração & Percurso (Footsteps)
 let explorationData = loadJSON(STORAGE_EXPLORATION, {
@@ -225,6 +228,40 @@ window.getMapSocialEntities = () => {
     );
     return [...window.friendsList, ...followedVisibleEntities];
 };
+
+// ---------- Som & Notificação de Segundo Plano do Bump ----------
+function playBumpSound(isSuper = false) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = isSuper ? "triangle" : "sine";
+        osc.frequency.setValueAtTime(isSuper ? 220 : 150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(
+            isSuper ? 680 : 45,
+            ctx.currentTime + (isSuper ? 0.35 : 0.2)
+        );
+
+        gain.gain.setValueAtTime(0.38, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (isSuper ? 0.38 : 0.22));
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + (isSuper ? 0.4 : 0.25));
+    } catch (e) {}
+}
+
+function sendBackgroundBumpNotification(title, body) {
+    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, { body });
+        } catch (e) {}
+    }
+}
 
 // ---------- Toast Notifications ----------
 let toastTimer;
@@ -790,6 +827,14 @@ function ensureSocialUI() {
         bumpRadarBtn.title = "Fazer Bump com amigo próximo ou abanar telemóvel";
         mapCtrls.appendChild(bumpRadarBtn);
 
+        const iosPermBtn = document.createElement("button");
+        iosPermBtn.type = "button";
+        iosPermBtn.id = "iosShakePermMapBtn";
+        iosPermBtn.className = "map-ctrl-btn ios-perm-btn hidden";
+        iosPermBtn.textContent = "📳 Ativar Abanão (iPhone)";
+        iosPermBtn.title = "Conceder permissão do acelerómetro no iOS/Safari";
+        mapCtrls.appendChild(iosPermBtn);
+
         const quickMoodBtn = document.createElement("button");
         quickMoodBtn.type = "button";
         quickMoodBtn.id = "quickMoodMapBtn";
@@ -936,8 +981,11 @@ function ensureSocialUI() {
         fModal.innerHTML = `
             <div class="modal-content">
                 <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
-                <h2 style="margin:0 0 4px;">👊 Amigos & Bump</h2>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Adiciona amigos, sobe o nível de amizade com Bumps ou segue entidades locais.</p>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding-right:34px; margin-bottom:4px;">
+                    <h2 style="margin:0;">👊 Amigos & Bump</h2>
+                    <button type="button" id="enableBgNotifBumpBtn" class="btn-soft" style="font-size:11.5px; padding:5px 9px;">🔔 Alertas</button>
+                </div>
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Bump = 1 pt • Super Bump (abanão mútuo em 5s) = 2 pts ⚡</p>
                 
                 <div class="auth-tabs" style="margin-bottom:14px;">
                     <button type="button" id="tabFriendsList" class="auth-tab active">👥 Meus Amigos (<span id="friendsTabCount">0</span>)</button>
@@ -1035,6 +1083,49 @@ function ensureSocialUI() {
     bindSocialEvents();
 }
 
+function attachShakeSensorListener() {
+    if (shakeSensorBound) return;
+    shakeSensorBound = true;
+    window.addEventListener("devicemotion", e => {
+        if (!currentUser || !isNormalUserAccount()) return;
+        const acc = e.accelerationIncludingGravity || e.acceleration;
+        if (!acc) return;
+        const totalForce = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+        if (totalForce > 24 && Date.now() - lastShakeTime > 2500) {
+            lastShakeTime = Date.now();
+            performSmartBumpAction(true);
+        }
+    });
+}
+
+function setupMotionSensorWithIOSPermission() {
+    const iosBtn = $("iosShakePermMapBtn");
+    if (
+        typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function"
+    ) {
+        if (iosBtn && isNormalUserAccount()) {
+            iosBtn.classList.remove("hidden");
+            iosBtn.onclick = async () => {
+                try {
+                    const perm = await DeviceMotionEvent.requestPermission();
+                    if (perm === "granted") {
+                        iosBtn.classList.add("hidden");
+                        attachShakeSensorListener();
+                        showToast("📳 Sensor ativado! Abana o iPhone para fazer Bump.", "success");
+                    } else {
+                        showToast("Permissão do acelerómetro recusada.", "error");
+                    }
+                } catch (e) {
+                    showToast("Não foi possível ativar o sensor.", "error");
+                }
+            };
+        }
+    } else {
+        attachShakeSensorListener();
+    }
+}
+
 function bindSocialEvents() {
     const friendsNavBtn = $("friendsNavBtn");
     const friendsModal = $("friendsModal");
@@ -1043,6 +1134,21 @@ function bindSocialEvents() {
         friendsNavBtn.addEventListener("click", async () => {
             openModal(friendsModal);
             await loadSocialData();
+        });
+    }
+
+    const bgNotifBtn = $("enableBgNotifBumpBtn");
+    if (bgNotifBtn && !bgNotifBtn.dataset.bound) {
+        bgNotifBtn.dataset.bound = "1";
+        bgNotifBtn.addEventListener("click", async () => {
+            if (!("Notification" in window)) {
+                showToast("O teu navegador não suporta notificações.", "error");
+                return;
+            }
+            const perm = await Notification.requestPermission();
+            if (perm === "granted") {
+                showToast("🔔 Alertas de Bump ativados mesmo em segundo plano!", "success");
+            }
         });
     }
 
@@ -1177,7 +1283,7 @@ function bindSocialEvents() {
     const bumpShakeBtn = $("bumpShakeMapBtn");
     if (bumpShakeBtn && !bumpShakeBtn.dataset.bound) {
         bumpShakeBtn.dataset.bound = "1";
-        bumpShakeBtn.addEventListener("click", () => performSmartBumpAction());
+        bumpShakeBtn.addEventListener("click", () => performSmartBumpAction(false));
     }
 
     const quickMoodBtn = $("quickMoodMapBtn");
@@ -1297,19 +1403,7 @@ function bindSocialEvents() {
         $("tabMyFriends").addEventListener("click", () => switchProfileTab("tabMyFriends", "profileFriendsList"));
     }
 
-    if (!window._bumpShakeBound) {
-        window._bumpShakeBound = true;
-        window.addEventListener("devicemotion", e => {
-            if (!currentUser || !isNormalUserAccount()) return;
-            const acc = e.accelerationIncludingGravity || e.acceleration;
-            if (!acc) return;
-            const totalForce = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
-            if (totalForce > 26 && Date.now() - lastShakeTime > 4000) {
-                lastShakeTime = Date.now();
-                performSmartBumpAction(true);
-            }
-        });
-    }
+    setupMotionSensorWithIOSPermission();
 }
 
 async function updateQuickUserMood(emoji, text) {
@@ -1344,6 +1438,7 @@ async function updateQuickUserMood(emoji, text) {
 
 async function performSmartBumpAction(fromShake = false) {
     if (!currentUser || !isNormalUserAccount()) return;
+
     if (!window.friendsList.length) {
         showToast("Adiciona primeiro um amigo para fazer Bump! 👊");
         openModal($("friendsModal"));
@@ -1351,28 +1446,58 @@ async function performSmartBumpAction(fromShake = false) {
         return;
     }
 
+    // Se vier de abanão físico, valida modo de privacidade (respeita Fantasma e Borrão)
+    if (fromShake) {
+        const myPrivacy = currentProfile?.privacy_mode || "precise";
+        if (myPrivacy !== "precise" || currentProfile?.ghost_mode) {
+            if (navigator.vibrate) try { navigator.vibrate(80); } catch (e) {}
+            showToast("👻 Ativa a localização Precisa para fazer Bump por abanão.");
+            return;
+        }
+
+        if (!userPosition) {
+            showToast("📍 Aguardando GPS preciso para detetar amigos por perto...");
+            return;
+        }
+
+        const nearbyFriends = window.friendsList.filter(f =>
+            !f.ghost_mode &&
+            (!f.privacy_mode || f.privacy_mode === "precise") &&
+            typeof f.last_lat === "number" &&
+            typeof f.last_lng === "number" &&
+            distanceKm(userPosition.lat, userPosition.lng, f.last_lat, f.last_lng) <= 0.25
+        );
+
+        if (nearbyFriends.length === 0) {
+            if (navigator.vibrate) try { navigator.vibrate(70); } catch (e) {}
+            showToast("📳 Abanão detetado, mas nenhum amigo com GPS preciso está a menos de 250m.");
+            return;
+        }
+
+        for (const friend of nearbyFriends) {
+            await window.sendBump(friend.id, "👊", "Shake Bump!");
+        }
+        return;
+    }
+
+    // Clique manual no botão "👊 Bump!" do mapa
     if (userPosition) {
         const nearbyFriend = window.friendsList.find(f =>
+            !f.ghost_mode &&
+            (!f.privacy_mode || f.privacy_mode === "precise") &&
             typeof f.last_lat === "number" &&
             typeof f.last_lng === "number" &&
             distanceKm(userPosition.lat, userPosition.lng, f.last_lat, f.last_lng) <= 0.25
         );
 
         if (nearbyFriend) {
-            if (typeof triggerMapBumpShockwave === "function") {
-                triggerMapBumpShockwave(nearbyFriend.last_lng, nearbyFriend.last_lat, "👊");
-            }
-            await window.sendBump(nearbyFriend.id, "👊", "BUMP DE PROXIMIDADE! (+2)", 2);
+            await window.sendBump(nearbyFriend.id, "👊", "BUMP DE PROXIMIDADE!");
             return;
         }
     }
 
     if (window.friendsList.length === 1) {
-        const onlyFriend = window.friendsList[0];
-        if (typeof onlyFriend.last_lng === "number" && typeof triggerMapBumpShockwave === "function") {
-            triggerMapBumpShockwave(onlyFriend.last_lng, onlyFriend.last_lat, "👊");
-        }
-        await window.sendBump(onlyFriend.id, "👊", fromShake ? "Shake Bump!" : "Bump!");
+        await window.sendBump(window.friendsList[0].id, "👊", "Bump!");
         return;
     }
 
@@ -1534,7 +1659,7 @@ logoutButton.addEventListener("click", async () => {
     window.friendsList = [];
     onlineUserIds.clear();
     if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
-    ["friendsNavBtn", "entityNetworkNavBtn", "bumpShakeMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
+    ["friendsNavBtn", "entityNetworkNavBtn", "bumpShakeMapBtn", "iosShakePermMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
         if ($(id)) $(id).classList.add("hidden");
     });
     notifBtn.classList.add("hidden");
@@ -1593,6 +1718,7 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
     }
 
     applyRoleUI();
+    setupMotionSensorWithIOSPermission();
     authOverlay.classList.add("hidden");
     if (typeof map !== "undefined") map.resize();
 
@@ -1802,7 +1928,11 @@ async function loadSocialData() {
                 const prof = profilesById.get(id);
                 if (!prof || prof.role !== "user") return null;
                 const fRow = friendshipRecords.get(String(id));
-                return { ...prof, bump_count: fRow?.bump_count || 0 };
+                return {
+                    ...prof,
+                    bump_count: fRow?.bump_count || 0,
+                    super_bump_count: fRow?.super_bump_count || 0
+                };
             })
             .filter(Boolean)
             .sort((a, b) => (b.bump_count || 0) - (a.bump_count || 0));
@@ -1872,13 +2002,14 @@ function renderFriendsModalContent() {
             const medals = ["🥇", "🥈", "🥉"];
             podiumContainer.innerHTML = `
                 <div class="bump-leaderboard-card">
-                    <strong style="font-size:12.5px; color:#f9a8d4;">🏆 Top Bumps</strong>
+                    <strong style="font-size:12.5px; color:#f9a8d4;">🏆 Pódio Top Bumps</strong>
                     <div class="bump-podium-row">
                         ${topFriends.map((f, idx) => `
                             <div class="bump-podium-item">
                                 <div style="font-size:16px;">${medals[idx]}</div>
                                 <strong style="display:block; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(f.full_name.split(" ")[0])}</strong>
-                                <span style="color:#f9a8d4; font-weight:700;">👊 ${f.bump_count}</span>
+                                <span style="color:#f59e0b; font-weight:800;">${f.bump_count} pts</span>
+                                ${f.super_bump_count ? `<small style="display:block; color:#f9a8d4; font-size:10px;">⚡ ${f.super_bump_count} Super</small>` : ""}
                             </div>
                         `).join("")}
                     </div>
@@ -1916,7 +2047,7 @@ function renderFriendsModalContent() {
                 <div class="friend-row-left" style="flex:1; min-width:0;">
                     ${renderAvatarChip(f, "")}
                     <div class="friend-row-info" style="flex:1; min-width:0;">
-                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0}</small></strong>
+                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0} pts</small></strong>
                         <span>${statusStr}</span>
                         <div style="margin-top:3px;">
                             <span class="friendship-tier-pill">${tier.badge}</span>
@@ -2234,23 +2365,27 @@ window.toggleFollowEntityModal = async (targetId, targetName) => {
 };
 
 // ==========================================
-// BUMP, PINGS («ONDE ESTÁS?»), EMOJI BOMBS & CHAT DIRETO
+// BUMP, SUPER BUMP, PINGS («ONDE ESTÁS?»), EMOJI BOMBS & CHAT DIRETO
 // ==========================================
-function triggerBumpVisual(emoji = "👊", text = "BUMP!") {
+function triggerBumpVisual(emoji = "👊", text = "BUMP!", isSuper = false) {
     if (navigator.vibrate) {
-        try { navigator.vibrate([100, 50, 140]); } catch (e) {}
+        try {
+            navigator.vibrate(isSuper ? [150, 60, 150, 60, 280] : [100, 50, 140]);
+        } catch (e) {}
     }
+    playBumpSound(isSuper);
+
     const existing = document.querySelector(".bump-overlay");
     if (existing) existing.remove();
 
     const overlay = document.createElement("div");
-    overlay.className = "bump-overlay";
+    overlay.className = `bump-overlay${isSuper ? " super-bump" : ""}`;
     overlay.innerHTML = `
-        <div class="bump-burst">${emoji}</div>
+        <div class="bump-burst">${isSuper ? "⚡" : emoji}</div>
         <div class="bump-banner-text">${escapeHTML(text)}</div>
     `;
     document.body.appendChild(overlay);
-    setTimeout(() => overlay.remove(), 1850);
+    setTimeout(() => overlay.remove(), isSuper ? 2200 : 1850);
 }
 
 function launchEmojiBombAnimation(emoji = "👊") {
@@ -2267,34 +2402,89 @@ function launchEmojiBombAnimation(emoji = "👊") {
     }
 }
 
-window.sendBump = async (friendId, emoji = "👊", label = "Bump!", points = 1) => {
+window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     if (!friend) return;
 
-    const fRow = friendshipRecords.get(String(friendId));
-    const nextCount = (fRow?.bump_count || 0) + points;
-    if (fRow) {
-        fRow.bump_count = nextCount;
-        await supabaseClient.from("friendships").update({ bump_count: nextCount }).eq("id", fRow.id);
+    const friendKey = String(friendId);
+    const now = Date.now();
+    const lastIncoming = recentIncomingBumpTs.get(friendKey) || 0;
+    const isMutualSuper = (now - lastIncoming) <= 5000;
+
+    // Cooldown de 60s apenas se NÃO for resposta mútua (Super Bump) nos primeiros 5s
+    if (!isMutualSuper) {
+        const lastBumpTs = bumpCooldownMap.get(friendKey) || 0;
+        const elapsedSec = Math.floor((now - lastBumpTs) / 1000);
+        if (elapsedSec < 60) {
+            showToast(`⏳ Aguarda ${60 - elapsedSec}s para novo Bump com ${friend.full_name.split(" ")[0]}.`);
+            return;
+        }
     }
-    friend.bump_count = nextCount;
+
+    bumpCooldownMap.set(friendKey, now);
+    if (isMutualSuper) recentIncomingBumpTs.delete(friendKey);
+
+    const pointsToAdd = isMutualSuper ? 2 : 1;
+    const fRow = friendshipRecords.get(friendKey);
+    const nextCount = (fRow?.bump_count || friend.bump_count || 0) + pointsToAdd;
+    const nextSuperCount = (fRow?.super_bump_count || friend.super_bump_count || 0) + (isMutualSuper ? 1 : 0);
+
+    // Tenta usar RPC atómica do Supabase se existir, com fallback direto para friendships
+    let finalScore = nextCount;
+    try {
+        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("registrar_bump", {
+            p_receiver_id: friendId
+        });
+        if (!rpcErr && rpcData && typeof rpcData.total_bumps === "number") {
+            finalScore = rpcData.total_bumps;
+        } else if (fRow) {
+            await supabaseClient
+                .from("friendships")
+                .update({ bump_count: nextCount })
+                .eq("id", fRow.id);
+        }
+    } catch (e) {
+        if (fRow) {
+            await supabaseClient
+                .from("friendships")
+                .update({ bump_count: nextCount })
+                .eq("id", fRow.id);
+        }
+    }
+
+    if (fRow) fRow.bump_count = finalScore;
+    friend.bump_count = finalScore;
+    if (isMutualSuper) friend.super_bump_count = nextSuperCount;
     window.friendsList.sort((a, b) => (b.bump_count || 0) - (a.bump_count || 0));
 
-    triggerBumpVisual(emoji, `${emoji} ${label} com ${friend.full_name}! (#${nextCount})`);
+    const bannerMsg = isMutualSuper
+        ? `⚡ SUPER BUMP com ${friend.full_name}! (+2 pts · Total: ${finalScore})`
+        : `${emoji} ${label} com ${friend.full_name}! (${finalScore} pts)`;
+
+    triggerBumpVisual(isMutualSuper ? "⚡" : emoji, bannerMsg, isMutualSuper);
     renderFriendsModalContent();
     if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
 
-    if (bumpBroadcastChannel && userPosition) {
+    const waveLng = typeof friend.last_lng === "number" ? friend.last_lng : userPosition?.lng;
+    const waveLat = typeof friend.last_lat === "number" ? friend.last_lat : userPosition?.lat;
+    if (typeof waveLng === "number" && typeof waveLat === "number" && typeof triggerMapBumpShockwave === "function") {
+        triggerMapBumpShockwave(waveLng, waveLat, isMutualSuper ? "⚡" : emoji, isMutualSuper);
+    }
+
+    if (bumpBroadcastChannel) {
         bumpBroadcastChannel.send({
             type: "broadcast",
             event: "bump_shockwave",
             payload: {
                 senderId: currentUser.id,
+                senderName: currentProfile.full_name,
                 receiverId: friendId,
-                lat: userPosition.lat,
-                lng: userPosition.lng,
-                emoji
+                lat: userPosition?.lat ?? waveLat,
+                lng: userPosition?.lng ?? waveLng,
+                emoji: isMutualSuper ? "⚡" : emoji,
+                isSuper: isMutualSuper,
+                totalScore: finalScore
             }
         });
     }
@@ -2302,8 +2492,12 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!", points = 1) 
     await createNotification(
         friendId,
         null,
-        `${emoji} ${currentProfile.full_name} fez Bump contigo! (#${nextCount})`,
-        `Abre o mapa para ver onde ${currentProfile.full_name} está agora!`
+        isMutualSuper
+            ? `⚡ SUPER BUMP com ${currentProfile.full_name}! (${finalScore} pts)`
+            : `${emoji} ${currentProfile.full_name} fez Bump contigo! (${finalScore} pts)`,
+        isMutualSuper
+            ? "Vocês abanaram o telemóvel ao mesmo tempo! (+2 pts)"
+            : `Abana também nos próximos 5s para ativar SUPER BUMP (+2 pts)!`
     );
 };
 
@@ -2385,7 +2579,7 @@ window.openFriendChat = async friendId => {
         <div>
             <strong style="display:block; font-size:15px;">${escapeHTML(friend.full_name)} ${isLive ? '<small style="color:#10b981;">● Online</small>' : ""}</strong>
             <span style="font-size:12px; color:#f9a8d4;">
-                ${tier.badge} · 👊 ${friend.bump_count || 0} Bumps · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}
+                ${tier.badge} · 👊 ${friend.bump_count || 0} pts · ${escapeHTML(friend.status_emoji || "📍")} ${escapeHTML(friend.status_text || "Online")}
             </span>
         </div>
     `;
@@ -2654,9 +2848,29 @@ function startLiveSocialSync() {
         })
         .on("broadcast", { event: "bump_shockwave" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
-            triggerBumpVisual(payload.emoji || "👊", "Recebeste um BUMP ao vivo!");
+
+            const senderKey = String(payload.senderId);
+            const isSuper = Boolean(payload.isSuper);
+            const senderName = payload.senderName || "Um amigo";
+
+            if (!isSuper) {
+                recentIncomingBumpTs.set(senderKey, Date.now());
+            } else {
+                recentIncomingBumpTs.delete(senderKey);
+            }
+
+            const msgText = isSuper
+                ? `⚡ SUPER BUMP com ${senderName}! (+2 pts)`
+                : `👊 ${senderName} fez Bump contigo! Abana em 5s para Super Bump!`;
+
+            triggerBumpVisual(isSuper ? "⚡" : (payload.emoji || "👊"), msgText, isSuper);
+            sendBackgroundBumpNotification(
+                isSuper ? "⚡ SUPER BUMP no LocalSpot!" : "👊 Novo Bump no LocalSpot!",
+                msgText
+            );
+
             if (typeof payload.lng === "number" && typeof triggerMapBumpShockwave === "function") {
-                triggerMapBumpShockwave(payload.lng, payload.lat, payload.emoji || "👊");
+                triggerMapBumpShockwave(payload.lng, payload.lat, isSuper ? "⚡" : (payload.emoji || "👊"), isSuper);
             }
             loadSocialData();
         })
@@ -2699,7 +2913,8 @@ function startLiveSocialSync() {
             const idx = window.friendsList.findIndex(f => f.id === updated.id);
             if (idx !== -1) {
                 const keepBumps = window.friendsList[idx].bump_count || 0;
-                window.friendsList[idx] = { ...updated, bump_count: keepBumps };
+                const keepSuper = window.friendsList[idx].super_bump_count || 0;
+                window.friendsList[idx] = { ...updated, bump_count: keepBumps, super_bump_count: keepSuper };
                 if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
                 renderFriendsModalContent();
             }
@@ -2724,7 +2939,8 @@ function startLiveSocialSync() {
             if (notif && String(notif.user_id) === String(currentUser.id)) {
                 loadNotifications();
                 if (notif.title && notif.title.includes("Bump")) {
-                    triggerBumpVisual("👊", notif.title);
+                    const isSuper = notif.title.includes("SUPER");
+                    triggerBumpVisual(isSuper ? "⚡" : "👊", notif.title, isSuper);
                 } else {
                     showToast(notif.title || "Nova notificação!");
                 }
@@ -3137,7 +3353,7 @@ userBadge.addEventListener("click", async () => {
             const bInfo = getAgeAndZodiac(currentProfile.birth_date);
             statsBar.innerHTML = `
                 <span class="profile-stat-pill">👊 ${window.friendsList.length} Amigos</span>
-                <span class="profile-stat-pill">🔥 ${totalBumps} Bumps</span>
+                <span class="profile-stat-pill">🔥 ${totalBumps} pts Bump</span>
                 <span class="profile-stat-pill">🗺️ ${explorationData.zones.length} Zonas</span>
                 ${bInfo ? `<span class="profile-stat-pill">${bInfo.sign.emoji} ${bInfo.age} anos</span>` : ""}
             `;
@@ -3302,7 +3518,7 @@ function renderProfileLists() {
             ? window.friendsList.map(f => `
                 <div class="profile-event-item">
                     <div>
-                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0}</small></strong>
+                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0} pts</small></strong>
                         <span>${escapeHTML(f.status_emoji || "📍")} ${escapeHTML(f.status_text || "Online")}</span>
                     </div>
                     <div style="display:flex; gap:6px;">
