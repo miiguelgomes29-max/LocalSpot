@@ -134,7 +134,7 @@ let bumpBroadcastChannel = null;
 const bumpCooldownMap = new Map();
 const recentIncomingBumpTs = new Map();
 
-// Estado de Exploração & Percurso (Footsteps)
+// Estado de Exploração & Percurso
 let explorationData = loadJSON(STORAGE_EXPLORATION, {
     date: new Date().toISOString().slice(0, 10),
     zones: [],
@@ -143,8 +143,7 @@ let explorationData = loadJSON(STORAGE_EXPLORATION, {
 });
 let trailVisible = false;
 
-// Estado do Welcome Splash & Onboarding
-let welcomeSplashTimer = null;
+// Estado do Onboarding
 let onboardingStep = 1;
 const onboardingData = {
     fullName: "",
@@ -187,7 +186,7 @@ function isBusinessAccount() {
 }
 
 function isNormalUserAccount() {
-    return currentProfile?.role === "user";
+    return !currentProfile || currentProfile.role === "user" || !currentProfile.role;
 }
 
 function isAdminAccount() {
@@ -208,15 +207,9 @@ function verifiedBadgeHTML(profile) {
 window.isFriendLiveOnline = friendId => onlineUserIds.has(String(friendId));
 
 window.getFriendshipTier = (bumpCount = 0) => {
-    if (bumpCount >= 30) {
-        return { badge: "👑 BFF / Alma Gémea", next: 50, pct: 100 };
-    }
-    if (bumpCount >= 15) {
-        return { badge: "🔥 Melhores Amigos", next: 30, pct: Math.round(((bumpCount - 15) / 15) * 100) };
-    }
-    if (bumpCount >= 5) {
-        return { badge: "⚡ Bons Amigos", next: 15, pct: Math.round(((bumpCount - 5) / 10) * 100) };
-    }
+    if (bumpCount >= 30) return { badge: "👑 BFF / Alma Gémea", next: 50, pct: 100 };
+    if (bumpCount >= 15) return { badge: "🔥 Melhores Amigos", next: 30, pct: Math.round(((bumpCount - 15) / 15) * 100) };
+    if (bumpCount >= 5) return { badge: "⚡ Bons Amigos", next: 15, pct: Math.round(((bumpCount - 5) / 10) * 100) };
     return { badge: "🌱 Novos Amigos", next: 5, pct: Math.round((bumpCount / 5) * 100) };
 };
 
@@ -231,7 +224,7 @@ window.getMapSocialEntities = () => {
     return [...window.friendsList, ...followedVisibleEntities];
 };
 
-// ---------- Som & Notificação de Segundo Plano ----------
+// ---------- Som & Notificação ----------
 function playBumpSound(isSuper = false) {
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -239,17 +232,11 @@ function playBumpSound(isSuper = false) {
         const ctx = new AudioCtx();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-
         osc.type = isSuper ? "triangle" : "sine";
         osc.frequency.setValueAtTime(isSuper ? 220 : 150, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(
-            isSuper ? 680 : 45,
-            ctx.currentTime + (isSuper ? 0.35 : 0.2)
-        );
-
+        osc.frequency.exponentialRampToValueAtTime(isSuper ? 680 : 45, ctx.currentTime + (isSuper ? 0.35 : 0.2));
         gain.gain.setValueAtTime(0.38, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (isSuper ? 0.38 : 0.22));
-
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start();
@@ -264,7 +251,6 @@ function playFriendWooshSound(isIncoming = false) {
         const ctx = new AudioCtx();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-
         osc.type = "sine";
         if (isIncoming) {
             osc.frequency.setValueAtTime(340, ctx.currentTime);
@@ -274,10 +260,8 @@ function playFriendWooshSound(isIncoming = false) {
             osc.frequency.setValueAtTime(280, ctx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(760, ctx.currentTime + 0.26);
         }
-
         gain.gain.setValueAtTime(0.3, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.34);
-
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start();
@@ -287,9 +271,7 @@ function playFriendWooshSound(isIncoming = false) {
 
 function sendBackgroundBumpNotification(title, body) {
     if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-        try {
-            new Notification(title, { body });
-        } catch (e) {}
+        try { new Notification(title, { body }); } catch (e) {}
     }
 }
 
@@ -392,6 +374,7 @@ function triggerFriendRequestAnimation(senderUser, friendshipId) {
 let toastTimer;
 function showToast(message, type = "info") {
     const toast = $("toast");
+    if (!toast) return;
     toast.textContent = message;
     toast.className = `toast show ${type}`;
     clearTimeout(toastTimer);
@@ -401,7 +384,6 @@ function showToast(message, type = "info") {
 function translateAuthError(error) {
     if (!error) return "Ocorreu um erro inesperado.";
     const msg = (error.message || "").toLowerCase();
-
     if (msg.includes("invalid login credentials")) return "E-mail ou palavra-passe incorretos.";
     if (msg.includes("email not confirmed")) return "Desativa «Confirm email» no Supabase para entrar de imediato.";
     if (msg.includes("user already registered") || msg.includes("already been registered")) return "Este e-mail já está registado. Muda para «Entrar».";
@@ -411,17 +393,12 @@ function translateAuthError(error) {
 }
 
 // ==========================================
-// EXPLORAÇÃO & PERCURSO DE HOJE (FOOTSTEPS BUMP)
+// EXPLORAÇÃO & PERCURSO DE HOJE
 // ==========================================
 function ensureTodayExplorationState() {
     const today = new Date().toISOString().slice(0, 10);
     if (explorationData.date !== today) {
-        explorationData = {
-            date: today,
-            zones: explorationData.zones || [],
-            trail: [],
-            distanceKm: 0
-        };
+        explorationData = { date: today, zones: explorationData.zones || [], trail: [], distanceKm: 0 };
         saveJSON(STORAGE_EXPLORATION, explorationData);
     }
 }
@@ -466,7 +443,7 @@ function updateExplorationPill() {
 }
 
 // ==========================================
-// ECRÃ DE BOAS-VINDAS AUTOMÁTICO (3 SEGUNDOS) & QUESTIONÁRIO ANIMADO
+// ONBOARDING (APENAS NOVOS UTILIZADORES SE NECESSÁRIO)
 // ==========================================
 function getAgeAndZodiac(dateStr) {
     if (!dateStr) return null;
@@ -478,7 +455,6 @@ function getAgeAndZodiac(dateStr) {
     let age = now.getFullYear() - dob.getFullYear();
     const mDiff = now.getMonth() - dob.getMonth();
     if (mDiff < 0 || (mDiff === 0 && now.getDate() < dob.getDate())) age--;
-
     if (age < 0 || age > 120) return null;
 
     const signs = [
@@ -498,68 +474,6 @@ function getAgeAndZodiac(dateStr) {
     ];
     const sign = day <= signs[month - 1].endDay ? signs[month - 1] : signs[month];
     return { age, sign };
-}
-
-function showWelcomeSplash(isBusiness = false) {
-    let splash = $("welcomeSplash");
-    if (splash) splash.remove();
-
-    splash = document.createElement("div");
-    splash.id = "welcomeSplash";
-    splash.className = `welcome-splash${isBusiness ? " business-theme" : ""}`;
-
-    if (isBusiness) {
-        splash.innerHTML = `
-            <div class="welcome-content">
-                <div class="welcome-logo-pill">🏛️ LocalSpot · Empresas & Domínio Público</div>
-                <div class="welcome-wave-wrap"><span class="welcome-suit-emoji">👔</span></div>
-                <h1 class="welcome-title">Bem-vindo!</h1>
-                <p class="welcome-desc">
-                    Divulgue iniciativas oficiais, alcance seguidores locais em tempo real e gira a presença institucional no mapa.
-                </p>
-                <div class="welcome-feature-pills">
-                    <span class="welcome-feat-chip">🏛️ Perfil Institucional</span>
-                    <span class="welcome-feat-chip">✅ Selo Verificado</span>
-                    <span class="welcome-feat-chip">📊 Seguidores & Eventos</span>
-                </div>
-                <div class="welcome-loader-track">
-                    <div class="welcome-loader-fill"></div>
-                </div>
-            </div>
-        `;
-    } else {
-        splash.innerHTML = `
-            <div class="welcome-content">
-                <div class="welcome-logo-pill">📍 LocalSpot · Mapa Social 3D</div>
-                <div class="welcome-wave-wrap"><span class="welcome-wave-emoji">👋</span></div>
-                <h1 class="welcome-title">Bem-vindo!</h1>
-                <p class="welcome-desc">
-                    Descobre eventos perto de ti, liga-te aos teus amigos em tempo real e segue as tuas entidades favoritas.
-                </p>
-                <div class="welcome-feature-pills">
-                    <span class="welcome-feat-chip">🗺️ Mapa 3D ao vivo</span>
-                    <span class="welcome-feat-chip">👊 Amigos & Bumps</span>
-                    <span class="welcome-feat-chip">💬 Chat em Tempo Real</span>
-                </div>
-                <div class="welcome-loader-track">
-                    <div class="welcome-loader-fill"></div>
-                </div>
-            </div>
-        `;
-    }
-
-    document.body.appendChild(splash);
-
-    clearTimeout(welcomeSplashTimer);
-    welcomeSplashTimer = setTimeout(() => {
-        splash.classList.add("leaving");
-        setTimeout(() => {
-            splash.remove();
-            if (currentUser && currentProfile && currentProfile.onboarding_completed === false && !isAdminAccount()) {
-                startOnboardingWizard();
-            }
-        }, 550);
-    }, 3000);
 }
 
 function startOnboardingWizard() {
@@ -586,7 +500,6 @@ function startOnboardingWizard() {
 
     const card = $("onboardingCard");
     if (card) card.classList.toggle("business-card", isBiz);
-
     overlay.classList.remove("hidden");
     renderOnboardingStep();
 }
@@ -597,7 +510,6 @@ function renderOnboardingStep() {
     const isBiz = isBusinessAccount();
     const totalSteps = 4;
     const pct = Math.round((onboardingStep / totalSteps) * 100);
-
     let stepBody = "";
 
     if (isBiz) {
@@ -606,11 +518,11 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">👔</div>
                     <h2>Identidade Institucional</h2>
-                    <p class="ob-sub">Configure o nome oficial da empresa ou organismo público que aparecerá aos seus seguidores.</p>
-                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome Oficial da Entidade / Empresa *</label>
+                    <p class="ob-sub">Configure o nome oficial da empresa ou organismo público.</p>
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome Oficial *</label>
                     <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Câmara Municipal / Teatro Municipal" maxlength="60" required>
-                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Apresentação ou Missão Institucional (opcional)</label>
-                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Programação cultural, desportiva e comunitária" maxlength="110">
+                    <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Apresentação (opcional)</label>
+                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Programação cultural e comunitária" maxlength="110">
                     <div class="onboarding-nav-row">
                         <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
                     </div>
@@ -621,7 +533,6 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">💼</div>
                     <h2>Setor de Atividade</h2>
-                    <p class="ob-sub">Selecione a categoria que melhor representa a sua organização ou domínio público.</p>
                     <div id="obBusinessSectorGrid" class="business-sector-grid">
                         ${BUSINESS_SECTORS.map(s => `
                             <button type="button" class="sector-opt-btn${onboardingData.businessType === s.label ? " active" : ""}" data-sector="${escapeHTML(s.label)}">
@@ -637,17 +548,13 @@ function renderOnboardingStep() {
             `;
         } else if (onboardingStep === 3) {
             const initials = (onboardingData.fullName || "E").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
-            const avatarInner = onboardingData.avatarPreviewUrl
-                ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
-                : escapeHTML(initials);
-
+            const avatarInner = onboardingData.avatarPreviewUrl ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">` : escapeHTML(initials);
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">🏛️</div>
                     <h2>Logótipo Oficial</h2>
-                    <p class="ob-sub">Carregue o logótipo ou imagem representativa da entidade para destacar a sua página e eventos.</p>
                     <div class="ob-avatar-picker">
-                        <label for="obAvatarFile" class="ob-avatar-circle business-logo-shape" id="obAvatarCircle" title="Carregar logótipo">${avatarInner}</label>
+                        <label for="obAvatarFile" class="ob-avatar-circle business-logo-shape" id="obAvatarCircle">${avatarInner}</label>
                         <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
                         <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">🏢 Carregar Logótipo</button>
                     </div>
@@ -657,22 +564,18 @@ function renderOnboardingStep() {
                     </div>
                 </div>
             `;
-        } else if (onboardingStep === 4) {
+        } else {
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">📊</div>
-                    <h2>Presença no Mapa & Verificação</h2>
-                    <p class="ob-sub">Defina como a sua entidade é apresentada aos seus seguidores no mapa.</p>
+                    <h2>Presença no Mapa</h2>
                     <div id="obPrivacyGrid" class="privacy-selector-grid two-cols">
                         <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">🏢 Sede Visível no Mapa</button>
                         <button type="button" class="privacy-opt-btn business-opt${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">📅 Apenas Eventos Públicos</button>
                     </div>
-                    <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
-                        ✅ <strong>Selo de Verificação:</strong> Após concluir, um Administrador poderá validar a sua conta para atribuir o selo oficial de entidade verificada.
-                    </div>
                     <div class="onboarding-nav-row">
                         <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
-                        <button type="button" id="obFinishBtn" class="ob-btn-next">Concluir Configuração 🏛️</button>
+                        <button type="button" id="obFinishBtn" class="ob-btn-next">Concluir 🏛️</button>
                     </div>
                 </div>
             `;
@@ -683,11 +586,10 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">✨</div>
                     <h2>Como queres ser chamado?</h2>
-                    <p class="ob-sub">Este é o nome que os teus amigos vão ver no mapa e nos eventos.</p>
                     <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Nome ou Alcunha *</label>
                     <input type="text" id="obNameInput" value="${escapeHTML(onboardingData.fullName)}" placeholder="Ex: Rodrigo Silva" maxlength="40" required>
                     <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:6px;">Bio rápida (opcional)</label>
-                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Sempre pronto para um café ou concerto 🎸" maxlength="80">
+                    <input type="text" id="obBioInput" value="${escapeHTML(onboardingData.bio)}" placeholder="Ex: Sempre pronto para um café 🎸" maxlength="80">
                     <div class="onboarding-nav-row">
                         <button type="button" id="obNextBtn" class="ob-btn-next">Continuar →</button>
                     </div>
@@ -700,7 +602,6 @@ function renderOnboardingStep() {
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">🎂</div>
                     <h2>Quando fazes anos?</h2>
-                    <p class="ob-sub">Usamos a tua data de nascimento para personalizar o teu perfil.</p>
                     <input type="date" id="obBirthInput" value="${escapeHTML(onboardingData.birthDate)}" max="${maxDate}">
                     <div id="obZodiacWrap">
                         ${info ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>` : ""}
@@ -713,17 +614,13 @@ function renderOnboardingStep() {
             `;
         } else if (onboardingStep === 3) {
             const initials = (onboardingData.fullName || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
-            const avatarInner = onboardingData.avatarPreviewUrl
-                ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">`
-                : escapeHTML(initials);
-
+            const avatarInner = onboardingData.avatarPreviewUrl ? `<img src="${escapeHTML(onboardingData.avatarPreviewUrl)}" alt="">` : escapeHTML(initials);
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">📸</div>
                     <h2>Escolhe a tua foto & vibe</h2>
-                    <p class="ob-sub">Toca no círculo para carregar uma foto de perfil e escolhe o teu estado inicial.</p>
                     <div class="ob-avatar-picker">
-                        <label for="obAvatarFile" class="ob-avatar-circle" id="obAvatarCircle" title="Escolher foto">${avatarInner}</label>
+                        <label for="obAvatarFile" class="ob-avatar-circle" id="obAvatarCircle">${avatarInner}</label>
                         <input type="file" id="obAvatarFile" accept="image/*" class="hidden">
                         <button type="button" class="btn-soft" onclick="$('obAvatarFile').click()">📷 Escolher Foto</button>
                     </div>
@@ -740,19 +637,15 @@ function renderOnboardingStep() {
                     </div>
                 </div>
             `;
-        } else if (onboardingStep === 4) {
+        } else {
             stepBody = `
                 <div class="onboarding-step-panel">
                     <div class="onboarding-step-emoji">🛰️</div>
                     <h2>Privacidade no Mapa</h2>
-                    <p class="ob-sub">Apenas os teus amigos aceites podem ver a tua localização. Podes mudar isto a qualquer momento.</p>
                     <div id="obPrivacyGrid" class="privacy-selector-grid">
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "precise" ? " active" : ""}" data-mode="precise">📍 Precisa</button>
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "blurred" ? " active" : ""}" data-mode="blurred">🌫️ Borrão</button>
                         <button type="button" class="privacy-opt-btn${onboardingData.privacyMode === "ghost" ? " active" : ""}" data-mode="ghost">👻 Fantasma</button>
-                    </div>
-                    <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:var(--muted); margin-bottom:10px;">
-                        💡 <strong>Dica Bump:</strong> Abana o telemóvel perto de um amigo para fazer um <strong>Bump</strong> instantâneo no mapa!
                     </div>
                     <div class="onboarding-nav-row">
                         <button type="button" id="obBackBtn" class="ob-btn-back">← Voltar</button>
@@ -774,22 +667,14 @@ function renderOnboardingStep() {
     `;
 
     if ($("obBackBtn")) {
-        $("obBackBtn").onclick = () => {
-            onboardingStep = Math.max(1, onboardingStep - 1);
-            renderOnboardingStep();
-        };
+        $("obBackBtn").onclick = () => { onboardingStep = Math.max(1, onboardingStep - 1); renderOnboardingStep(); };
     }
 
     if (onboardingStep === 1) {
         const nameInp = $("obNameInput");
-        setTimeout(() => nameInp.focus(), 60);
         $("obNextBtn").onclick = () => {
             const val = nameInp.value.trim();
-            if (!val) {
-                showToast(isBiz ? "Indique o nome oficial da entidade!" : "Escreve o teu nome para continuar!", "error");
-                nameInp.focus();
-                return;
-            }
+            if (!val) { showToast("Preenche o nome para continuar!", "error"); return; }
             onboardingData.fullName = val;
             onboardingData.bio = $("obBioInput").value.trim();
             onboardingStep = 2;
@@ -804,25 +689,15 @@ function renderOnboardingStep() {
                 btn.classList.add("active");
                 onboardingData.businessType = btn.dataset.sector;
             };
-            $("obNextBtn").onclick = () => {
-                onboardingStep = 3;
-                renderOnboardingStep();
-            };
+            $("obNextBtn").onclick = () => { onboardingStep = 3; renderOnboardingStep(); };
         } else {
             const birthInp = $("obBirthInput");
             birthInp.onchange = () => {
                 onboardingData.birthDate = birthInp.value;
                 const info = getAgeAndZodiac(birthInp.value);
-                $("obZodiacWrap").innerHTML = info
-                    ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>`
-                    : "";
+                $("obZodiacWrap").innerHTML = info ? `<div class="zodiac-preview-pill">🎉 ${info.age} anos · ${info.sign.emoji} ${info.sign.name}</div>` : "";
             };
             $("obNextBtn").onclick = () => {
-                if (!birthInp.value) {
-                    showToast("Seleciona a tua data de nascimento!", "error");
-                    birthInp.focus();
-                    return;
-                }
                 onboardingData.birthDate = birthInp.value;
                 onboardingStep = 3;
                 renderOnboardingStep();
@@ -846,11 +721,8 @@ function renderOnboardingStep() {
                 onboardingData.statusText = btn.dataset.text;
             };
         }
-        $("obNextBtn").onclick = () => {
-            onboardingStep = 4;
-            renderOnboardingStep();
-        };
-    } else if (onboardingStep === 4) {
+        $("obNextBtn").onclick = () => { onboardingStep = 4; renderOnboardingStep(); };
+    } else {
         $("obPrivacyGrid").onclick = e => {
             const btn = e.target.closest(".privacy-opt-btn");
             if (!btn) return;
@@ -865,16 +737,11 @@ function renderOnboardingStep() {
 async function finishOnboardingWizard() {
     const btn = $("obFinishBtn");
     const isBiz = isBusinessAccount();
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = isBiz ? "A guardar perfil institucional..." : "A preparar o teu mapa...";
-    }
+    if (btn) { btn.disabled = true; btn.textContent = "A guardar..."; }
 
     try {
         let avatarUrl = currentProfile?.avatar_url || null;
-        if (onboardingData.avatarFile) {
-            avatarUrl = await uploadAvatarImage(onboardingData.avatarFile);
-        }
+        if (onboardingData.avatarFile) avatarUrl = await uploadAvatarImage(onboardingData.avatarFile);
 
         const isGhost = onboardingData.privacyMode === "ghost";
         const updatePayload = {
@@ -896,29 +763,17 @@ async function finishOnboardingWizard() {
 
         const overlay = $("onboardingOverlay");
         if (overlay) overlay.classList.add("hidden");
-
-        if (isBiz) {
-            triggerBumpVisual("🏛️", `Perfil Institucional ativo: ${currentProfile.full_name}`);
-        } else {
-            triggerBumpVisual("🎉", `Tudo pronto, ${currentProfile.full_name}!`);
-            launchEmojiBombAnimation("🚀");
-        }
-
-        if (!isGhost) {
-            try { await locateUser(); } catch (e) {}
-        }
+        showToast("Perfil configurado com sucesso!", "success");
     } catch (err) {
-        showToast("Erro ao guardar perfil inicial.", "error");
+        const overlay = $("onboardingOverlay");
+        if (overlay) overlay.classList.add("hidden");
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = isBiz ? "Concluir Configuração 🏛️" : "Entrar no Mapa 🎉";
-        }
+        if (btn) { btn.disabled = false; btn.textContent = "Concluir"; }
     }
 }
 
 // ==========================================
-// INJEÇÃO DA UI SOCIAL, AMIGOS & CHAT
+// INJEÇÃO DA UI SOCIAL, AMIGOS & CHAT DIRETO NO CABEÇALHO
 // ==========================================
 function ensureSocialUI() {
     const nav = document.querySelector(".header nav");
@@ -928,8 +783,17 @@ function ensureSocialUI() {
         friendsBtn.type = "button";
         friendsBtn.id = "friendsNavBtn";
         friendsBtn.className = "btn-friends-nav hidden";
-        friendsBtn.innerHTML = `👊 Amigos & Chat <span id="friendsReqBadge" class="friends-req-badge hidden">0</span>`;
+        friendsBtn.innerHTML = `👊 Amigos <span id="friendsReqBadge" class="friends-req-badge hidden">0</span>`;
         nav.insertBefore(friendsBtn, notifBtn);
+    }
+
+    if (nav && !$("directChatsNavBtn")) {
+        const chatHeaderBtn = document.createElement("button");
+        chatHeaderBtn.type = "button";
+        chatHeaderBtn.id = "directChatsNavBtn";
+        chatHeaderBtn.className = "btn-soft hidden";
+        chatHeaderBtn.innerHTML = `💬 Chat <span id="headerChatUnreadBadge" class="friends-req-badge hidden">0</span>`;
+        nav.insertBefore(chatHeaderBtn, notifBtn);
     }
 
     if (nav && !$("entityNetworkNavBtn")) {
@@ -949,7 +813,6 @@ function ensureSocialUI() {
         bumpRadarBtn.className = "map-ctrl-btn hidden";
         bumpRadarBtn.style.borderColor = "#ec4899";
         bumpRadarBtn.textContent = "👊 Bump!";
-        bumpRadarBtn.title = "Fazer Bump com amigo próximo ou abanar telemóvel";
         mapCtrls.appendChild(bumpRadarBtn);
 
         const iosPermBtn = document.createElement("button");
@@ -957,7 +820,6 @@ function ensureSocialUI() {
         iosPermBtn.id = "iosShakePermMapBtn";
         iosPermBtn.className = "map-ctrl-btn ios-perm-btn hidden";
         iosPermBtn.textContent = "📳 Ativar Abanão (iPhone)";
-        iosPermBtn.title = "Conceder permissão do acelerómetro no iOS/Safari";
         mapCtrls.appendChild(iosPermBtn);
 
         const quickMoodBtn = document.createElement("button");
@@ -965,7 +827,6 @@ function ensureSocialUI() {
         quickMoodBtn.id = "quickMoodMapBtn";
         quickMoodBtn.className = "map-ctrl-btn hidden";
         quickMoodBtn.textContent = "📍 Vibe";
-        quickMoodBtn.title = "Mudar estado/emoji rapidamente no mapa";
         mapCtrls.appendChild(quickMoodBtn);
 
         const privacyBtn = document.createElement("button");
@@ -973,7 +834,6 @@ function ensureSocialUI() {
         privacyBtn.id = "privacyMapBtn";
         privacyBtn.className = "map-ctrl-btn hidden";
         privacyBtn.textContent = "📍 Precisa";
-        privacyBtn.title = "Alternar visibilidade no mapa";
         mapCtrls.appendChild(privacyBtn);
 
         const checkinBtn = document.createElement("button");
@@ -981,7 +841,6 @@ function ensureSocialUI() {
         checkinBtn.id = "quickCheckinMapBtn";
         checkinBtn.className = "map-ctrl-btn hidden";
         checkinBtn.textContent = "📌 Check-in";
-        checkinBtn.title = "Partilhar onde estás agora";
         mapCtrls.appendChild(checkinBtn);
 
         const expBtn = document.createElement("button");
@@ -989,7 +848,6 @@ function ensureSocialUI() {
         expBtn.id = "explorationMapBtn";
         expBtn.className = "map-ctrl-btn exploration-pill-btn hidden";
         expBtn.textContent = "🗺️ 0 zonas · 0,0 km";
-        expBtn.title = "Mostrar/esconder o teu percurso de hoje no mapa";
         mapCtrls.appendChild(expBtn);
     }
 
@@ -1058,7 +916,7 @@ function ensureSocialUI() {
             <div id="userOnlyProfileFields">
                 <label for="profileBirthDateInput">Data de Nascimento</label>
                 <input type="date" id="profileBirthDateInput" style="margin-bottom:10px;">
-                <label>Estado / Vibe atual (visível apenas para amigos no mapa)</label>
+                <label>Estado / Vibe atual</label>
                 <div id="statusPillsContainer" class="status-pills-grid">
                     ${BUMP_STATUSES.map(s => `
                         <button type="button" class="status-pill-btn" data-emoji="${s.emoji}" data-text="${s.text}">${s.emoji} ${s.text}</button>
@@ -1066,7 +924,7 @@ function ensureSocialUI() {
                 </div>
                 <div style="display:grid; grid-template-columns: 64px 1fr; gap:8px; margin-bottom:12px;">
                     <input type="text" id="profileCustomEmoji" maxlength="4" placeholder="📍" style="text-align:center;">
-                    <input type="text" id="profileCustomStatus" maxlength="40" placeholder="Escreve o teu estado personalizado...">
+                    <input type="text" id="profileCustomStatus" maxlength="40" placeholder="Estado personalizado...">
                 </div>
                 <label>Privacidade da localização no mapa</label>
                 <div id="privacySelectorGrid" class="privacy-selector-grid">
@@ -1074,10 +932,6 @@ function ensureSocialUI() {
                     <button type="button" class="privacy-opt-btn" data-mode="blurred">🌫️ Borrão (~400m)</button>
                     <button type="button" class="privacy-opt-btn" data-mode="ghost">👻 Fantasma</button>
                 </div>
-            </div>
-
-            <div style="text-align:right; margin-bottom:8px;">
-                <button type="button" id="replayOnboardingBtn" class="btn-link small">✨ Repetir introdução e questionário</button>
             </div>
         `;
         profileForm.insertBefore(avatarSection, profileForm.firstChild);
@@ -1129,9 +983,9 @@ function ensureSocialUI() {
 
                 <div id="panelFriendsAdd" class="hidden">
                     <div id="incomingRequestsSection" style="margin-bottom:16px;"></div>
-                    <label for="friendSearchInput">Procurar utilizadores (para amizade) ou entidades (para seguir)</label>
+                    <label for="friendSearchInput">Procurar utilizadores ou entidades</label>
                     <div style="display:flex; gap:8px; margin-bottom:12px;">
-                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, Câmara Municipal, joao@email.com...">
+                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, João, joao@email.com...">
                         <button type="button" id="friendSearchBtn" class="btn-primary-sm">Procurar</button>
                     </div>
                     <div id="friendSearchResults"></div>
@@ -1150,26 +1004,17 @@ function ensureSocialUI() {
             <div class="modal-content">
                 <button type="button" id="closeEntityNetworkModal" class="close-button" aria-label="Fechar">&times;</button>
                 <h2 style="margin:0 0 4px;">🏛️ Rede Institucional</h2>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Gira os seguidores da sua entidade e acompanhe outras organizações verificadas.</p>
-                
+                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Gira os seguidores da sua entidade.</p>
                 <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:var(--bg); padding:4px; border-radius:10px; margin-bottom:14px;">
                     <button type="button" id="tabEntFollowers" class="auth-tab active">👥 Seguidores (<span id="entFollowersTabCount">0</span>)</button>
                     <button type="button" id="tabEntFollowing" class="auth-tab">🏛️ A Seguir (<span id="entFollowingTabCount">0</span>)</button>
                     <button type="button" id="tabEntDiscover" class="auth-tab">🔍 Seguir</button>
                 </div>
-
-                <div id="panelEntFollowers">
-                    <div id="entFollowersListContainer"></div>
-                </div>
-
-                <div id="panelEntFollowing" class="hidden">
-                    <div id="entFollowingListContainer"></div>
-                </div>
-
+                <div id="panelEntFollowers"><div id="entFollowersListContainer"></div></div>
+                <div id="panelEntFollowing" class="hidden"><div id="entFollowingListContainer"></div></div>
                 <div id="panelEntDiscover" class="hidden">
-                    <label for="entitySearchInput">Procurar empresas ou entidades públicas para seguir</label>
                     <div style="display:flex; gap:8px; margin-bottom:12px;">
-                        <input type="text" id="entitySearchInput" placeholder="Ex: Câmara Municipal, Associação, Teatro...">
+                        <input type="text" id="entitySearchInput" placeholder="Procurar entidades...">
                         <button type="button" id="entitySearchBtn" class="btn-primary-sm">Procurar</button>
                     </div>
                     <div id="entitySearchResults"></div>
@@ -1237,10 +1082,7 @@ function attachShakeSensorListener() {
 
 function setupMotionSensorWithIOSPermission() {
     const iosBtn = $("iosShakePermMapBtn");
-    if (
-        typeof DeviceMotionEvent !== "undefined" &&
-        typeof DeviceMotionEvent.requestPermission === "function"
-    ) {
+    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
         if (iosBtn && isNormalUserAccount()) {
             iosBtn.classList.remove("hidden");
             iosBtn.onclick = async () => {
@@ -1249,13 +1091,9 @@ function setupMotionSensorWithIOSPermission() {
                     if (perm === "granted") {
                         iosBtn.classList.add("hidden");
                         attachShakeSensorListener();
-                        showToast("📳 Sensor ativado! Abana o iPhone para fazer Bump.", "success");
-                    } else {
-                        showToast("Permissão do acelerómetro recusada.", "error");
+                        showToast("📳 Sensor ativado!", "success");
                     }
-                } catch (e) {
-                    showToast("Não foi possível ativar o sensor.", "error");
-                }
+                } catch (e) {}
             };
         }
     } else {
@@ -1265,11 +1103,32 @@ function setupMotionSensorWithIOSPermission() {
 
 function bindSocialEvents() {
     const friendsNavBtn = $("friendsNavBtn");
+    const directChatsNavBtn = $("directChatsNavBtn");
     const friendsModal = $("friendsModal");
+
+    const switchFriendsTab = (activeId) => {
+        ["tabFriendsList", "tabFriendsChats", "tabFriendsAdd"].forEach(id => {
+            if ($(id)) $(id).classList.toggle("active", id === activeId);
+        });
+        if ($("panelFriendsList")) $("panelFriendsList").classList.toggle("hidden", activeId !== "tabFriendsList");
+        if ($("panelFriendsChats")) $("panelFriendsChats").classList.toggle("hidden", activeId !== "tabFriendsChats");
+        if ($("panelFriendsAdd")) $("panelFriendsAdd").classList.toggle("hidden", activeId !== "tabFriendsAdd");
+    };
+
     if (friendsNavBtn && !friendsNavBtn.dataset.bound) {
         friendsNavBtn.dataset.bound = "1";
         friendsNavBtn.addEventListener("click", async () => {
             openModal(friendsModal);
+            switchFriendsTab("tabFriendsList");
+            await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
+        });
+    }
+
+    if (directChatsNavBtn && !directChatsNavBtn.dataset.bound) {
+        directChatsNavBtn.dataset.bound = "1";
+        directChatsNavBtn.addEventListener("click", async () => {
+            openModal(friendsModal);
+            switchFriendsTab("tabFriendsChats");
             await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
         });
     }
@@ -1278,14 +1137,9 @@ function bindSocialEvents() {
     if (bgNotifBtn && !bgNotifBtn.dataset.bound) {
         bgNotifBtn.dataset.bound = "1";
         bgNotifBtn.addEventListener("click", async () => {
-            if (!("Notification" in window)) {
-                showToast("O teu navegador não suporta notificações.", "error");
-                return;
-            }
+            if (!("Notification" in window)) return;
             const perm = await Notification.requestPermission();
-            if (perm === "granted") {
-                showToast("🔔 Alertas ativados mesmo em segundo plano!", "success");
-            }
+            if (perm === "granted") showToast("🔔 Alertas ativados!", "success");
         });
     }
 
@@ -1324,29 +1178,17 @@ function bindSocialEvents() {
         };
         $("tabEntFollowers").addEventListener("click", () => switchEntTab("tabEntFollowers"));
         $("tabEntFollowing").addEventListener("click", () => switchEntTab("tabEntFollowing"));
-        $("tabEntDiscover").addEventListener("click", () => {
-            switchEntTab("tabEntDiscover");
-            searchEntitiesToFollow();
-        });
+        $("tabEntDiscover").addEventListener("click", () => { switchEntTab("tabEntDiscover"); searchEntitiesToFollow(); });
         $("entitySearchBtn").addEventListener("click", searchEntitiesToFollow);
-        $("entitySearchInput").addEventListener("keydown", e => {
-            if (e.key === "Enter") { e.preventDefault(); searchEntitiesToFollow(); }
-        });
     }
 
     const closeChatBtn = $("closeFriendChatModal");
     const chatModal = $("friendChatModal");
     if (closeChatBtn && !closeChatBtn.dataset.bound) {
         closeChatBtn.dataset.bound = "1";
-        closeChatBtn.addEventListener("click", () => {
-            activeChatFriendId = null;
-            closeModalEl(chatModal);
-        });
+        closeChatBtn.addEventListener("click", () => { activeChatFriendId = null; closeModalEl(chatModal); });
         chatModal.addEventListener("mousedown", e => {
-            if (e.target === chatModal) {
-                activeChatFriendId = null;
-                closeModalEl(chatModal);
-            }
+            if (e.target === chatModal) { activeChatFriendId = null; closeModalEl(chatModal); }
         });
     }
 
@@ -1404,12 +1246,6 @@ function bindSocialEvents() {
     const tabAdd = $("tabFriendsAdd");
     if (tabList && !tabList.dataset.bound) {
         tabList.dataset.bound = "1";
-        const switchFriendsTab = (activeId) => {
-            ["tabFriendsList", "tabFriendsChats", "tabFriendsAdd"].forEach(id => $(id).classList.toggle("active", id === activeId));
-            $("panelFriendsList").classList.toggle("hidden", activeId !== "tabFriendsList");
-            $("panelFriendsChats").classList.toggle("hidden", activeId !== "tabFriendsChats");
-            $("panelFriendsAdd").classList.toggle("hidden", activeId !== "tabFriendsAdd");
-        };
         tabList.addEventListener("click", () => switchFriendsTab("tabFriendsList"));
         tabChats.addEventListener("click", async () => {
             switchFriendsTab("tabFriendsChats");
@@ -1438,10 +1274,7 @@ function bindSocialEvents() {
     const moodPopover = $("quickMoodPopover");
     if (quickMoodBtn && !quickMoodBtn.dataset.bound) {
         quickMoodBtn.dataset.bound = "1";
-        quickMoodBtn.addEventListener("click", e => {
-            e.stopPropagation();
-            moodPopover.classList.toggle("hidden");
-        });
+        quickMoodBtn.addEventListener("click", e => { e.stopPropagation(); moodPopover.classList.toggle("hidden"); });
         $("closeQuickMoodBtn").addEventListener("click", () => moodPopover.classList.add("hidden"));
         moodPopover.addEventListener("click", async e => {
             const item = e.target.closest(".quick-mood-item");
@@ -1463,16 +1296,7 @@ function bindSocialEvents() {
         expMapBtn.addEventListener("click", () => {
             trailVisible = !trailVisible;
             updateExplorationPill();
-            if (typeof setTodayTrailCoords === "function") {
-                setTodayTrailCoords(explorationData.trail, trailVisible);
-            }
-            if (trailVisible) {
-                showToast(
-                    explorationData.trail.length >= 2
-                        ? "🟢 Percurso de hoje visível no mapa!"
-                        : "Caminha ou ativa o GPS para desenhar o teu percurso de hoje!"
-                );
-            }
+            if (typeof setTodayTrailCoords === "function") setTodayTrailCoords(explorationData.trail, trailVisible);
         });
     }
 
@@ -1531,18 +1355,7 @@ function bindSocialEvents() {
         avatarInput.addEventListener("change", () => {
             const file = avatarInput.files[0];
             if (!file) return;
-            const url = URL.createObjectURL(file);
-            $("profileAvatarPreview").innerHTML = `<img src="${url}" alt="">`;
-        });
-    }
-
-    const replayBtn = $("replayOnboardingBtn");
-    if (replayBtn && !replayBtn.dataset.bound) {
-        replayBtn.dataset.bound = "1";
-        replayBtn.addEventListener("click", () => {
-            closeModalEl(profileModal);
-            if (currentProfile) currentProfile.onboarding_completed = false;
-            showWelcomeSplash(isBusinessAccount());
+            $("profileAvatarPreview").innerHTML = `<img src="${URL.createObjectURL(file)}" alt="">`;
         });
     }
 
@@ -1555,20 +1368,11 @@ function bindSocialEvents() {
 }
 
 async function updateQuickUserMood(emoji, text) {
-    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
-    const { error } = await supabaseClient
+    if (!currentUser || !currentProfile) return;
+    await supabaseClient
         .from("profiles")
-        .update({
-            status_emoji: emoji,
-            status_text: text,
-            last_seen: new Date().toISOString()
-        })
+        .update({ status_emoji: emoji, status_text: text, last_seen: new Date().toISOString() })
         .eq("id", currentUser.id);
-
-    if (error) {
-        showToast("Erro ao atualizar estado.", "error");
-        return;
-    }
 
     currentProfile.status_emoji = emoji;
     currentProfile.status_text = text;
@@ -1585,7 +1389,7 @@ async function updateQuickUserMood(emoji, text) {
 }
 
 async function performSmartBumpAction(fromShake = false) {
-    if (!currentUser || !isNormalUserAccount()) return;
+    if (!currentUser) return;
 
     if (!window.friendsList.length) {
         showToast("Adiciona primeiro um amigo para fazer Bump! 👊");
@@ -1594,50 +1398,15 @@ async function performSmartBumpAction(fromShake = false) {
         return;
     }
 
-    if (fromShake) {
-        const myPrivacy = currentProfile?.privacy_mode || "precise";
-        if (myPrivacy !== "precise" || currentProfile?.ghost_mode) {
-            if (navigator.vibrate) try { navigator.vibrate(80); } catch (e) {}
-            showToast("👻 Ativa a localização Precisa para fazer Bump por abanão.");
-            return;
-        }
-
-        if (!userPosition) {
-            showToast("📍 Aguardando GPS preciso para detetar amigos por perto...");
-            return;
-        }
-
+    if (fromShake && userPosition) {
         const nearbyFriends = window.friendsList.filter(f =>
             !f.ghost_mode &&
-            (!f.privacy_mode || f.privacy_mode === "precise") &&
             typeof f.last_lat === "number" &&
             typeof f.last_lng === "number" &&
             distanceKm(userPosition.lat, userPosition.lng, f.last_lat, f.last_lng) <= 0.25
         );
-
-        if (nearbyFriends.length === 0) {
-            if (navigator.vibrate) try { navigator.vibrate(70); } catch (e) {}
-            showToast("📳 Abanão detetado, mas nenhum amigo com GPS preciso está a menos de 250m.");
-            return;
-        }
-
-        for (const friend of nearbyFriends) {
-            await window.sendBump(friend.id, "👊", "Shake Bump!");
-        }
-        return;
-    }
-
-    if (userPosition) {
-        const nearbyFriend = window.friendsList.find(f =>
-            !f.ghost_mode &&
-            (!f.privacy_mode || f.privacy_mode === "precise") &&
-            typeof f.last_lat === "number" &&
-            typeof f.last_lng === "number" &&
-            distanceKm(userPosition.lat, userPosition.lng, f.last_lat, f.last_lng) <= 0.25
-        );
-
-        if (nearbyFriend) {
-            await window.sendBump(nearbyFriend.id, "👊", "BUMP DE PROXIMIDADE!");
+        if (nearbyFriends.length > 0) {
+            for (const friend of nearbyFriends) await window.sendBump(friend.id, "👊", "Shake Bump!");
             return;
         }
     }
@@ -1722,7 +1491,7 @@ loginForm.addEventListener("submit", async e => {
             return;
         }
         if (data?.user) {
-            await handleAuthenticatedSession(data.user, { showSplash: true });
+            await handleAuthenticatedSession(data.user);
             showToast("Sessão iniciada com sucesso!", "success");
         }
     } catch (err) {
@@ -1776,10 +1545,11 @@ registerForm.addEventListener("submit", async e => {
                 business_type: businessType,
                 status_emoji: role === "business" ? "🏢" : "📍",
                 status_text: role === "business" ? (businessType || "Entidade Oficial") : "No LocalSpot",
-                onboarding_completed: false
+                onboarding_completed: true
             });
 
-            await handleAuthenticatedSession(data.user, { isNewSignup: true, showSplash: true });
+            await handleAuthenticatedSession(data.user);
+            showToast("Conta criada com sucesso!", "success");
         }
     } catch (err) {
         errEl.textContent = "Falha de ligação ao criar conta.";
@@ -1807,7 +1577,7 @@ logoutButton.addEventListener("click", async () => {
     animatedIncomingFriendshipIds.clear();
     lastChatMessageByFriend.clear();
     if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
-    ["friendsNavBtn", "entityNetworkNavBtn", "bumpShakeMapBtn", "iosShakePermMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
+    ["friendsNavBtn", "directChatsNavBtn", "entityNetworkNavBtn", "bumpShakeMapBtn", "iosShakePermMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
         if ($(id)) $(id).classList.add("hidden");
     });
     notifBtn.classList.add("hidden");
@@ -1819,7 +1589,7 @@ logoutButton.addEventListener("click", async () => {
     showToast("Sessão terminada.");
 });
 
-async function handleAuthenticatedSession(user, { isNewSignup = false, showSplash = false } = {}) {
+async function handleAuthenticatedSession(user) {
     currentUser = user;
     const meta = user.user_metadata || {};
     let profile = null;
@@ -1837,7 +1607,7 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
                 business_type: meta.business_type || null,
                 status_emoji: roleVal === "business" ? "🏢" : "📍",
                 status_text: roleVal === "business" ? (meta.business_type || "Entidade Oficial") : "No LocalSpot",
-                onboarding_completed: !isNewSignup
+                onboarding_completed: true
             };
             const { data: inserted } = await supabaseClient.from("profiles").upsert(newProfile).select().maybeSingle();
             profile = inserted || newProfile;
@@ -1850,19 +1620,13 @@ async function handleAuthenticatedSession(user, { isNewSignup = false, showSplas
             full_name: meta.full_name || user.email.split("@")[0],
             role: roleVal,
             business_type: meta.business_type || null,
-            onboarding_completed: !isNewSignup
+            onboarding_completed: true
         };
     }
 
     currentProfile = profile;
     if (!currentProfile.privacy_mode) {
         currentProfile.privacy_mode = currentProfile.ghost_mode ? "ghost" : "precise";
-    }
-
-    if (showSplash) {
-        showWelcomeSplash(isBusinessAccount());
-    } else if ((isNewSignup || currentProfile.onboarding_completed === false) && !isAdminAccount()) {
-        startOnboardingWizard();
     }
 
     applyRoleUI();
@@ -1900,10 +1664,12 @@ function applyRoleUI() {
     if (!currentProfile) return;
     const { role, full_name, business_type, privacy_mode } = currentProfile;
     const isBiz = role === "business";
-    const isUser = role === "user";
     const isAdm = role === "admin";
+    const isUser = !isBiz && !isAdm;
 
-    if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", !isUser);
+    if (addEventButton) addEventButton.classList.remove("hidden");
+    if ($("friendsNavBtn")) $("friendsNavBtn").classList.toggle("hidden", isBiz);
+    if ($("directChatsNavBtn")) $("directChatsNavBtn").classList.toggle("hidden", isBiz);
     if ($("bumpShakeMapBtn")) $("bumpShakeMapBtn").classList.toggle("hidden", !isUser);
     if ($("quickMoodMapBtn")) {
         $("quickMoodMapBtn").classList.toggle("hidden", !isUser);
@@ -1968,17 +1734,17 @@ function applyRoleUI() {
 
 async function initAuth() {
     ensureSocialUI();
+    const existingSplash = $("welcomeSplash");
+    if (existingSplash) existingSplash.remove();
 
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
-            await handleAuthenticatedSession(session.user, { showSplash: true });
+            await handleAuthenticatedSession(session.user);
         } else {
-            showWelcomeSplash(false);
             authOverlay.classList.remove("hidden");
         }
     } catch (e) {
-        showWelcomeSplash(false);
         authOverlay.classList.remove("hidden");
     }
 }
@@ -1995,13 +1761,11 @@ window.updateHangoutBanner = (hangoutNames, firstFriend) => {
     }
     banner.textContent = `🔥 Hangout! ${hangoutNames[0]} estão juntos agora!`;
     banner.classList.remove("hidden");
-    banner.onclick = () => {
-        if (firstFriend) focusFriendOnMap(firstFriend.id);
-    };
+    banner.onclick = () => { if (firstFriend) focusFriendOnMap(firstFriend.id); };
 };
 
 async function loadUnreadMessagesCount() {
-    if (!currentUser || !isNormalUserAccount()) return;
+    if (!currentUser) return;
     try {
         const { data, error } = await supabaseClient
             .from("friend_messages")
@@ -2021,7 +1785,7 @@ async function loadUnreadMessagesCount() {
 }
 
 async function loadRecentChatSummaries() {
-    if (!currentUser || !isNormalUserAccount()) return;
+    if (!currentUser) return;
     try {
         const { data, error } = await supabaseClient
             .from("friend_messages")
@@ -2106,14 +1870,6 @@ function renderChatsTabContent() {
 async function loadSocialData({ animateInitialRequests = false, triggerAnimForSenderId = null } = {}) {
     if (!currentUser) return;
 
-    if (!isNormalUserAccount()) {
-        window.friendsList = [];
-        if (typeof showFriendsOnMap === "function") {
-            showFriendsOnMap(window.getMapSocialEntities());
-        }
-        return;
-    }
-
     try {
         const { data: rows, error } = await supabaseClient
             .from("friendships")
@@ -2158,7 +1914,7 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
         window.friendsList = [...acceptedIds]
             .map(id => {
                 const prof = profilesById.get(id);
-                if (!prof || prof.role !== "user") return null;
+                if (!prof) return null;
                 const fRow = friendshipRecords.get(String(id));
                 return {
                     ...prof,
@@ -2172,12 +1928,11 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
         incomingFriendRequests = incomingRows
             .map(r => {
                 const prof = profilesById.get(r.requester_id);
-                if (!prof || prof.role !== "user") return null;
+                if (!prof) return null;
                 return { friendshipId: r.id, user: prof };
             })
             .filter(Boolean);
 
-        // Dispara animação com a foto do utilizador se houver pedido novo
         if (triggerAnimForSenderId) {
             const targetReq = incomingFriendRequests.find(r => String(r.user.id) === String(triggerAnimForSenderId));
             if (targetReq && !animatedIncomingFriendshipIds.has(String(targetReq.friendshipId))) {
@@ -2190,7 +1945,7 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
                 animatedIncomingFriendshipIds.add(String(firstReq.friendshipId));
                 setTimeout(() => {
                     triggerFriendRequestAnimation(firstReq.user, firstReq.friendshipId);
-                }, 3300);
+                }, 600);
             }
         }
 
@@ -2206,12 +1961,16 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
 function updateSocialBadges() {
     let totalUnreadMsgs = 0;
     unreadMessagesBySender.forEach(v => { totalUnreadMsgs += v; });
-    const badgeTotal = incomingFriendRequests.length + totalUnreadMsgs;
 
     const navBadge = $("friendsReqBadge");
     if (navBadge) {
-        navBadge.textContent = badgeTotal;
-        navBadge.classList.toggle("hidden", badgeTotal === 0);
+        navBadge.textContent = incomingFriendRequests.length;
+        navBadge.classList.toggle("hidden", incomingFriendRequests.length === 0);
+    }
+    const headerChatBadge = $("headerChatUnreadBadge");
+    if (headerChatBadge) {
+        headerChatBadge.textContent = totalUnreadMsgs;
+        headerChatBadge.classList.toggle("hidden", totalUnreadMsgs === 0);
     }
     const chatTabBadge = $("chatsTabUnreadBadge");
     if (chatTabBadge) {
@@ -2264,7 +2023,6 @@ function renderFriendsModalContent() {
                                 <div style="font-size:16px;">${medals[idx]}</div>
                                 <strong style="display:block; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(f.full_name.split(" ")[0])}</strong>
                                 <span style="color:#f59e0b; font-weight:800;">${f.bump_count} pts</span>
-                                ${f.super_bump_count ? `<small style="display:block; color:#f9a8d4; font-size:10px;">⚡ ${f.super_bump_count} Super</small>` : ""}
                             </div>
                         `).join("")}
                     </div>
@@ -2280,7 +2038,7 @@ function renderFriendsModalContent() {
             <div style="text-align:center; padding:24px 12px; color:var(--muted);">
                 <p style="font-size:28px; margin:0 0 8px;">👊</p>
                 <p style="margin:0 0 12px; font-size:13.5px;">Ainda não tens amigos adicionados.</p>
-                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos ou entidades</button>
+                <button type="button" class="btn-primary-sm" onclick="$('tabFriendsAdd').click()">Procurar amigos</button>
             </div>
         `;
         return;
@@ -2312,7 +2070,6 @@ function renderFriendsModalContent() {
                 </div>
                 <div class="friend-row-actions">
                     <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')" title="Enviar Bump">👊</button>
-                    <button type="button" class="btn-soft" onclick="window.sendWhereAreYouPing('${f.id}')" title="Perguntar onde está">👀</button>
                     <button type="button" class="btn-soft" onclick="window.openFriendChat('${f.id}')" title="Chat">💬${unread > 0 ? ` (${unread})` : ""}</button>
                     ${hasLocation ? `<button type="button" class="btn-soft" onclick="window.locateFriendOnMap('${f.id}')" title="Ver no mapa">📍</button>` : ""}
                     <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')" title="Remover">×</button>
@@ -2333,7 +2090,6 @@ async function searchUsersAndEntities() {
         .from("profiles")
         .select("*")
         .neq("id", currentUser.id)
-        .neq("role", "admin")
         .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(18);
 
@@ -2390,18 +2146,13 @@ window.toggleFollowFromSearch = async (targetId, targetName) => {
 window.sendFriendRequest = async (targetId, targetName) => {
     if (!currentUser || !currentProfile) return;
 
-    if (!isNormalUserAccount()) {
-        showToast("Apenas utilizadores normais podem enviar pedidos de amizade.", "error");
-        return;
-    }
-
     const { data: targetProf } = await supabaseClient
         .from("profiles")
         .select("*")
         .eq("id", targetId)
         .maybeSingle();
 
-    if (!targetProf || targetProf.role !== "user") {
+    if (targetProf && targetProf.role === "business") {
         showToast("Empresas e entidades públicas não aceitam pedidos de amizade — clique em Seguir.", "error");
         return;
     }
@@ -2422,11 +2173,8 @@ window.sendFriendRequest = async (targetId, targetName) => {
     }
 
     sentFriendRequestIds.add(targetId);
+    triggerFriendSentAnimation(targetProf || { full_name: targetName });
 
-    // Dispara imediatamente a animação de envio com a foto do destinatário
-    triggerFriendSentAnimation(targetProf);
-
-    // Envia Broadcast imediato para que o destinatário veja a animação com a foto em tempo real
     if (bumpBroadcastChannel) {
         bumpBroadcastChannel.send({
             type: "broadcast",
@@ -2506,19 +2254,14 @@ window.removeFriend = async (friendId, friendName) => {
 window.locateFriendOnMap = friendId => {
     closeModalEl($("friendsModal"));
     if (window.innerWidth <= 820) setMobileView("map");
-    if (!focusFriendOnMap(friendId)) {
-        showToast("Localização indisponível.");
-    }
+    if (!focusFriendOnMap(friendId)) showToast("Localização indisponível.");
 };
 
 // ==========================================
-// REDE INSTITUCIONAL (SEGUIDORES & A SEGUIR PARA ENTIDADES)
+// REDE INSTITUCIONAL
 // ==========================================
 async function loadMyFollowers() {
-    if (!currentUser || !isBusinessAccount()) {
-        myFollowersList = [];
-        return;
-    }
+    if (!currentUser || !isBusinessAccount()) { myFollowersList = []; return; }
     try {
         const { data: rows, error } = await supabaseClient
             .from("follows")
@@ -2532,11 +2275,7 @@ async function loadMyFollowers() {
         }
 
         const followerIds = rows.map(r => r.follower_id).filter(Boolean);
-        const { data: profs } = await supabaseClient
-            .from("profiles")
-            .select("*")
-            .in("id", followerIds);
-
+        const { data: profs } = await supabaseClient.from("profiles").select("*").in("id", followerIds);
         myFollowersList = profs || [];
         if ($("headerFollowersCount")) $("headerFollowersCount").textContent = myFollowersList.length;
     } catch (e) {}
@@ -2549,28 +2288,17 @@ function renderEntityNetworkModal() {
     const followersBox = $("entFollowersListContainer");
     if (followersBox) {
         followersBox.innerHTML = myFollowersList.length
-            ? myFollowersList.map(u => {
-                const isBiz = u.role === "business";
-                return `
-                    <div class="friend-row">
-                        <div class="friend-row-left">
-                            ${renderAvatarChip(u, "")}
-                            <div class="friend-row-info">
-                                <strong>${escapeHTML(u.full_name)}${verifiedBadgeHTML(u)}</strong>
-                                <span>${isBiz ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : "👤 Utilizador"}</span>
-                            </div>
+            ? myFollowersList.map(u => `
+                <div class="friend-row">
+                    <div class="friend-row-left">
+                        ${renderAvatarChip(u, "")}
+                        <div class="friend-row-info">
+                            <strong>${escapeHTML(u.full_name)}${verifiedBadgeHTML(u)}</strong>
+                            <span>${u.role === "business" ? "🏛️ " + escapeHTML(u.business_type || "Entidade") : "👤 Utilizador"}</span>
                         </div>
-                        ${isBiz && String(u.id) !== String(currentUser.id)
-                            ? `<div>
-                                ${myFollowing.has(String(u.id))
-                                    ? `<button type="button" class="btn-soft" onclick="window.toggleFollowEntityModal('${u.id}', '${escapeHTML(u.full_name)}')">✓ A seguir</button>`
-                                    : `<button type="button" class="btn-primary-sm" onclick="window.toggleFollowEntityModal('${u.id}', '${escapeHTML(u.full_name)}')">+ Seguir</button>`
-                                }
-                               </div>`
-                            : ""}
                     </div>
-                `;
-            }).join("")
+                </div>
+            `).join("")
             : `<p class="muted" style="font-size:13px; text-align:center; padding:18px;">Ainda sem seguidores.</p>`;
     }
 
@@ -2598,21 +2326,11 @@ async function searchEntitiesToFollow() {
     const resultsEl = $("entitySearchResults");
     if (!resultsEl || !currentUser) return;
 
-    resultsEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A carregar entidades...</p>`;
+    let req = supabaseClient.from("profiles").select("*").eq("role", "business").neq("id", currentUser.id).limit(20);
+    if (query) req = req.ilike("full_name", `%${query}%`);
 
-    let req = supabaseClient
-        .from("profiles")
-        .select("*")
-        .eq("role", "business")
-        .neq("id", currentUser.id)
-        .limit(20);
-
-    if (query) {
-        req = req.ilike("full_name", `%${query}%`);
-    }
-
-    const { data, error } = await req;
-    if (error || !data || data.length === 0) {
+    const { data } = await req;
+    if (!data || data.length === 0) {
         resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhuma empresa ou entidade encontrada.</p>`;
         return;
     }
@@ -2642,19 +2360,15 @@ async function searchEntitiesToFollow() {
 window.toggleFollowEntityModal = async (targetId, targetName) => {
     await toggleFollowOrganizer(targetId, targetName);
     renderEntityNetworkModal();
-    if ($("panelEntDiscover") && !$("panelEntDiscover").classList.contains("hidden")) {
-        await searchEntitiesToFollow();
-    }
+    if ($("panelEntDiscover") && !$("panelEntDiscover").classList.contains("hidden")) await searchEntitiesToFollow();
 };
 
 // ==========================================
-// BUMP, SUPER BUMP, PINGS («ONDE ESTÁS?»), EMOJI BOMBS & CHAT DIRETO
+// BUMP, EMOJI BOMBS & CHAT DIRETO
 // ==========================================
 function triggerBumpVisual(emoji = "👊", text = "BUMP!", isSuper = false) {
     if (navigator.vibrate) {
-        try {
-            navigator.vibrate(isSuper ? [150, 60, 150, 60, 280] : [100, 50, 140]);
-        } catch (e) {}
+        try { navigator.vibrate(isSuper ? [150, 60, 150, 60, 280] : [100, 50, 140]); } catch (e) {}
     }
     playBumpSound(isSuper);
 
@@ -2686,7 +2400,7 @@ function launchEmojiBombAnimation(emoji = "👊") {
 }
 
 window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
-    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
+    if (!currentUser || !currentProfile) return;
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     if (!friend) return;
 
@@ -2710,33 +2424,21 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     const pointsToAdd = isMutualSuper ? 2 : 1;
     const fRow = friendshipRecords.get(friendKey);
     const nextCount = (fRow?.bump_count || friend.bump_count || 0) + pointsToAdd;
-    const nextSuperCount = (fRow?.super_bump_count || friend.super_bump_count || 0) + (isMutualSuper ? 1 : 0);
 
     let finalScore = nextCount;
     try {
-        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("registrar_bump", {
-            p_receiver_id: friendId
-        });
+        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("registrar_bump", { p_receiver_id: friendId });
         if (!rpcErr && rpcData && typeof rpcData.total_bumps === "number") {
             finalScore = rpcData.total_bumps;
         } else if (fRow) {
-            await supabaseClient
-                .from("friendships")
-                .update({ bump_count: nextCount })
-                .eq("id", fRow.id);
+            await supabaseClient.from("friendships").update({ bump_count: nextCount }).eq("id", fRow.id);
         }
     } catch (e) {
-        if (fRow) {
-            await supabaseClient
-                .from("friendships")
-                .update({ bump_count: nextCount })
-                .eq("id", fRow.id);
-        }
+        if (fRow) await supabaseClient.from("friendships").update({ bump_count: nextCount }).eq("id", fRow.id);
     }
 
     if (fRow) fRow.bump_count = finalScore;
     friend.bump_count = finalScore;
-    if (isMutualSuper) friend.super_bump_count = nextSuperCount;
     window.friendsList.sort((a, b) => (b.bump_count || 0) - (a.bump_count || 0));
 
     const bannerMsg = isMutualSuper
@@ -2747,12 +2449,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     renderFriendsModalContent();
     if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
 
-    const waveLng = typeof friend.last_lng === "number" ? friend.last_lng : userPosition?.lng;
-    const waveLat = typeof friend.last_lat === "number" ? friend.last_lat : userPosition?.lat;
-    if (typeof waveLng === "number" && typeof waveLat === "number" && typeof triggerMapBumpShockwave === "function") {
-        triggerMapBumpShockwave(waveLng, waveLat, isMutualSuper ? "⚡" : emoji, isMutualSuper);
-    }
-
     if (bumpBroadcastChannel) {
         bumpBroadcastChannel.send({
             type: "broadcast",
@@ -2761,8 +2457,8 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
                 senderId: currentUser.id,
                 senderName: currentProfile.full_name,
                 receiverId: friendId,
-                lat: userPosition?.lat ?? waveLat,
-                lng: userPosition?.lng ?? waveLng,
+                lat: userPosition?.lat,
+                lng: userPosition?.lng,
                 emoji: isMutualSuper ? "⚡" : emoji,
                 isSuper: isMutualSuper,
                 totalScore: finalScore
@@ -2776,14 +2472,12 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
         isMutualSuper
             ? `⚡ SUPER BUMP com ${currentProfile.full_name}! (${finalScore} pts)`
             : `${emoji} ${currentProfile.full_name} fez Bump contigo! (${finalScore} pts)`,
-        isMutualSuper
-            ? "Vocês abanaram o telemóvel ao mesmo tempo! (+2 pts)"
-            : `Abana também nos próximos 5s para ativar SUPER BUMP (+2 pts)!`
+        `Abana também nos próximos 5s para ativar SUPER BUMP!`
     );
 };
 
 window.sendWhereAreYouPing = async friendId => {
-    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
+    if (!currentUser || !currentProfile) return;
     const friend = window.friendsList.find(f => String(f.id) === String(friendId));
     if (!friend) return;
 
@@ -2791,27 +2485,13 @@ window.sendWhereAreYouPing = async friendId => {
         bumpBroadcastChannel.send({
             type: "broadcast",
             event: "where_are_you_ping",
-            payload: {
-                senderId: currentUser.id,
-                senderName: currentProfile.full_name,
-                receiverId: friendId
-            }
+            payload: { senderId: currentUser.id, senderName: currentProfile.full_name, receiverId: friendId }
         });
     }
-
-    await createNotification(
-        friendId,
-        null,
-        `👀 ${currentProfile.full_name} perguntou: Onde estás?`,
-        "Entra no mapa ou responde no chat!"
-    );
     showToast(`Ping «👀 Onde estás?» enviado a ${friend.full_name}!`, "success");
 };
 
 function showIncomingPingCard(senderId, senderName) {
-    if (navigator.vibrate) {
-        try { navigator.vibrate([120, 60, 120]); } catch (e) {}
-    }
     const existing = $("livePingToast");
     if (existing) existing.remove();
 
@@ -2842,7 +2522,6 @@ function showIncomingPingCard(senderId, senderName) {
             showToast(`Resposta enviada a ${senderName}: ${replyText}`, "success");
         };
     });
-
     setTimeout(() => { if (card.parentElement) card.remove(); }, 15000);
 }
 
@@ -2882,7 +2561,7 @@ async function loadChatHistory(friendId) {
         .limit(60);
 
     if (error) {
-        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Sem mensagens disponíveis.</p>`;
+        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Erro ao carregar histórico. Verifica a tabela friend_messages no Supabase.</p>`;
         return;
     }
 
@@ -2924,7 +2603,7 @@ async function loadChatHistory(friendId) {
 
 async function sendDirectMessage(receiverId, content, msgType = "text") {
     if (!currentUser) return;
-    const { data } = await supabaseClient
+    const { data, error } = await supabaseClient
         .from("friend_messages")
         .insert([{
             sender_id: currentUser.id,
@@ -2934,6 +2613,11 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
         }])
         .select()
         .maybeSingle();
+
+    if (error) {
+        showToast("Erro ao enviar mensagem: " + error.message, "error");
+        return;
+    }
 
     if (data) {
         lastChatMessageByFriend.set(String(receiverId), data);
@@ -2946,16 +2630,13 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
 }
 
 // ==========================================
-// TELEMETRIA (BATERIA, CHECK-IN, PRIVACIDADE & REALTIME)
+// TELEMETRIA & REALTIME
 // ==========================================
 async function getDeviceBatteryInfo() {
     if (!navigator.getBattery) return { level: null, charging: false };
     try {
         const bat = await navigator.getBattery();
-        return {
-            level: Math.round(bat.level * 100),
-            charging: Boolean(bat.charging)
-        };
+        return { level: Math.round(bat.level * 100), charging: Boolean(bat.charging) };
     } catch (e) {
         return { level: null, charging: false };
     }
@@ -2965,28 +2646,18 @@ function applyPrivacyCoordinates(lat, lng, mode) {
     if (mode !== "blurred") return { lat, lng };
     const offsetLat = (Math.sin(lat * 1000) * 0.0032);
     const offsetLng = (Math.cos(lng * 1000) * 0.0038);
-    return {
-        lat: Number((lat + offsetLat).toFixed(5)),
-        lng: Number((lng + offsetLng).toFixed(5))
-    };
+    return { lat: Number((lat + offsetLat).toFixed(5)), lng: Number((lng + offsetLng).toFixed(5)) };
 }
 
 window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
-    if (!currentUser || !currentProfile) return;
-    if (isAdminAccount()) return;
-
+    if (!currentUser || !currentProfile || isAdminAccount()) return;
     const mode = currentProfile.privacy_mode || "precise";
     if (mode === "ghost" || currentProfile.ghost_mode) return;
 
     const coords = applyPrivacyCoordinates(lat, lng, mode);
     const bat = isNormalUserAccount() ? await getDeviceBatteryInfo() : { level: null, charging: false };
 
-    const updatePayload = {
-        last_lat: coords.lat,
-        last_lng: coords.lng,
-        last_seen: new Date().toISOString()
-    };
-
+    const updatePayload = { last_lat: coords.lat, last_lng: coords.lng, last_seen: new Date().toISOString() };
     if (isNormalUserAccount()) {
         updatePayload.speed_kmh = speedKmh;
         if (bat.level !== null) {
@@ -2995,10 +2666,7 @@ window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
         }
     }
 
-    await supabaseClient
-        .from("profiles")
-        .update(updatePayload)
-        .eq("id", currentUser.id);
+    await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
 };
 
 async function cyclePrivacyMode() {
@@ -3007,62 +2675,32 @@ async function cyclePrivacyMode() {
     if (isBusinessAccount()) {
         const next = currentProfile.privacy_mode === "ghost" ? "precise" : "ghost";
         const isGhost = next === "ghost";
-
-        const updateData = { privacy_mode: next, ghost_mode: isGhost };
-        if (!isGhost && userPosition) {
-            updateData.last_lat = userPosition.lat;
-            updateData.last_lng = userPosition.lng;
-        }
-
-        await supabaseClient.from("profiles").update(updateData).eq("id", currentUser.id);
+        await supabaseClient.from("profiles").update({ privacy_mode: next, ghost_mode: isGhost }).eq("id", currentUser.id);
         currentProfile.privacy_mode = next;
         currentProfile.ghost_mode = isGhost;
         applyRoleUI();
-
-        if (!isGhost) {
-            try { await locateUser(); } catch (e) {}
-            showToast("🏢 Sede da entidade agora visível para os seguidores!", "success");
-        } else {
-            showToast("📅 Modo Apenas Eventos ativo (sede ocultada do mapa).");
-        }
+        showToast(isGhost ? "📅 Modo Apenas Eventos ativo." : "🏢 Sede visível no mapa!", "success");
         return;
     }
 
     const order = ["precise", "blurred", "ghost"];
-    const currentIdx = order.indexOf(currentProfile.privacy_mode || "precise");
-    const next = order[(currentIdx + 1) % order.length];
+    const next = order[(order.indexOf(currentProfile.privacy_mode || "precise") + 1) % order.length];
     const isGhost = next === "ghost";
 
-    await supabaseClient
-        .from("profiles")
-        .update({ privacy_mode: next, ghost_mode: isGhost })
-        .eq("id", currentUser.id);
-
+    await supabaseClient.from("profiles").update({ privacy_mode: next, ghost_mode: isGhost }).eq("id", currentUser.id);
     currentProfile.privacy_mode = next;
     currentProfile.ghost_mode = isGhost;
     applyRoleUI();
 
-    if (next === "precise") {
-        if (userPosition) window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
-        showToast("📍 Localização Precisa ativada para amigos.");
-    } else if (next === "blurred") {
-        if (userPosition) window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
-        showToast("🌫️ Modo Borrão ativado (zona aproximada).");
-    } else {
-        showToast("👻 Modo Fantasma ativado (estás invisível no mapa).");
-    }
+    if (next !== "ghost" && userPosition) window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
+    showToast(next === "precise" ? "📍 Localização Precisa" : (next === "blurred" ? "🌫️ Modo Borrão" : "👻 Modo Fantasma"));
 }
 
 async function doQuickCheckin() {
-    if (!currentUser || !currentProfile || !isNormalUserAccount()) return;
+    if (!currentUser || !currentProfile) return;
     let pos = userPosition;
     if (!pos) {
-        try {
-            pos = await locateUser();
-        } catch (err) {
-            showToast(err.message, "error");
-            return;
-        }
+        try { pos = await locateUser(); } catch (err) { showToast(err.message, "error"); return; }
     }
 
     let placeName = "Localização atual";
@@ -3076,15 +2714,12 @@ async function doQuickCheckin() {
     if (customPlace === null) return;
     const finalPlace = customPlace.trim() || placeName;
 
-    await supabaseClient
-        .from("profiles")
-        .update({
-            current_place: finalPlace,
-            last_lat: pos.lat,
-            last_lng: pos.lng,
-            last_seen: new Date().toISOString()
-        })
-        .eq("id", currentUser.id);
+    await supabaseClient.from("profiles").update({
+        current_place: finalPlace,
+        last_lat: pos.lat,
+        last_lng: pos.lng,
+        last_seen: new Date().toISOString()
+    }).eq("id", currentUser.id);
 
     currentProfile.current_place = finalPlace;
     triggerBumpVisual("📌", `Check-in em ${finalPlace}!`);
@@ -3106,26 +2741,7 @@ function startLiveSocialSync() {
             () => {},
             { enableHighAccuracy: true, timeout: 8000 }
         );
-
-        if (isNormalUserAccount()) {
-            geoWatchId = navigator.geolocation.watchPosition(
-                pos => {
-                    userPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
-                    window.recordExplorationPoint(userPosition.lat, userPosition.lng);
-                    window.syncMyLiveLocation(userPosition.lat, userPosition.lng, speedKmh);
-                },
-                () => {},
-                { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 }
-            );
-        }
     }
-
-    locationSyncInterval = setInterval(() => {
-        if (userPosition && currentProfile?.privacy_mode !== "ghost" && !isAdminAccount()) {
-            window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
-        }
-    }, 30000);
 
     bumpBroadcastChannel = supabaseClient.channel("localspot_bump_live", {
         config: { presence: { key: currentUser.id } }
@@ -3137,9 +2753,7 @@ function startLiveSocialSync() {
             onlineUserIds = new Set(Object.keys(stateObj));
             renderFriendsModalContent();
             renderChatsTabContent();
-            if (typeof showFriendsOnMap === "function") {
-                showFriendsOnMap(window.getMapSocialEntities());
-            }
+            if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
         })
         .on("broadcast", { event: "friend_request_received" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
@@ -3148,53 +2762,21 @@ function startLiveSocialSync() {
             if (fid) animatedIncomingFriendshipIds.add(fid);
 
             triggerFriendRequestAnimation(payload.sender, payload.friendshipId);
-            sendBackgroundBumpNotification(
-                "👊 Novo pedido de amizade!",
-                `${payload.sender?.full_name || "Alguém"} quer adicionar-te aos amigos no LocalSpot!`
-            );
             loadSocialData();
         })
         .on("broadcast", { event: "bump_shockwave" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
-
-            const senderKey = String(payload.senderId);
             const isSuper = Boolean(payload.isSuper);
-            const senderName = payload.senderName || "Um amigo";
-
-            if (!isSuper) {
-                recentIncomingBumpTs.set(senderKey, Date.now());
-            } else {
-                recentIncomingBumpTs.delete(senderKey);
-            }
-
+            if (!isSuper) recentIncomingBumpTs.set(String(payload.senderId), Date.now());
             const msgText = isSuper
-                ? `⚡ SUPER BUMP com ${senderName}! (+2 pts)`
-                : `👊 ${senderName} fez Bump contigo! Abana em 5s para Super Bump!`;
-
+                ? `⚡ SUPER BUMP com ${payload.senderName || "um amigo"}! (+2 pts)`
+                : `👊 ${payload.senderName || "Um amigo"} fez Bump contigo!`;
             triggerBumpVisual(isSuper ? "⚡" : (payload.emoji || "👊"), msgText, isSuper);
-            sendBackgroundBumpNotification(
-                isSuper ? "⚡ SUPER BUMP no LocalSpot!" : "👊 Novo Bump no LocalSpot!",
-                msgText
-            );
-
-            if (typeof payload.lng === "number" && typeof triggerMapBumpShockwave === "function") {
-                triggerMapBumpShockwave(payload.lng, payload.lat, isSuper ? "⚡" : (payload.emoji || "👊"), isSuper);
-            }
             loadSocialData();
         })
         .on("broadcast", { event: "where_are_you_ping" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
             showIncomingPingCard(payload.senderId, payload.senderName || "Um amigo");
-        })
-        .on("broadcast", { event: "live_status" }, ({ payload }) => {
-            if (!payload) return;
-            const f = window.friendsList.find(x => String(x.id) === String(payload.userId));
-            if (f) {
-                f.status_emoji = payload.emoji;
-                f.status_text = payload.text;
-                if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-                renderFriendsModalContent();
-            }
         })
         .on("broadcast", { event: "typing_indicator" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
@@ -3207,31 +2789,12 @@ function startLiveSocialSync() {
         })
         .subscribe(async status => {
             if (status === "SUBSCRIBED") {
-                await bumpBroadcastChannel.track({
-                    user_id: currentUser.id,
-                    online_at: new Date().toISOString()
-                });
+                await bumpBroadcastChannel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
             }
         });
 
     realtimeChannel = supabaseClient
         .channel("localspot_realtime_social")
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, payload => {
-            const updated = payload.new;
-            const idx = window.friendsList.findIndex(f => f.id === updated.id);
-            if (idx !== -1) {
-                const keepBumps = window.friendsList[idx].bump_count || 0;
-                const keepSuper = window.friendsList[idx].super_bump_count || 0;
-                window.friendsList[idx] = { ...updated, bump_count: keepBumps, super_bump_count: keepSuper };
-                if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-                renderFriendsModalContent();
-            }
-            const entIdx = myFollowingProfiles.findIndex(e => e.id === updated.id);
-            if (entIdx !== -1) {
-                myFollowingProfiles[entIdx] = updated;
-                if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-            }
-        })
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "friendships" }, payload => {
             const row = payload.new;
             if (row && String(row.addressee_id) === String(currentUser.id) && row.status === "pending") {
@@ -3240,40 +2803,14 @@ function startLiveSocialSync() {
                 loadSocialData();
             }
         })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "friendships" }, () => {
-            loadSocialData();
-        })
-        .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships" }, () => {
-            loadSocialData();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "follows" }, async () => {
-            await Promise.all([loadMyFollowing(), loadMyFollowers()]);
-            if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-            if ($("entityNetworkModal") && !$("entityNetworkModal").classList.contains("hidden")) {
-                renderEntityNetworkModal();
-            }
-        })
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, payload => {
-            const notif = payload.new;
-            if (notif && String(notif.user_id) === String(currentUser.id)) {
-                loadNotifications();
-                if (notif.title && notif.title.includes("Bump")) {
-                    const isSuper = notif.title.includes("SUPER");
-                    triggerBumpVisual(isSuper ? "⚡" : "👊", notif.title, isSuper);
-                } else if (!notif.title?.includes("pedido de amizade")) {
-                    showToast(notif.title || "Nova notificação!");
-                }
-            }
-        })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "friendships" }, () => loadSocialData())
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships" }, () => loadSocialData())
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "friend_messages" }, payload => {
             const msg = payload.new;
             if (!msg || String(msg.receiver_id) !== String(currentUser.id)) return;
 
             lastChatMessageByFriend.set(String(msg.sender_id), msg);
-
-            if (msg.msg_type === "emoji_bomb") {
-                launchEmojiBombAnimation(msg.content);
-            }
+            if (msg.msg_type === "emoji_bomb") launchEmojiBombAnimation(msg.content);
 
             if (String(activeChatFriendId) === String(msg.sender_id)) {
                 loadChatHistory(activeChatFriendId);
@@ -3285,7 +2822,6 @@ function startLiveSocialSync() {
                 renderFriendsModalContent();
                 renderChatsTabContent();
                 showToast(`💬 ${senderName}: ${msg.content}`);
-                sendBackgroundBumpNotification(`💬 Mensagem de ${senderName}`, msg.content);
             }
         })
         .subscribe();
@@ -3294,10 +2830,8 @@ function startLiveSocialSync() {
 // ---------- Amizade nos Eventos ----------
 async function loadAllEnrollmentsSummary() {
     try {
-        const { data, error } = await supabaseClient
-            .from("enrollments")
-            .select("event_id, user_id, user_name");
-        if (!error && data) {
+        const { data } = await supabaseClient.from("enrollments").select("event_id, user_id, user_name");
+        if (data) {
             allEnrollmentsMap = new Map();
             data.forEach(row => {
                 const key = String(row.event_id);
@@ -3312,34 +2846,23 @@ window.getFriendsGoingToEvent = eventId => {
     const attendees = allEnrollmentsMap.get(String(eventId)) || [];
     if (!attendees.length || !window.friendsList.length) return [];
     const friendById = new Map(window.friendsList.map(f => [String(f.id), f]));
-    return attendees
-        .map(a => friendById.get(String(a.user_id)))
-        .filter(Boolean);
+    return attendees.map(a => friendById.get(String(a.user_id))).filter(Boolean);
 };
 
 // ==========================================
-// NOTIFICAÇÕES E SEGUIDORES DE ORGANIZADORES
+// NOTIFICAÇÕES E SEGUIDORES
 // ==========================================
 async function createNotification(targetUserId, eventId, title, message) {
     if (!targetUserId || String(targetUserId) === String(currentUser?.id)) return;
     try {
-        await supabaseClient.from("notifications").insert([{
-            user_id: targetUserId,
-            event_id: eventId,
-            title,
-            message
-        }]);
+        await supabaseClient.from("notifications").insert([{ user_id: targetUserId, event_id: eventId, title, message }]);
     } catch (e) {}
 }
 
 async function notifyFollowersOfNewEvent(eventObj) {
     if (!currentUser || !currentProfile) return;
     try {
-        const { data: followers } = await supabaseClient
-            .from("follows")
-            .select("follower_id")
-            .eq("following_id", currentUser.id);
-
+        const { data: followers } = await supabaseClient.from("follows").select("follower_id").eq("following_id", currentUser.id);
         if (followers && followers.length > 0) {
             const rows = followers.map(f => ({
                 user_id: f.follower_id,
@@ -3355,17 +2878,13 @@ async function notifyFollowersOfNewEvent(eventObj) {
 async function loadNotifications() {
     if (!currentUser) return;
     try {
-        const { data, error } = await supabaseClient
+        const { data } = await supabaseClient
             .from("notifications")
             .select("*")
             .eq("user_id", currentUser.id)
             .order("created_at", { ascending: false })
             .limit(20);
-
-        if (!error && data) {
-            notifications = data;
-            renderNotifications();
-        }
+        if (data) { notifications = data; renderNotifications(); }
     } catch (e) {}
 }
 
@@ -3387,39 +2906,22 @@ function renderNotifications() {
     `).join("");
 }
 
-notifBtn.addEventListener("click", e => {
-    e.stopPropagation();
-    notifDropdown.classList.toggle("hidden");
-});
+notifBtn.addEventListener("click", e => { e.stopPropagation(); notifDropdown.classList.toggle("hidden"); });
 
 document.addEventListener("click", e => {
-    if (!notifDropdown.contains(e.target) && e.target !== notifBtn) {
-        notifDropdown.classList.add("hidden");
-    }
+    if (!notifDropdown.contains(e.target) && e.target !== notifBtn) notifDropdown.classList.add("hidden");
     const moodPop = $("quickMoodPopover");
     const moodBtn = $("quickMoodMapBtn");
-    if (moodPop && !moodPop.contains(e.target) && e.target !== moodBtn) {
-        moodPop.classList.add("hidden");
-    }
+    if (moodPop && !moodPop.contains(e.target) && e.target !== moodBtn) moodPop.classList.add("hidden");
 });
 
 notifList.addEventListener("click", async e => {
     const item = e.target.closest(".notif-item");
     if (!item) return;
-    const nid = item.dataset.nid;
-    const eid = item.dataset.eid;
-
-    await supabaseClient.from("notifications").update({ is_read: true }).eq("id", nid);
+    await supabaseClient.from("notifications").update({ is_read: true }).eq("id", item.dataset.nid);
     await loadNotifications();
     notifDropdown.classList.add("hidden");
-
-    if (eid) {
-        window.openEventDetails(eid);
-    } else if (isNormalUserAccount()) {
-        openModal($("friendsModal"));
-        $("tabFriendsAdd").click();
-        await loadSocialData();
-    }
+    if (item.dataset.eid) window.openEventDetails(item.dataset.eid);
 });
 
 $("markAllReadBtn").addEventListener("click", async () => {
@@ -3431,12 +2933,8 @@ $("markAllReadBtn").addEventListener("click", async () => {
 async function loadMyFollowing() {
     if (!currentUser) return;
     try {
-        const { data, error } = await supabaseClient
-            .from("follows")
-            .select("following_id, following_name")
-            .eq("follower_id", currentUser.id);
-
-        if (!error && data) {
+        const { data } = await supabaseClient.from("follows").select("following_id, following_name").eq("follower_id", currentUser.id);
+        if (data) {
             myFollowing = new Map(data.map(r => [String(r.following_id), r.following_name]));
             const ids = data.map(r => r.following_id).filter(Boolean);
             if (ids.length > 0) {
@@ -3444,9 +2942,6 @@ async function loadMyFollowing() {
                 myFollowingProfiles = profs || [];
             } else {
                 myFollowingProfiles = [];
-            }
-            if (typeof showFriendsOnMap === "function") {
-                showFriendsOnMap(window.getMapSocialEntities());
             }
         }
     } catch (e) {}
@@ -3457,46 +2952,20 @@ async function toggleFollowOrganizer(organizerId, organizerName) {
     const key = String(organizerId);
 
     if (myFollowing.has(key)) {
-        await supabaseClient.from("follows").delete()
-            .eq("follower_id", currentUser.id)
-            .eq("following_id", organizerId);
+        await supabaseClient.from("follows").delete().eq("follower_id", currentUser.id).eq("following_id", organizerId);
         myFollowing.delete(key);
         myFollowingProfiles = myFollowingProfiles.filter(p => String(p.id) !== key);
         showToast(`Deixaste de seguir ${organizerName}.`);
     } else {
-        const { data: targetProf } = await supabaseClient
-            .from("profiles")
-            .select("*")
-            .eq("id", organizerId)
-            .maybeSingle();
-
-        if (!targetProf || targetProf.role !== "business") {
-            showToast("Só é possível seguir empresas ou entidades de domínio público.", "error");
-            return;
-        }
-
-        await supabaseClient.from("follows").insert([{
-            follower_id: currentUser.id,
-            following_id: organizerId,
-            following_name: organizerName
-        }]);
+        await supabaseClient.from("follows").insert([{ follower_id: currentUser.id, following_id: organizerId, following_name: organizerName }]);
         myFollowing.set(key, organizerName);
-        myFollowingProfiles.push(targetProf);
-        await createNotification(
-            organizerId,
-            null,
-            "Novo seguidor! 🏛️",
-            `${currentProfile.full_name} começou a seguir a sua entidade.`
-        );
         showToast(`A seguir ${organizerName}!`, "success");
     }
-
-    if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
     filterEvents();
 }
 
 // ==========================================
-// CARREGAMENTO DE EVENTOS E INSCRIÇÕES (SUPABASE)
+// CARREGAMENTO DE EVENTOS E INSCRIÇÕES
 // ==========================================
 function mapDbEvent(row) {
     return {
@@ -3525,11 +2994,7 @@ function mapDbEvent(row) {
 
 async function loadEventsFromSupabase() {
     try {
-        const { data, error } = await supabaseClient
-            .from("events")
-            .select("*")
-            .order("date", { ascending: true });
-
+        const { data, error } = await supabaseClient.from("events").select("*").order("date", { ascending: true });
         if (!error && Array.isArray(data)) {
             events = data.map(mapDbEvent);
             filterEvents();
@@ -3542,24 +3007,13 @@ async function loadEventsFromSupabase() {
 async function loadMyEnrollments() {
     if (!currentUser) return;
     try {
-        const { data, error } = await supabaseClient
-            .from("enrollments")
-            .select("event_id")
-            .eq("user_id", currentUser.id);
-
-        if (!error && data) {
-            myEnrollments = new Set(data.map(row => String(row.event_id)));
-        }
+        const { data } = await supabaseClient.from("enrollments").select("event_id").eq("user_id", currentUser.id);
+        if (data) myEnrollments = new Set(data.map(row => String(row.event_id)));
     } catch (e) {}
 }
 
-// ---------- Inscrição em Eventos ----------
 window.toggleEnrollment = async id => {
-    if (!currentUser || !currentProfile) {
-        showToast("Inicia sessão para te inscreveres.", "error");
-        return;
-    }
-
+    if (!currentUser || !currentProfile) return;
     const ev = events.find(x => String(x.id) === String(id));
     if (!ev) return;
 
@@ -3568,60 +3022,33 @@ window.toggleEnrollment = async id => {
 
     try {
         if (isEnrolled) {
-            const { error } = await supabaseClient
-                .from("enrollments")
-                .delete()
-                .eq("event_id", ev.id)
-                .eq("user_id", currentUser.id);
-
-            if (error) throw error;
-
+            await supabaseClient.from("enrollments").delete().eq("event_id", ev.id).eq("user_id", currentUser.id);
             myEnrollments.delete(strId);
             ev.enrolled = Math.max(0, (ev.enrolled || 1) - 1);
             await supabaseClient.from("events").update({ enrolled: ev.enrolled }).eq("id", ev.id);
             showToast(`Inscrição cancelada em "${ev.name}".`);
         } else {
             if (ev.maxParticipants && ev.enrolled >= ev.maxParticipants) {
-                showToast("Este evento já atingiu a lotação máxima.", "error");
+                showToast("Lotação máxima atingida.", "error");
                 return;
             }
-
-            const { error } = await supabaseClient
-                .from("enrollments")
-                .insert([{
-                    event_id: ev.id,
-                    user_id: currentUser.id,
-                    user_name: currentProfile.full_name
-                }]);
-
-            if (error) throw error;
-
+            await supabaseClient.from("enrollments").insert([{ event_id: ev.id, user_id: currentUser.id, user_name: currentProfile.full_name }]);
             myEnrollments.add(strId);
             ev.enrolled = (ev.enrolled || 0) + 1;
             await supabaseClient.from("events").update({ enrolled: ev.enrolled }).eq("id", ev.id);
-
-            await createNotification(
-                ev.creatorId,
-                ev.id,
-                "Nova inscrição no teu evento",
-                `${currentProfile.full_name} inscreveu-se em "${ev.name}".`
-            );
-
             showToast(`Inscrição confirmada em "${ev.name}"! 🎉`, "success");
         }
 
         await loadAllEnrollmentsSummary();
         filterEvents();
-        if (!detailModal.classList.contains("hidden") && String(detailEventId) === strId) {
-            window.openEventDetails(ev.id);
-        }
+        if (!detailModal.classList.contains("hidden") && String(detailEventId) === strId) window.openEventDetails(ev.id);
     } catch (err) {
         showToast("Erro ao atualizar inscrição.", "error");
     }
 };
 
 // ==========================================
-// PERFIL DO UTILIZADOR (AVATAR, VIBE, PRIVACIDADE & DADOS)
+// PERFIL DO UTILIZADOR
 // ==========================================
 function switchProfileTab(activeTabId, activePanelId) {
     ["tabMyEnrollments", "tabMyCreated", "tabMyFriends", "tabMyFollowing"].forEach(id => {
@@ -3643,47 +3070,10 @@ userBadge.addEventListener("click", async () => {
     $("profileBioInput").value = currentProfile.bio || "";
     if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
 
-    if ($("profileAvatarLabel")) {
-        $("profileAvatarLabel").textContent = isBiz ? "Logótipo da Entidade / Empresa" : "Foto de Perfil";
-    }
-
     if ($("businessOnlyProfileFields")) $("businessOnlyProfileFields").classList.toggle("hidden", !isBiz);
     if ($("userOnlyProfileFields")) $("userOnlyProfileFields").classList.toggle("hidden", !isUser);
-
     if ($("tabMyFriends")) $("tabMyFriends").classList.toggle("hidden", !isUser);
-    if ($("tabMyFollowing")) {
-        $("tabMyFollowing").classList.toggle("hidden", isAdm);
-        $("tabMyFollowing").textContent = isBiz ? "Rede Institucional" : "Entidades";
-    }
-    if ($("replayOnboardingBtn")) {
-        $("replayOnboardingBtn").classList.toggle("hidden", isAdm);
-    }
-
-    const statsBar = $("profileStatsBar");
-    if (statsBar) {
-        if (isBiz) {
-            const createdCount = events.filter(e => String(e.creatorId) === String(currentUser.id)).length;
-            const isVer = isEntityVerified(currentProfile);
-            statsBar.innerHTML = `
-                <span class="${isVer ? "verified-pill" : "unverified-pill"}">
-                    ${isVer ? "✅ Entidade Oficial Verificada" : "⏳ Aguarda Verificação do Admin"}
-                </span>
-                <span class="profile-stat-pill">👥 ${myFollowersList.length} Seguidores</span>
-                <span class="profile-stat-pill">📅 ${createdCount} Eventos</span>
-            `;
-        } else if (isUser) {
-            const totalBumps = window.friendsList.reduce((acc, f) => acc + (f.bump_count || 0), 0);
-            const bInfo = getAgeAndZodiac(currentProfile.birth_date);
-            statsBar.innerHTML = `
-                <span class="profile-stat-pill">👊 ${window.friendsList.length} Amigos</span>
-                <span class="profile-stat-pill">🔥 ${totalBumps} pts Bump</span>
-                <span class="profile-stat-pill">🗺️ ${explorationData.zones.length} Zonas</span>
-                ${bInfo ? `<span class="profile-stat-pill">${bInfo.sign.emoji} ${bInfo.age} anos</span>` : ""}
-            `;
-        } else {
-            statsBar.innerHTML = `<span class="profile-stat-pill">🛡️ Conta Administrador</span>`;
-        }
-    }
+    if ($("tabMyFollowing")) $("tabMyFollowing").classList.toggle("hidden", isAdm);
 
     if ($("profileAvatarPreview")) {
         $("profileAvatarPreview").className = `avatar-circle lg${isBiz ? " business-avatar" : (isAdm ? " admin-avatar" : "")}`;
@@ -3692,23 +3082,10 @@ userBadge.addEventListener("click", async () => {
             : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
     }
 
-    if (isBiz) {
-        if ($("profileBusinessTypeSelect") && currentProfile.business_type) {
-            $("profileBusinessTypeSelect").value = currentProfile.business_type;
-        }
-        const curMode = currentProfile.privacy_mode || "precise";
-        document.querySelectorAll("#businessPrivacyGrid .privacy-opt-btn").forEach(b => {
-            b.classList.toggle("active", b.dataset.mode === curMode);
-        });
-    } else if (isUser) {
+    if (isUser) {
         if ($("profileBirthDateInput")) $("profileBirthDateInput").value = currentProfile.birth_date || "";
         if ($("profileCustomEmoji")) $("profileCustomEmoji").value = currentProfile.status_emoji || "📍";
         if ($("profileCustomStatus")) $("profileCustomStatus").value = currentProfile.status_text || "No LocalSpot";
-
-        const curMode = currentProfile.privacy_mode || "precise";
-        document.querySelectorAll("#privacySelectorGrid .privacy-opt-btn").forEach(b => {
-            b.classList.toggle("active", b.dataset.mode === curMode);
-        });
     }
 
     switchProfileTab("tabMyEnrollments", "profileEnrolledList");
@@ -3719,7 +3096,6 @@ userBadge.addEventListener("click", async () => {
 
 $("closeProfile").addEventListener("click", () => closeModalEl(profileModal));
 profileModal.addEventListener("mousedown", e => { if (e.target === profileModal) closeModalEl(profileModal); });
-
 $("tabMyEnrollments").addEventListener("click", () => switchProfileTab("tabMyEnrollments", "profileEnrolledList"));
 $("tabMyCreated").addEventListener("click", () => switchProfileTab("tabMyCreated", "profileCreatedList"));
 $("tabMyFollowing").addEventListener("click", () => switchProfileTab("tabMyFollowing", "profileFollowingList"));
@@ -3727,10 +3103,7 @@ $("tabMyFollowing").addEventListener("click", () => switchProfileTab("tabMyFollo
 async function uploadAvatarImage(file) {
     const ext = file.name.split(".").pop() || "jpg";
     const fileName = `avatars/${currentUser.id}_${Date.now()}.${ext}`;
-    const { error } = await supabaseClient.storage
-        .from("event-images")
-        .upload(fileName, file, { cacheControl: "3600", upsert: true });
-
+    const { error } = await supabaseClient.storage.from("event-images").upload(fileName, file, { cacheControl: "3600", upsert: true });
     if (error) throw error;
     const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
     return data.publicUrl;
@@ -3741,67 +3114,24 @@ $("profileUpdateForm").addEventListener("submit", async e => {
     const newName = $("profileNameInput").value.trim();
     const newBio = $("profileBioInput").value.trim();
     const avatarFile = $("profileAvatarInput")?.files[0];
-
     if (!newName) return;
 
-    const isBiz = isBusinessAccount();
-    const isUser = isNormalUserAccount();
     let avatarUrl = currentProfile.avatar_url || null;
-
     try {
-        if (avatarFile) {
-            avatarUrl = await uploadAvatarImage(avatarFile);
-        }
-    } catch (err) {
-        showToast("Não foi possível carregar a imagem.", "error");
+        if (avatarFile) avatarUrl = await uploadAvatarImage(avatarFile);
+    } catch (err) {}
+
+    const updatePayload = { full_name: newName, bio: newBio, avatar_url: avatarUrl };
+    if (isNormalUserAccount()) {
+        updatePayload.birth_date = $("profileBirthDateInput")?.value || null;
+        updatePayload.status_emoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
+        updatePayload.status_text = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
     }
 
-    const updatePayload = {
-        full_name: newName,
-        bio: newBio,
-        avatar_url: avatarUrl
-    };
-
-    if (isBiz) {
-        const newBizType = $("profileBusinessTypeSelect")?.value || currentProfile.business_type || "Empresa / Comércio";
-        const activeBizBtn = document.querySelector("#businessPrivacyGrid .privacy-opt-btn.active");
-        const newPrivacy = activeBizBtn ? activeBizBtn.dataset.mode : (currentProfile.privacy_mode || "precise");
-        updatePayload.business_type = newBizType;
-        updatePayload.status_text = newBizType;
-        updatePayload.privacy_mode = newPrivacy;
-        updatePayload.ghost_mode = newPrivacy === "ghost";
-    } else if (isUser) {
-        const newBirthDate = $("profileBirthDateInput")?.value || null;
-        const newEmoji = ($("profileCustomEmoji")?.value || "📍").trim() || "📍";
-        const newStatus = ($("profileCustomStatus")?.value || "No LocalSpot").trim() || "No LocalSpot";
-        const activePrivBtn = document.querySelector("#privacySelectorGrid .privacy-opt-btn.active");
-        const newPrivacy = activePrivBtn ? activePrivBtn.dataset.mode : (currentProfile.privacy_mode || "precise");
-
-        updatePayload.birth_date = newBirthDate;
-        updatePayload.status_emoji = newEmoji;
-        updatePayload.status_text = newStatus;
-        updatePayload.privacy_mode = newPrivacy;
-        updatePayload.ghost_mode = newPrivacy === "ghost";
-    }
-
-    const { error } = await supabaseClient
-        .from("profiles")
-        .update(updatePayload)
-        .eq("id", currentUser.id);
-
-    if (error) {
-        showToast("Erro ao atualizar perfil.", "error");
-        return;
-    }
-
+    await supabaseClient.from("profiles").update(updatePayload).eq("id", currentUser.id);
     Object.assign(currentProfile, updatePayload);
     applyRoleUI();
-
-    if (userPosition && updatePayload.privacy_mode !== "ghost") {
-        window.syncMyLiveLocation(userPosition.lat, userPosition.lng);
-    }
-
-    showToast("Perfil atualizado com sucesso!", "success");
+    showToast("Perfil atualizado!", "success");
     closeModalEl(profileModal);
 });
 
@@ -3812,14 +3142,8 @@ function renderProfileLists() {
     $("profileEnrolledList").innerHTML = enrolledEvents.length
         ? enrolledEvents.map(ev => `
             <div class="profile-event-item">
-                <div>
-                    <strong>${escapeHTML(ev.name)}</strong>
-                    <span>📅 ${escapeHTML(formatEventDate(ev))} · 📍 ${escapeHTML(ev.location)}</span>
-                </div>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openTicketModal('${ev.id}')">🎟️ Bilhete</button>
-                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
-                </div>
+                <div><strong>${escapeHTML(ev.name)}</strong><span>📅 ${escapeHTML(formatEventDate(ev))}</span></div>
+                <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Abrir</button>
             </div>
         `).join("")
         : `<p class="muted" style="font-size:13px;">Ainda não estás inscrito em nenhum evento.</p>`;
@@ -3827,28 +3151,18 @@ function renderProfileLists() {
     $("profileCreatedList").innerHTML = createdEvents.length
         ? createdEvents.map(ev => `
             <div class="profile-event-item">
-                <div>
-                    <strong>${escapeHTML(ev.name)}</strong>
-                    <span>👥 ${ev.enrolled || 0} inscritos · 📅 ${escapeHTML(formatEventDate(ev))}</span>
-                </div>
+                <div><strong>${escapeHTML(ev.name)}</strong><span>👥 ${ev.enrolled || 0} inscritos</span></div>
                 <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openEventDetails('${ev.id}')">Gerir</button>
             </div>
         `).join("")
         : `<p class="muted" style="font-size:13px;">Ainda não criaste nenhum evento.</p>`;
 
-    if ($("profileFriendsList") && isNormalUserAccount()) {
+    if ($("profileFriendsList")) {
         $("profileFriendsList").innerHTML = window.friendsList.length
             ? window.friendsList.map(f => `
                 <div class="profile-event-item">
-                    <div>
-                        <strong>${escapeHTML(f.full_name)} <small style="color:#f9a8d4;">👊${f.bump_count || 0} pts</small></strong>
-                        <span>${escapeHTML(f.status_emoji || "📍")} ${escapeHTML(f.status_text || "Online")}</span>
-                    </div>
-                    <div style="display:flex; gap:6px;">
-                        <button type="button" class="btn-bump" onclick="window.sendBump('${f.id}', '👊', 'Bump!')">👊</button>
-                        <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openFriendChat('${f.id}')">💬</button>
-                        <button type="button" class="btn-logout" onclick="window.removeFriend('${f.id}', '${escapeHTML(f.full_name)}')">Remover</button>
-                    </div>
+                    <div><strong>${escapeHTML(f.full_name)}</strong><span>${escapeHTML(f.status_emoji || "📍")} ${escapeHTML(f.status_text || "Online")}</span></div>
+                    <button type="button" class="btn-soft" onclick="closeModalEl(profileModal); window.openFriendChat('${f.id}')">💬 Chat</button>
                 </div>
             `).join("")
             : `<p class="muted" style="font-size:13px;">Ainda não tens amigos adicionados.</p>`;
@@ -3858,141 +3172,46 @@ function renderProfileLists() {
     $("profileFollowingList").innerHTML = followingArr.length
         ? followingArr.map(([id, name]) => `
             <div class="profile-event-item">
-                <div>
-                    <strong>🏛️ ${escapeHTML(name)}</strong>
-                    <span>Entidade seguida</span>
-                </div>
+                <div><strong>🏛️ ${escapeHTML(name)}</strong></div>
                 <button type="button" class="btn-logout" onclick="toggleFollowOrganizer('${id}', '${escapeHTML(name)}').then(renderProfileLists)">Deixar de seguir</button>
             </div>
         `).join("")
-        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhuma empresa ou entidade.</p>`;
+        : `<p class="muted" style="font-size:13px;">Ainda não segues nenhuma entidade.</p>`;
 }
 
 // ==========================================
-// PAINEL DO ADMINISTRADOR (GERIR CONTAS & VERIFICAR ENTIDADES)
+// PAINEL DO ADMINISTRADOR
 // ==========================================
 adminPanelBtn.addEventListener("click", async () => {
     if (!isAdminAccount()) return;
     openModal(adminModal);
     await loadAdminDashboard();
 });
-
 $("closeAdmin").addEventListener("click", () => closeModalEl(adminModal));
 adminModal.addEventListener("mousedown", e => { if (e.target === adminModal) closeModalEl(adminModal); });
 
 async function loadAdminDashboard() {
     const listEl = $("adminUsersList");
     const statsEl = $("adminStatsGrid");
-    listEl.innerHTML = `<p class="muted">A carregar contas...</p>`;
-
-    const { data: profiles, error } = await supabaseClient
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-    if (error || !profiles) {
-        listEl.innerHTML = `<p class="form-error">Erro ao carregar utilizadores.</p>`;
-        return;
-    }
-
-    const totalUsers = profiles.length;
-    const totalBusinesses = profiles.filter(p => p.role === "business").length;
-    const verifiedEntities = profiles.filter(p => isEntityVerified(p)).length;
-    const totalEvents = events.length;
+    const { data: profiles } = await supabaseClient.from("profiles").select("*").order("created_at", { ascending: false });
+    if (!profiles) return;
 
     statsEl.innerHTML = `
-        <div class="admin-stat-card"><strong>${totalUsers}</strong><span>Contas</span></div>
-        <div class="admin-stat-card"><strong>${totalBusinesses}</strong><span>Entidades</span></div>
-        <div class="admin-stat-card"><strong>${verifiedEntities}</strong><span>Verificadas</span></div>
-        <div class="admin-stat-card"><strong>${totalEvents}</strong><span>Eventos</span></div>
+        <div class="admin-stat-card"><strong>${profiles.length}</strong><span>Contas</span></div>
+        <div class="admin-stat-card"><strong>${profiles.filter(p => p.role === "business").length}</strong><span>Entidades</span></div>
+        <div class="admin-stat-card"><strong>${profiles.filter(p => isEntityVerified(p)).length}</strong><span>Verificadas</span></div>
+        <div class="admin-stat-card"><strong>${events.length}</strong><span>Eventos</span></div>
     `;
 
-    listEl.innerHTML = profiles.map(p => {
-        const isSelf = currentUser && p.id === currentUser.id;
-        const isBiz = p.role === "business";
-        const isVer = isEntityVerified(p);
-        const typeLabel = isBiz
-            ? `👔 ${escapeHTML(p.business_type || "Empresa / Domínio Público")}`
-            : (p.role === "admin" ? "🛡️ Administrador" : "👤 Utilizador Normal");
-
-        return `
-            <div class="admin-user-row">
-                <div class="admin-user-info">
-                    <strong>${escapeHTML(p.full_name || "Sem nome")}${verifiedBadgeHTML(p)} ${isSelf ? "<small>(Tu)</small>" : ""}</strong>
-                    <span>${escapeHTML(p.email)} · ${typeLabel}</span>
-                </div>
-                <div class="admin-row-controls">
-                    ${isBiz ? `
-                        <button type="button" class="${isVer ? "btn-unverify" : "btn-verify"}" onclick="window.toggleEntityVerification('${p.id}', ${isVer})">
-                            ${isVer ? "✅ Verificada" : "Verificar"}
-                        </button>
-                    ` : ""}
-                    <select class="admin-role-select" onchange="window.changeUserRole('${p.id}', this.value)" ${isSelf ? "disabled" : ""}>
-                        <option value="user" ${p.role === "user" ? "selected" : ""}>Utilizador</option>
-                        <option value="business" ${p.role === "business" ? "selected" : ""}>Empresa / Público</option>
-                        <option value="admin" ${p.role === "admin" ? "selected" : ""}>Admin</option>
-                    </select>
-                </div>
+    listEl.innerHTML = profiles.map(p => `
+        <div class="admin-user-row">
+            <div class="admin-user-info">
+                <strong>${escapeHTML(p.full_name || "Sem nome")}</strong>
+                <span>${escapeHTML(p.email)} · ${escapeHTML(p.role || "user")}</span>
             </div>
-        `;
-    }).join("");
+        </div>
+    `).join("");
 }
-
-window.toggleEntityVerification = async (userId, currentlyVerified) => {
-    if (!isAdminAccount()) return;
-    const nextVerified = !currentlyVerified;
-    const nextEmoji = nextVerified ? "✅" : "🏢";
-
-    let { error } = await supabaseClient
-        .from("profiles")
-        .update({ is_verified: nextVerified, status_emoji: nextEmoji })
-        .eq("id", userId);
-
-    if (error) {
-        const fallback = await supabaseClient
-            .from("profiles")
-            .update({ status_emoji: nextEmoji })
-            .eq("id", userId);
-        error = fallback.error;
-    }
-
-    if (error) {
-        showToast("Erro ao atualizar verificação.", "error");
-        return;
-    }
-
-    await supabaseClient
-        .from("events")
-        .update({ creator_verified: nextVerified })
-        .eq("creator_id", userId);
-
-    await createNotification(
-        userId,
-        null,
-        nextVerified ? "✅ Entidade Oficial Verificada!" : "Estado de verificação atualizado",
-        nextVerified
-            ? "A sua entidade recebeu o selo oficial de verificação no LocalSpot!"
-            : "O selo de verificação da sua conta foi alterado pelo administrador."
-    );
-
-    showToast(nextVerified ? "Selo oficial atribuído!" : "Selo removido.", "success");
-    await loadAdminDashboard();
-    await loadEventsFromSupabase();
-};
-
-window.changeUserRole = async (userId, newRole) => {
-    if (!isAdminAccount()) return;
-    const businessType = newRole === "business" ? "Empresa / Domínio Público" : null;
-    const { error } = await supabaseClient.from("profiles").update({ role: newRole, business_type: businessType }).eq("id", userId);
-
-    if (error) {
-        showToast("Erro ao atualizar tipo de conta.", "error");
-        return;
-    }
-
-    showToast("Tipo de conta atualizado!", "success");
-    await loadAdminDashboard();
-};
 
 // ==========================================
 // FILTROS, PESQUISA E RENDERIZAÇÃO DA LISTA
@@ -4008,13 +3227,10 @@ function populateDistricts() {
 
 function getFilteredEvents() {
     const query = state.search.trim().toLowerCase();
-
     return events
         .map(ev => ({
             ...ev,
-            distance: userPosition
-                ? distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude)
-                : null
+            distance: userPosition ? distanceKm(userPosition.lat, userPosition.lng, ev.latitude, ev.longitude) : null
         }))
         .filter(ev => {
             if (state.category !== "all" && ev.category !== state.category) return false;
@@ -4022,14 +3238,11 @@ function getFilteredEvents() {
             if (state.onlyFavorites && !favorites.has(String(ev.id))) return false;
             if (state.onlyFree && !isEventFree(ev)) return false;
             if (state.onlyFollowing && (!ev.creatorId || !myFollowing.has(String(ev.creatorId)))) return false;
-
             if (state.period === "upcoming" && isEventPast(ev)) return false;
             if (state.period === "today" && !isEventToday(ev)) return false;
             if (state.period === "week" && !isEventThisWeek(ev)) return false;
             if (state.period === "past" && !isEventPast(ev)) return false;
-
             if (ev.distance !== null && state.radius < 300 && ev.distance > state.radius) return false;
-
             if (query) {
                 const text = `${ev.name} ${ev.location} ${ev.distrito} ${ev.description} ${ev.category} ${ev.creatorName || ""}`.toLowerCase();
                 if (!text.includes(query)) return false;
@@ -4037,18 +3250,14 @@ function getFilteredEvents() {
             return true;
         })
         .sort((a, b) => {
-            if (state.sort === "distance" && a.distance !== null && b.distance !== null) {
-                return a.distance - b.distance;
-            }
-            if (state.sort === "popular") {
-                return (b.enrolled || 0) - (a.enrolled || 0);
-            }
+            if (state.sort === "distance" && a.distance !== null && b.distance !== null) return a.distance - b.distance;
+            if (state.sort === "popular") return (b.enrolled || 0) - (a.enrolled || 0);
             return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
         });
 }
 
 function canManageEvent(ev) {
-    if (!currentUser || !currentProfile) return false;
+    if (!currentUser) return false;
     if (isAdminAccount()) return true;
     return ev.creatorId && String(ev.creatorId) === String(currentUser.id);
 }
@@ -4077,12 +3286,6 @@ function renderList(list) {
         else if (isRegistered) regBtnText = "✓ Inscrito";
         else if (full) regBtnText = "Lotação esgotada";
 
-        const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
-        const isOrgAdm = ev.creatorRole === "admin" || ev.creatorType === "Admin";
-        const orgTagClass = isOrgAdm ? "admin-tag" : (isOrgBiz ? "" : "user-tag");
-        const orgPrefix = isOrgAdm ? "🛡️" : (isOrgBiz ? "🏛️" : "👤");
-        const orgVerBadge = (isOrgBiz && ev.creatorVerified) ? `<span class="verified-check">✓</span>` : "";
-
         const card = document.createElement("article");
         card.className = "event-card" + (String(ev.id) === String(activeId) ? " active" : "");
         card.dataset.id = ev.id;
@@ -4091,30 +3294,20 @@ function renderList(list) {
                 <img class="event-image" src="${escapeHTML(ev.image || DEFAULT_IMAGE)}" alt="${escapeHTML(ev.name)}" loading="lazy" onerror="this.src='${DEFAULT_IMAGE}'">
                 ${past ? `<span class="badge-past">Terminado</span>` : ""}
                 <span class="badge-price-card">${escapeHTML(ev.price || "Gratuito")}</span>
-                <button class="fav-btn ${isFav ? "on" : ""}" data-fav="${ev.id}" title="Guardar favorito" aria-label="Guardar favorito">
-                    ${isFav ? "★" : "☆"}
-                </button>
+                <button class="fav-btn ${isFav ? "on" : ""}" data-fav="${ev.id}">${isFav ? "★" : "☆"}</button>
             </div>
             <div class="event-meta">
-                <span class="category" style="--cat:${getCategoryColor(ev.category)}">
-                    ${getCategoryEmoji(ev.category)} ${escapeHTML(ev.category)}
-                </span>
+                <span class="category">${getCategoryEmoji(ev.category)} ${escapeHTML(ev.category)}</span>
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
-            <div class="organizer-tag ${orgTagClass}">${orgPrefix} ${escapeHTML(ev.creatorName)}${orgVerBadge}</div>
+            <div class="organizer-tag user-tag">👤 ${escapeHTML(ev.creatorName)}</div>
             ${friendsGoing.length > 0 ? `<div class="friends-going-badge">👊 ${friendsGoing.map(f => escapeHTML(f.full_name.split(" ")[0])).join(", ")} vai</div>` : ""}
             <p>📅 ${escapeHTML(formatEventDate(ev))} às ${escapeHTML(ev.time)}</p>
             <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(ev.distrito)}${distText}</p>
-            <div class="registration-info">
-                👥 ${ev.enrolled || 0}${ev.maxParticipants ? " / " + ev.maxParticipants : ""} inscritos
-            </div>
+            <div class="registration-info">👥 ${ev.enrolled || 0}${ev.maxParticipants ? " / " + ev.maxParticipants : ""} inscritos</div>
             <div class="card-actions-grid">
-                <button type="button" class="register-btn ${isRegistered ? "registered" : ""}" onclick="event.stopPropagation(); window.toggleEnrollment('${ev.id}')" ${past || (!isRegistered && full) ? "disabled" : ""}>
-                    ${regBtnText}
-                </button>
-                <button type="button" class="details-btn" onclick="event.stopPropagation(); window.openEventDetails('${ev.id}')">
-                    Detalhes
-                </button>
+                <button type="button" class="register-btn ${isRegistered ? "registered" : ""}" onclick="event.stopPropagation(); window.toggleEnrollment('${ev.id}')" ${past || (!isRegistered && full) ? "disabled" : ""}>${regBtnText}</button>
+                <button type="button" class="details-btn" onclick="event.stopPropagation(); window.openEventDetails('${ev.id}')">Detalhes</button>
             </div>
             ${canManage ? `
                 <div class="owner-card-bar">
@@ -4142,23 +3335,18 @@ function filterEvents() {
 
 function selectEvent(id, { scroll = false } = {}) {
     activeId = id;
-    document.querySelectorAll(".event-card").forEach(c => {
-        c.classList.toggle("active", String(c.dataset.id) === String(id));
-    });
+    document.querySelectorAll(".event-card").forEach(c => c.classList.toggle("active", String(c.dataset.id) === String(id)));
     focusEventOnMap(id);
-
     if (scroll) {
         const card = document.querySelector(`.event-card[data-id="${id}"]`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 }
 
-window.handleMarkerClick = id => {
-    selectEvent(id, { scroll: true });
-};
+window.handleMarkerClick = id => selectEvent(id, { scroll: true });
 
 // ==========================================
-// DETALHES DO EVENTO, BILHETE QR, PARTILHA, AVALIAÇÕES E COMENTÁRIOS
+// DETALHES DO EVENTO
 // ==========================================
 function updateDetailSocialButton(ev) {
     const followBtn = $("detailFollowBtn");
@@ -4170,27 +3358,17 @@ function updateDetailSocialButton(ev) {
     }
 
     const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
-    const isOrgUser = ev.creatorRole === "user" || ev.creatorType === "Utilizador";
-
     if (isOrgBiz) {
         followBtn.classList.remove("hidden");
-        const isFollowing = myFollowing.has(String(ev.creatorId));
-        followBtn.textContent = isFollowing ? "✓ A seguir" : "+ Seguir";
-        followBtn.onclick = async () => {
-            await toggleFollowOrganizer(ev.creatorId, ev.creatorName);
-            updateDetailSocialButton(ev);
-        };
-    } else if (isOrgUser && isNormalUserAccount()) {
+        followBtn.textContent = myFollowing.has(String(ev.creatorId)) ? "✓ A seguir" : "+ Seguir";
+        followBtn.onclick = async () => { await toggleFollowOrganizer(ev.creatorId, ev.creatorName); updateDetailSocialButton(ev); };
+    } else {
         followBtn.classList.remove("hidden");
         const isFriend = window.friendsList.some(f => String(f.id) === String(ev.creatorId));
         const isSent = sentFriendRequestIds.has(ev.creatorId);
-
         if (isFriend) {
             followBtn.textContent = "💬 Conversar";
-            followBtn.onclick = () => {
-                closeModalEl(detailModal);
-                window.openFriendChat(ev.creatorId);
-            };
+            followBtn.onclick = () => { closeModalEl(detailModal); window.openFriendChat(ev.creatorId); };
         } else if (isSent) {
             followBtn.textContent = "✈️ Pedido enviado";
             followBtn.onclick = null;
@@ -4198,8 +3376,6 @@ function updateDetailSocialButton(ev) {
             followBtn.textContent = "👊 Adicionar Amigo";
             followBtn.onclick = () => window.sendFriendRequest(ev.creatorId, ev.creatorName);
         }
-    } else {
-        followBtn.classList.add("hidden");
     }
 }
 
@@ -4215,18 +3391,9 @@ window.openEventDetails = async id => {
     const canManage = canManageEvent(ev);
 
     $("detailHeroImg").src = ev.image || DEFAULT_IMAGE;
-    $("detailHeroImg").onerror = () => { $("detailHeroImg").src = DEFAULT_IMAGE; };
     $("detailCategory").textContent = `${getCategoryEmoji(ev.category)} ${ev.category}`;
     $("detailPrice").textContent = ev.price || "Gratuito";
-
-    const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
-    const isOrgAdm = ev.creatorRole === "admin" || ev.creatorType === "Admin";
-    const orgTagClass = isOrgAdm ? "admin-tag" : (isOrgBiz ? "" : "user-tag");
-    const orgPrefix = isOrgAdm ? "🛡️" : (isOrgBiz ? "🏛️" : "👤");
-    const orgVerBadge = (isOrgBiz && ev.creatorVerified) ? `<span class="verified-check">✓</span>` : "";
-
-    $("detailOrganizer").className = `organizer-tag ${orgTagClass}`;
-    $("detailOrganizer").innerHTML = `${orgPrefix} Organizado por ${escapeHTML(ev.creatorName)}${orgVerBadge}`;
+    $("detailOrganizer").innerHTML = `👤 Organizado por ${escapeHTML(ev.creatorName)}`;
     $("detailTitle").textContent = ev.name;
     $("detailDescription").textContent = ev.description || "Sem descrição adicional.";
     $("detailDateTime").textContent = `${formatEventDate(ev)} às ${ev.time}`;
@@ -4236,12 +3403,8 @@ window.openEventDetails = async id => {
     updateDetailSocialButton(ev);
 
     const extLink = $("detailExternalLink");
-    if (ev.externalUrl) {
-        extLink.href = ev.externalUrl;
-        extLink.classList.remove("hidden");
-    } else {
-        extLink.classList.add("hidden");
-    }
+    if (ev.externalUrl) { extLink.href = ev.externalUrl; extLink.classList.remove("hidden"); }
+    else extLink.classList.add("hidden");
 
     const regBtn = $("detailRegisterBtn");
     regBtn.className = `register-btn ${isRegistered ? "registered" : ""}`;
@@ -4255,10 +3418,7 @@ window.openEventDetails = async id => {
 
     const favBtn = $("detailFavBtn");
     favBtn.textContent = isFav ? "★ Guardado" : "☆ Guardar";
-    favBtn.onclick = () => {
-        toggleFavorite(ev.id);
-        favBtn.textContent = favorites.has(String(ev.id)) ? "★ Guardado" : "☆ Guardar";
-    };
+    favBtn.onclick = () => { toggleFavorite(ev.id); favBtn.textContent = favorites.has(String(ev.id)) ? "★ Guardado" : "☆ Guardar"; };
 
     $("detailDirectionsBtn").href = `https://www.google.com/maps/dir/?api=1&destination=${ev.latitude},${ev.longitude}`;
     $("detailCalendarBtn").onclick = () => downloadEventICS(ev);
@@ -4271,13 +3431,8 @@ window.openEventDetails = async id => {
     $("detailDeleteBtn").onclick = () => { closeModalEl(detailModal); window.deleteEvent(ev.id); };
 
     $("reviewForm").classList.toggle("hidden", !past);
-
     openModal(detailModal);
-    await Promise.all([
-        loadEventAttendees(ev.id),
-        loadEventComments(ev.id),
-        loadEventReviews(ev.id)
-    ]);
+    await Promise.all([loadEventAttendees(ev.id), loadEventComments(ev.id), loadEventReviews(ev.id)]);
 };
 
 $("closeDetail").addEventListener("click", () => closeModalEl(detailModal));
@@ -4286,16 +3441,13 @@ detailModal.addEventListener("mousedown", e => { if (e.target === detailModal) c
 window.openTicketModal = id => {
     const ev = events.find(x => String(x.id) === String(id));
     if (!ev || !currentUser || !currentProfile) return;
-
     const code = `LS-${String(ev.id).slice(0, 6).toUpperCase()}-${currentUser.id.slice(0, 6).toUpperCase()}`;
     const qrPayload = encodeURIComponent(`LocalSpot Ticket | ${code} | ${ev.name} | ${currentProfile.full_name}`);
-
     $("ticketEventTitle").textContent = ev.name;
     $("ticketEventMeta").textContent = `📅 ${formatEventDate(ev)} às ${ev.time} · 📍 ${ev.location}`;
     $("ticketQrImage").src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrPayload}`;
     $("ticketCodeText").textContent = code;
     $("ticketHolderName").textContent = `Participante: ${currentProfile.full_name}`;
-
     openModal(ticketModal);
 };
 
@@ -4305,18 +3457,10 @@ ticketModal.addEventListener("mousedown", e => { if (e.target === ticketModal) c
 function downloadEventICS(ev) {
     const dtStart = `${ev.date.replace(/-/g, "")}T${ev.time.replace(":", "")}00`;
     const icsContent = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//LocalSpot//Eventos//PT",
-        "BEGIN:VEVENT",
-        `SUMMARY:${ev.name}`,
-        `DTSTART:${dtStart}`,
-        `LOCATION:${ev.location}, ${ev.distrito}`,
-        `DESCRIPTION:${(ev.description || "").replace(/\n/g, " ")}`,
-        "END:VEVENT",
-        "END:VCALENDAR"
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//LocalSpot//Eventos//PT", "BEGIN:VEVENT",
+        `SUMMARY:${ev.name}`, `DTSTART:${dtStart}`, `LOCATION:${ev.location}, ${ev.distrito}`,
+        `DESCRIPTION:${(ev.description || "").replace(/\n/g, " ")}`, "END:VEVENT", "END:VCALENDAR"
     ].join("\r\n");
-
     const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -4324,223 +3468,87 @@ function downloadEventICS(ev) {
     a.download = `${ev.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast("Ficheiro de calendário (.ics) transferido!", "success");
 }
 
 async function shareEventLink(ev) {
     const shareUrl = `${window.location.origin}${window.location.pathname}?event=${ev.id}`;
-    if (navigator.share) {
-        try {
-            await navigator.share({ title: ev.name, text: `Vê este evento no LocalSpot: ${ev.name}`, url: shareUrl });
-            return;
-        } catch (e) {}
-    }
-    try {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast("Link do evento copiado para a área de transferência!", "success");
-    } catch (e) {
-        showToast(`Link: ${shareUrl}`);
-    }
+    try { await navigator.clipboard.writeText(shareUrl); showToast("Link copiado!", "success"); } catch (e) {}
 }
 
 function checkSharedEventUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const sharedId = params.get("event");
+    const sharedId = new URLSearchParams(window.location.search).get("event");
     if (sharedId) {
         const exists = events.find(e => String(e.id) === String(sharedId));
-        if (exists) {
-            selectEvent(exists.id, { scroll: true });
-            window.openEventDetails(exists.id);
-        }
+        if (exists) { selectEvent(exists.id, { scroll: true }); window.openEventDetails(exists.id); }
     }
 }
 
-function openReportModal(ev) {
-    $("reportEventName").textContent = `A denunciar: ${ev.name}`;
-    $("reportDetails").value = "";
-    openModal(reportModal);
-}
-
+function openReportModal(ev) { $("reportEventName").textContent = `A denunciar: ${ev.name}`; $("reportDetails").value = ""; openModal(reportModal); }
 $("closeReport").addEventListener("click", () => closeModalEl(reportModal));
 reportModal.addEventListener("mousedown", e => { if (e.target === reportModal) closeModalEl(reportModal); });
-
 $("reportForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!currentUser || !detailEventId) return;
-
-    const { error } = await supabaseClient.from("event_reports").insert([{
-        event_id: detailEventId,
-        reporter_id: currentUser.id,
-        reason: $("reportReason").value,
-        details: $("reportDetails").value.trim()
-    }]);
-
-    if (error) {
-        showToast("Não foi possível registar a denúncia.", "error");
-        return;
-    }
-
+    await supabaseClient.from("event_reports").insert([{ event_id: detailEventId, reporter_id: currentUser.id, reason: $("reportReason").value, details: $("reportDetails").value.trim() }]);
     closeModalEl(reportModal);
-    showToast("Denúncia enviada à equipa de moderação.", "success");
+    showToast("Denúncia enviada.", "success");
 });
 
-// Participantes, Comentários e Avaliações
 async function loadEventAttendees(eventId) {
     const listEl = $("detailAttendeesList");
-    listEl.innerHTML = `<span class="muted">A carregar participantes...</span>`;
-
-    const { data, error } = await supabaseClient
-        .from("enrollments")
-        .select("user_id, user_name")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: true });
-
-    if (error || !data || data.length === 0) {
-        listEl.innerHTML = `<span class="muted">Ainda sem inscritos. Sê o primeiro!</span>`;
-        return;
-    }
-
-    const friendIds = new Set(window.friendsList.map(f => String(f.id)));
-
-    listEl.innerHTML = data.map(row => {
-        const isFriend = friendIds.has(String(row.user_id));
-        return `<span class="attendee-pill ${isFriend ? "friend-attendee" : ""}">${isFriend ? "👊" : "👤"} ${escapeHTML(row.user_name || "Participante")}</span>`;
-    }).join("");
+    const { data } = await supabaseClient.from("enrollments").select("user_id, user_name").eq("event_id", eventId);
+    if (!data || data.length === 0) { listEl.innerHTML = `<span class="muted">Ainda sem inscritos.</span>`; return; }
+    listEl.innerHTML = data.map(row => `<span class="attendee-pill">👤 ${escapeHTML(row.user_name || "Participante")}</span>`).join("");
 }
 
 async function loadEventComments(eventId) {
     const listEl = $("detailCommentsList");
-    listEl.innerHTML = `<span class="muted">A carregar comentários...</span>`;
-
-    const { data, error } = await supabaseClient
-        .from("event_comments")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: true });
-
-    if (error || !data || data.length === 0) {
-        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Sem comentários ainda. Deixa a tua mensagem!</p>`;
-        return;
-    }
-
-    listEl.innerHTML = data.map(c => {
-        const canDel = currentUser && (String(c.user_id) === String(currentUser.id) || isAdminAccount());
-        return `
-            <div class="comment-item">
-                <div class="comment-head">
-                    <strong>${escapeHTML(c.user_name)}</strong>
-                    ${canDel ? `<button type="button" class="btn-link small" onclick="window.deleteComment(${c.id})">Apagar</button>` : ""}
-                </div>
-                <p>${escapeHTML(c.content)}</p>
-            </div>
-        `;
-    }).join("");
+    const { data } = await supabaseClient.from("event_comments").select("*").eq("event_id", eventId).order("created_at", { ascending: true });
+    if (!data || data.length === 0) { listEl.innerHTML = `<p class="muted" style="font-size:13px;">Sem comentários ainda.</p>`; return; }
+    listEl.innerHTML = data.map(c => `<div class="comment-item"><div class="comment-head"><strong>${escapeHTML(c.user_name)}</strong></div><p>${escapeHTML(c.content)}</p></div>`).join("");
 }
 
 $("commentForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!currentUser || !currentProfile || !detailEventId) return;
-
     const input = $("commentInput");
     const content = input.value.trim();
     if (!content) return;
-
-    const { error } = await supabaseClient.from("event_comments").insert([{
-        event_id: detailEventId,
-        user_id: currentUser.id,
-        user_name: currentProfile.full_name,
-        content
-    }]);
-
-    if (error) {
-        showToast("Erro ao publicar comentário.", "error");
-        return;
-    }
-
-    const ev = events.find(x => String(x.id) === String(detailEventId));
-    if (ev) {
-        await createNotification(
-            ev.creatorId,
-            ev.id,
-            `Novo comentário em "${ev.name}"`,
-            `${currentProfile.full_name}: "${content.slice(0, 60)}"`
-        );
-    }
-
+    await supabaseClient.from("event_comments").insert([{ event_id: detailEventId, user_id: currentUser.id, user_name: currentProfile.full_name, content }]);
     input.value = "";
     await loadEventComments(detailEventId);
-    showToast("Comentário publicado!", "success");
 });
-
-window.deleteComment = async commentId => {
-    await supabaseClient.from("event_comments").delete().eq("id", commentId);
-    if (detailEventId) await loadEventComments(detailEventId);
-};
 
 async function loadEventReviews(eventId) {
     const listEl = $("detailReviewsList");
     const badgeEl = $("detailRatingBadge");
-
-    const { data, error } = await supabaseClient
-        .from("event_reviews")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-
-    if (error || !data || data.length === 0) {
-        badgeEl.classList.add("hidden");
-        listEl.innerHTML = `<p class="muted" style="font-size:13px;">Ainda sem avaliações para este evento.</p>`;
-        return;
-    }
-
+    const { data } = await supabaseClient.from("event_reviews").select("*").eq("event_id", eventId);
+    if (!data || data.length === 0) { badgeEl.classList.add("hidden"); listEl.innerHTML = `<p class="muted" style="font-size:13px;">Sem avaliações.</p>`; return; }
     const avg = (data.reduce((sum, r) => sum + Number(r.rating), 0) / data.length).toFixed(1);
     badgeEl.textContent = `⭐ ${avg} (${data.length})`;
     badgeEl.classList.remove("hidden");
-
-    listEl.innerHTML = data.map(r => `
-        <div class="comment-item">
-            <div class="comment-head">
-                <strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong>
-            </div>
-            ${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}
-        </div>
-    `).join("");
+    listEl.innerHTML = data.map(r => `<div class="comment-item"><div class="comment-head"><strong>${escapeHTML(r.user_name)} · ${"⭐".repeat(r.rating)}</strong></div>${r.comment ? `<p>${escapeHTML(r.comment)}</p>` : ""}</div>`).join("");
 }
 
 $("reviewForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!currentUser || !currentProfile || !detailEventId) return;
-
-    const rating = Number($("reviewRating").value);
-    const comment = $("reviewComment").value.trim();
-
-    const { error } = await supabaseClient.from("event_reviews").upsert([{
-        event_id: detailEventId,
-        user_id: currentUser.id,
-        user_name: currentProfile.full_name,
-        rating,
-        comment
-    }], { onConflict: "event_id,user_id" });
-
-    if (error) {
-        showToast("Erro ao guardar avaliação.", "error");
-        return;
-    }
-
+    await supabaseClient.from("event_reviews").upsert([{ event_id: detailEventId, user_id: currentUser.id, user_name: currentProfile.full_name, rating: Number($("reviewRating").value), comment: $("reviewComment").value.trim() }], { onConflict: "event_id,user_id" });
     $("reviewComment").value = "";
     await loadEventReviews(detailEventId);
-    showToast("Avaliação registada! Obrigado.", "success");
 });
 
 // ==========================================
-// CRIAR, EDITAR E ELIMINAR EVENTOS
+// CRIAR, EDITAR E ELIMINAR EVENTOS (CORRIGIDO COM FALLBACK DE COLUNAS)
 // ==========================================
 function openModal(el) {
+    if (!el) return;
     el.classList.remove("hidden");
     el.setAttribute("aria-hidden", "false");
 }
 
 function closeModalEl(el) {
+    if (!el) return;
     el.classList.add("hidden");
     el.setAttribute("aria-hidden", "true");
 }
@@ -4554,7 +3562,11 @@ function updateCoordsDisplay() {
 }
 
 addEventButton.addEventListener("click", () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+        showToast("Inicia sessão primeiro para criar um evento.", "error");
+        authOverlay.classList.remove("hidden");
+        return;
+    }
     editingEventId = null;
     $("eventModalTitle").textContent = "Novo Evento";
     $("submitEventBtn").textContent = "Publicar Evento";
@@ -4562,7 +3574,9 @@ addEventButton.addEventListener("click", () => {
     $("eventPrice").value = "Gratuito";
     imagePreview.classList.add("hidden");
     formError.classList.add("hidden");
-    pendingLocation = null;
+
+    // Pré-seleciona a localização atual do utilizador se disponível para facilitar
+    pendingLocation = userPosition ? { lat: userPosition.lat, lng: userPosition.lng } : null;
     updateCoordsDisplay();
     openModal(modal);
 });
@@ -4596,7 +3610,6 @@ window.openEditEvent = id => {
     } else {
         imagePreview.classList.add("hidden");
     }
-
     openModal(modal);
 };
 
@@ -4606,27 +3619,15 @@ window.deleteEvent = async id => {
     if (!confirm(`Tens a certeza que queres eliminar "${ev.name}"?`)) return;
 
     const { error } = await supabaseClient.from("events").delete().eq("id", ev.id);
-    if (error) {
-        showToast("Erro ao eliminar evento.", "error");
-        return;
-    }
+    if (error) { showToast("Erro ao eliminar evento.", "error"); return; }
 
     events = events.filter(x => String(x.id) !== String(id));
     filterEvents();
     showToast("Evento eliminado com sucesso.");
 };
 
-closeModal.addEventListener("click", () => {
-    closeModalEl(modal);
-    stopLocationPicking();
-});
-
-modal.addEventListener("mousedown", e => {
-    if (e.target === modal) {
-        closeModalEl(modal);
-        stopLocationPicking();
-    }
-});
+closeModal.addEventListener("click", () => { closeModalEl(modal); stopLocationPicking(); });
+modal.addEventListener("mousedown", e => { if (e.target === modal) { closeModalEl(modal); stopLocationPicking(); } });
 
 changeLocationButton.addEventListener("click", () => {
     closeModalEl(modal);
@@ -4664,25 +3665,16 @@ $("pickSearchBtn").addEventListener("click", async () => {
 
 eventImageInput.addEventListener("change", () => {
     const file = eventImageInput.files[0];
-    if (!file) {
-        imagePreview.classList.add("hidden");
-        return;
-    }
+    if (!file) { imagePreview.classList.add("hidden"); return; }
     const reader = new FileReader();
-    reader.onload = () => {
-        imagePreview.src = reader.result;
-        imagePreview.classList.remove("hidden");
-    };
+    reader.onload = () => { imagePreview.src = reader.result; imagePreview.classList.remove("hidden"); };
     reader.readAsDataURL(file);
 });
 
 async function uploadEventImage(file) {
     const ext = file.name.split(".").pop() || "jpg";
     const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
-    const { error } = await supabaseClient.storage
-        .from("event-images")
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-
+    const { error } = await supabaseClient.storage.from("event-images").upload(fileName, file, { cacheControl: "3600", upsert: false });
     if (error) throw error;
     const { data } = supabaseClient.storage.from("event-images").getPublicUrl(fileName);
     return data.publicUrl;
@@ -4693,7 +3685,7 @@ eventForm.addEventListener("submit", async e => {
     formError.classList.add("hidden");
 
     if (!pendingLocation) {
-        formError.textContent = "Por favor, escolhe a localização do evento no mapa.";
+        formError.textContent = "Por favor, clica em «Escolher no mapa» para marcar o local do evento.";
         formError.classList.remove("hidden");
         return;
     }
@@ -4708,19 +3700,11 @@ eventForm.addEventListener("submit", async e => {
 
         const file = eventImageInput.files[0];
         if (file) {
-            try {
-                imageUrl = await uploadEventImage(file);
-            } catch (uploadErr) {
-                imageUrl = imagePreview.src || DEFAULT_IMAGE;
-            }
+            try { imageUrl = await uploadEventImage(file); } catch (uploadErr) { imageUrl = DEFAULT_IMAGE; }
         }
 
         const maxVal = $("eventMaxParticipants").value;
-        const creatorType = isBusinessAccount()
-            ? (currentProfile?.business_type || "Empresa / Domínio Público")
-            : (isAdminAccount() ? "Admin" : "Utilizador");
-
-        const payload = {
+        const basePayload = {
             name: $("eventName").value.trim(),
             category: $("eventCategory").value,
             distrito: $("eventDistrito").value,
@@ -4731,37 +3715,43 @@ eventForm.addEventListener("submit", async e => {
             longitude: pendingLocation.lng,
             max_participants: maxVal ? parseInt(maxVal, 10) : null,
             price: $("eventPrice").value.trim() || "Gratuito",
-            external_url: $("eventExternalUrl").value.trim() || null,
             description: $("eventDescription").value.trim(),
             image: imageUrl
         };
 
         if (editingEventId) {
-            const { data, error } = await supabaseClient
-                .from("events")
-                .update(payload)
-                .eq("id", editingEventId)
-                .select()
-                .single();
-
+            const { data, error } = await supabaseClient.from("events").update(basePayload).eq("id", editingEventId).select().single();
             if (error) throw error;
             const updated = mapDbEvent(data);
             const idx = events.findIndex(x => String(x.id) === String(editingEventId));
             if (idx !== -1) events[idx] = updated;
             showToast("Evento atualizado com sucesso!", "success");
         } else {
-            payload.creator_id = currentUser.id;
-            payload.creator_name = currentProfile?.full_name || "Organizador";
-            payload.creator_type = creatorType;
-            payload.creator_role = currentProfile?.role || "user";
-            payload.creator_verified = isEntityVerified(currentProfile);
-            payload.enrolled = 0;
+            const fullPayload = {
+                ...basePayload,
+                creator_id: currentUser.id,
+                creator_name: currentProfile?.full_name || currentUser.email.split("@")[0],
+                creator_type: isBusinessAccount() ? (currentProfile?.business_type || "Entidade") : "Utilizador",
+                creator_role: currentProfile?.role || "user",
+                creator_verified: isEntityVerified(currentProfile),
+                external_url: $("eventExternalUrl").value.trim() || null,
+                enrolled: 0
+            };
 
-            const { data, error } = await supabaseClient
-                .from("events")
-                .insert([payload])
-                .select()
-                .single();
+            let { data, error } = await supabaseClient.from("events").insert([fullPayload]).select().single();
+
+            // Fallback automático caso alguma coluna opcional não exista na tabela events
+            if (error) {
+                const minimalPayload = {
+                    ...basePayload,
+                    creator_id: currentUser.id,
+                    creator_name: currentProfile?.full_name || currentUser.email.split("@")[0],
+                    enrolled: 0
+                };
+                const retry = await supabaseClient.from("events").insert([minimalPayload]).select().single();
+                data = retry.data;
+                error = retry.error;
+            }
 
             if (error) throw error;
             const created = mapDbEvent(data);
@@ -4787,29 +3777,18 @@ eventForm.addEventListener("submit", async e => {
 // ==========================================
 function toggleFavorite(id) {
     const strId = String(id);
-    if (favorites.has(strId)) {
-        favorites.delete(strId);
-        showToast("Removido dos favoritos.");
-    } else {
-        favorites.add(strId);
-        showToast("Guardado nos favoritos ★");
-    }
+    if (favorites.has(strId)) { favorites.delete(strId); showToast("Removido dos favoritos."); }
+    else { favorites.add(strId); showToast("Guardado nos favoritos ★"); }
     saveJSON(STORAGE_FAVS, [...favorites]);
     filterEvents();
 }
 
 eventsList.addEventListener("click", e => {
     const favBtn = e.target.closest("[data-fav]");
-    if (favBtn) {
-        e.stopPropagation();
-        toggleFavorite(favBtn.dataset.fav);
-    }
+    if (favBtn) { e.stopPropagation(); toggleFavorite(favBtn.dataset.fav); }
 });
 
-searchInput.addEventListener("input", () => {
-    state.search = searchInput.value;
-    filterEvents();
-});
+searchInput.addEventListener("input", () => { state.search = searchInput.value; filterEvents(); });
 
 categoryChips.addEventListener("click", e => {
     const chip = e.target.closest(".chip");
@@ -4820,15 +3799,8 @@ categoryChips.addEventListener("click", e => {
     filterEvents();
 });
 
-districtFilter.addEventListener("change", () => {
-    state.district = districtFilter.value;
-    filterEvents();
-});
-
-periodFilter.addEventListener("change", () => {
-    state.period = periodFilter.value;
-    filterEvents();
-});
+districtFilter.addEventListener("change", () => { state.district = districtFilter.value; filterEvents(); });
+periodFilter.addEventListener("change", () => { state.period = periodFilter.value; filterEvents(); });
 
 radiusSlider.addEventListener("input", () => {
     state.radius = Number(radiusSlider.value);
@@ -4836,10 +3808,7 @@ radiusSlider.addEventListener("input", () => {
     filterEvents();
 });
 
-sortFilter.addEventListener("change", () => {
-    state.sort = sortFilter.value;
-    filterEvents();
-});
+sortFilter.addEventListener("change", () => { state.sort = sortFilter.value; filterEvents(); });
 
 favoritesToggle.addEventListener("click", () => {
     state.onlyFavorites = !state.onlyFavorites;
@@ -4860,28 +3829,12 @@ followingOnlyToggle.addEventListener("click", () => {
 });
 
 resetFiltersBtn.addEventListener("click", () => {
-    state.search = "";
-    state.category = "all";
-    state.district = "all";
-    state.period = "all";
-    state.radius = 100;
-    state.sort = "date";
-    state.onlyFavorites = false;
-    state.onlyFree = false;
-    state.onlyFollowing = false;
-
-    searchInput.value = "";
-    districtFilter.value = "all";
-    periodFilter.value = "all";
-    radiusSlider.value = 100;
-    radiusValue.textContent = "100 km";
-    sortFilter.value = "date";
-    favoritesToggle.classList.remove("on");
-    freeOnlyToggle.classList.remove("on");
-    followingOnlyToggle.classList.remove("on");
-    categoryChips.querySelectorAll(".chip").forEach(c => {
-        c.classList.toggle("active", c.dataset.category === "all");
-    });
+    state.search = ""; state.category = "all"; state.district = "all"; state.period = "all";
+    state.radius = 100; state.sort = "date"; state.onlyFavorites = false; state.onlyFree = false; state.onlyFollowing = false;
+    searchInput.value = ""; districtFilter.value = "all"; periodFilter.value = "all";
+    radiusSlider.value = 100; radiusValue.textContent = "100 km"; sortFilter.value = "date";
+    favoritesToggle.classList.remove("on"); freeOnlyToggle.classList.remove("on"); followingOnlyToggle.classList.remove("on");
+    categoryChips.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.category === "all"));
     filterEvents();
 });
 
@@ -4903,24 +3856,12 @@ locationButton.addEventListener("click", async () => {
 });
 
 $("exportCsvBtn").addEventListener("click", () => {
-    if (!currentList.length) {
-        showToast("Não existem eventos visíveis para exportar.", "error");
-        return;
-    }
-
+    if (!currentList.length) { showToast("Não existem eventos visíveis para exportar.", "error"); return; }
     const headers = ["Nome", "Categoria", "Organizador", "Distrito", "Local", "Data", "Hora", "Preço", "Inscritos"];
     const rows = currentList.map(ev => [
-        `"${(ev.name || "").replace(/"/g, '""')}"`,
-        `"${ev.category}"`,
-        `"${(ev.creatorName || "").replace(/"/g, '""')}"`,
-        `"${ev.distrito}"`,
-        `"${(ev.location || "").replace(/"/g, '""')}"`,
-        ev.date,
-        ev.time,
-        `"${ev.price || "Gratuito"}"`,
-        ev.enrolled || 0
+        `"${(ev.name || "").replace(/"/g, '""')}"`, `"${ev.category}"`, `"${(ev.creatorName || "").replace(/"/g, '""')}"`,
+        `"${ev.distrito}"`, `"${(ev.location || "").replace(/"/g, '""')}"`, ev.date, ev.time, `"${ev.price || "Gratuito"}"`, ev.enrolled || 0
     ]);
-
     const csv = "\uFEFF" + [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -4929,7 +3870,6 @@ $("exportCsvBtn").addEventListener("click", () => {
     a.download = `localspot-eventos-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast("Lista exportada em CSV!", "success");
 });
 
 $("aboutButton").addEventListener("click", () => openModal(aboutModal));
@@ -4941,10 +3881,7 @@ document.addEventListener("keydown", e => {
         [modal, detailModal, ticketModal, reportModal, aboutModal, adminModal, profileModal].forEach(closeModalEl);
         if ($("friendsModal")) closeModalEl($("friendsModal"));
         if ($("entityNetworkModal")) closeModalEl($("entityNetworkModal"));
-        if ($("friendChatModal")) {
-            activeChatFriendId = null;
-            closeModalEl($("friendChatModal"));
-        }
+        if ($("friendChatModal")) { activeChatFriendId = null; closeModalEl($("friendChatModal")); }
         if ($("quickMoodPopover")) $("quickMoodPopover").classList.add("hidden");
         stopLocationPicking();
         pickBanner.classList.add("hidden");
