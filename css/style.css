@@ -740,6 +740,12 @@ input:focus, select:focus, textarea:focus {
     color: #cbd5e1;
 }
 
+.map-ctrl-btn.ios-perm-btn {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    border-color: #7dd3fc;
+    color: #082f49;
+}
+
 .pick-banner {
     position: absolute;
     bottom: 20px;
@@ -1898,7 +1904,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ==========================================
-   ANIMAÇÕES BUMP, RADAR, VIBE RÁPIDO & TOAST
+   ANIMAÇÕES BUMP, SUPER BUMP, RADAR, VIBE RÁPIDO & TOAST
    ========================================== */
 .bump-overlay {
     position: fixed;
@@ -1910,6 +1916,10 @@ input:focus, select:focus, textarea:focus {
     align-items: center;
     justify-content: center;
     background: radial-gradient(circle, rgba(236, 72, 153, 0.28), transparent 70%);
+}
+
+.bump-overlay.super-bump {
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.36), rgba(236, 72, 153, 0.2) 55%, transparent 75%);
 }
 
 .bump-burst {
@@ -1932,6 +1942,12 @@ input:focus, select:focus, textarea:focus {
     padding: 10px 20px;
     border-radius: 999px;
     margin-top: 10px;
+}
+
+.bump-overlay.super-bump .bump-banner-text {
+    border-color: #f59e0b;
+    color: #fde68a;
+    box-shadow: 0 0 28px rgba(245, 158, 11, 0.55);
 }
 
 .flying-emoji-bomb {
@@ -1961,6 +1977,11 @@ input:focus, select:focus, textarea:focus {
     border: 4px solid #ec4899;
     box-shadow: 0 0 24px rgba(236, 72, 153, 0.85), inset 0 0 18px rgba(236, 72, 153, 0.5);
     animation: bumpShockwaveExpand 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bump-shockwave-marker.super .bump-shockwave-ring {
+    border-color: #f59e0b;
+    box-shadow: 0 0 32px rgba(245, 158, 11, 0.95), inset 0 0 22px rgba(245, 158, 11, 0.65);
 }
 
 .bump-shockwave-core {
