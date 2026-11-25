@@ -12,7 +12,6 @@ const CATEGORIES = {
     comunidade: { label: "Comunidade", emoji: "🤝", color: "#db2777" }
 };
 
-// Capitais de distrito
 const DISTRICTS = [
     { value: "aveiro", label: "Aveiro", lat: 40.6405, lng: -8.6538 },
     { value: "beja", label: "Beja", lat: 38.0151, lng: -7.8632 },
@@ -36,89 +35,10 @@ const DISTRICTS = [
     { value: "madeira", label: "Madeira (Região Autónoma)", lat: 32.6669, lng: -16.9241 }
 ];
 
-const events = [
-    {
-        id: 1,
-        name: "Basketball 3v3",
-        description: "Torneio de basketball 3x3 aberto a equipas da zona.",
-        category: "desporto",
-        date: "2026-11-14",
-        time: "15:00",
-        location: "Parque da Cidade",
-        distrito: "porto",
-        latitude: 41.1699,
-        longitude: -8.6790,
-        image: "assets/eventos/basketball.jpg"
-    },
-    {
-        id: 2,
-        name: "Concerto ao Vivo",
-        description: "Música ao vivo no Estádio da Luz.",
-        category: "musica",
-        date: "2026-11-20",
-        time: "21:00",
-        location: "Estádio da Luz",
-        distrito: "lisboa",
-        latitude: 38.7526,
-        longitude: -9.1847,
-        image: "assets/eventos/concerto.jpg"
-    },
-    {
-        id: 3,
-        name: "Workshop de Fotografia",
-        description: "Workshop de fotografia urbana na Baixa.",
-        category: "cultura",
-        date: "2026-11-22",
-        time: "14:30",
-        location: "Baixa de Coimbra",
-        distrito: "coimbra",
-        latitude: 40.2081,
-        longitude: -8.4265,
-        image: "assets/eventos/fotografia.jpg"
-    },
-    {
-        id: 4,
-        name: "Torneio de Gaming",
-        description: "Competição de jogos com prémios.",
-        category: "gaming",
-        date: "2026-12-05",
-        time: "16:00",
-        location: "Espaço Gaming Aveiro",
-        distrito: "aveiro",
-        latitude: 40.6405,
-        longitude: -8.6538,
-        image: "assets/eventos/gaming.jpg"
-    },
-    {
-        id: 5,
-        name: "Corrida Solidária",
-        description: "Corrida e caminhada solidária aberta a todas as idades.",
-        category: "comunidade",
-        date: "2026-11-29",
-        time: "09:30",
-        location: "Parque da Ponte",
-        distrito: "braga",
-        latitude: 41.5503,
-        longitude: -8.4200,
-        image: DEFAULT_IMAGE
-    },
-    {
-        id: 6,
-        name: "Feira de Artesanato",
-        description: "Artesãos locais, gastronomia e música ao ar livre.",
-        category: "cultura",
-        date: "2026-12-06",
-        time: "10:00",
-        location: "Jardim Manuel Bivar",
-        distrito: "faro",
-        latitude: 37.0160,
-        longitude: -7.9350,
-        image: DEFAULT_IMAGE
-    }
-];
+// Array global que vai guardar os eventos vindos da BD
+let events = [];
 
 // ---------- Utilitários ----------
-
 function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>"']/g, ch => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -159,4 +79,186 @@ function nearestDistrict(lat, lng) {
         if (dist < bestDist) { best = d; bestDist = dist; }
     });
     return best.value;
+}
+
+// ---------- Funções de Base de Dados (Supabase) ----------
+
+async function dbLoadEvents() {
+    const { data, error } = await supabase
+        .from('events')
+        .select(`
+            *,
+            profiles:created_by (username, avatar_url)
+        `)
+        .order('date', { ascending: true });
+
+    if (error) {
+        console.error("Erro ao carregar eventos:", error);
+        return [];
+    }
+    
+    // Adaptar os nomes dos campos da BD para os nomes que o teu frontend usa
+    return data.map(e => ({
+        ...e,
+        location: e.location_name, // O frontend usa 'location', a BD usa 'location_name'
+        image: e.image_url,        // O frontend usa 'image', a BD usa 'image_url'
+        custom: true               // Assumimos que todos vêm da BD para efeitos de delete
+    }));
+}
+
+async function dbCreateEvent(eventData, imageFile) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Precisas de iniciar sessão para criar eventos.");
+
+    let image_url = null;
+
+    if (imageFile) {
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('event-images')
+            .upload(fileName, imageFile);
+
+        if (uploadError) throw new Error("Erro ao carregar imagem: " + uploadError.message);
+
+        const { data: urlData } = supabase.storage
+            .from('event-images')
+            .getPublicUrl(fileName);
+
+        image_url = urlData.publicUrl;
+    }
+
+    const { data, error } = await supabase
+        .from('events')
+        .insert({
+            created_by: user.id,
+            name: eventData.name,
+            description: eventData.description,
+            category: eventData.category,
+            date: eventData.date,
+            time: eventData.time,
+            location_name: eventData.location,
+            district: eventData.distrito,
+            latitude: eventData.latitude,
+            longitude: eventData.longitude,
+            image_url: image_url
+        })
+        .select()
+        .single();
+
+    if (error) throw new Error("Erro ao criar evento: " + error.message);
+    return data;
+}
+
+async function dbDeleteEvent(eventId) {
+    const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
+    if (error) throw error;
+}
+
+async function dbLoadFavorites() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return new Set();
+
+    const { data, error } = await supabase
+        .from('favorites')
+        .select('event_id')
+        .eq('user_id', user.id);
+
+    if (error) return new Set();
+    return new Set(data.map(f => f.event_id));
+}
+
+async function dbToggleFavorite(eventId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Precisas de iniciar sessão.");
+
+    const { data: existing } = await supabase
+        .from('favorites')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+    if (existing) {
+        await supabase.from('favorites').delete().eq('id', existing.id);
+        return false;
+    } else {
+        await supabase.from('favorites').insert({ user_id: user.id, event_id: eventId });
+        return true;
+    }
+}
+
+async function dbGetEventDetails(eventId) {
+    // Buscar likes
+    const { count: likeCount } = await supabase
+        .from('event_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', eventId);
+
+    // Verificar se o user atual deu like
+    let hasLiked = false;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+        const { data: likeData } = await supabase
+            .from('event_likes')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('event_id', eventId)
+            .maybeSingle();
+        hasLiked = !!likeData;
+    }
+
+    // Buscar comentários
+    const { data: comments } = await supabase
+        .from('event_comments')
+        .select(`*, profiles:user_id (username)`)
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true });
+
+    return { likeCount: likeCount || 0, hasLiked, comments: comments || [] };
+}
+
+async function dbToggleLike(eventId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Precisas de iniciar sessão.");
+
+    const { data: existing } = await supabase
+        .from('event_likes')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+    if (existing) {
+        await supabase.from('event_likes').delete().eq('id', existing.id);
+    } else {
+        await supabase.from('event_likes').insert({ user_id: user.id, event_id: eventId });
+    }
+}
+
+async function dbAddComment(eventId, content) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Precisas de iniciar sessão.");
+
+    const { error } = await supabase
+        .from('event_comments')
+        .insert({ user_id: user.id, event_id: eventId, content });
+    if (error) throw error;
+}
+
+async function dbCheckIn(eventId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Precisas de iniciar sessão.");
+
+    const { error } = await supabase
+        .from('event_checkins')
+        .insert({ user_id: user.id, event_id: eventId });
+    
+    if (error && error.code !== '23505') { // Ignorar se já fez check-in
+        throw error;
+    }
 }
