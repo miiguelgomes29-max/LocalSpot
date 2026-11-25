@@ -6,24 +6,296 @@
     <title>LocalSpot — Eventos & Radar Social ao Vivo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <style>
-        /* Garantia de dimensões do mapa e estilos completos Bump Social */
-        .map-container {
-            position: relative;
-            flex: 1;
-            min-height: calc(100vh - 64px);
+        /* =========================================================
+           1. CORREÇÃO DEFINITIVA DE DIMENSÕES DO MAPA (PRIORIDADE MAX)
+           ========================================================= */
+        html, body {
+            height: 100%;
+            margin: 0;
             overflow: hidden;
         }
-        #map {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
+        #main {
+            display: flex !important;
+            height: calc(100vh - 64px) !important;
+            min-height: calc(100vh - 64px) !important;
+            width: 100% !important;
+            position: relative !important;
+        }
+        #main .map-container {
+            position: relative !important;
+            flex: 1 1 auto !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 450px !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            overflow: hidden !important;
+            background: #090e1a;
+        }
+        #main .map-container #map {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 450px !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 1 !important;
+        }
+        .map-floating-controls {
+            z-index: 20 !important;
+        }
+        @media (max-width: 860px) {
+            #main[data-view="map"] .sidebar { display: none !important; }
+            #main[data-view="map"] .map-container { display: block !important; width: 100% !important; height: 100% !important; }
+            #main[data-view="list"] .map-container { display: none !important; }
         }
 
+        /* =========================================================
+           2. ANIMAÇÕES ESTILO BUMP (RADAR, SHOCKWAVE, SPRING)
+           ========================================================= */
+        @keyframes bumpPopIn {
+            0% { opacity: 0; transform: scale(0.86) translateY(18px); }
+            65% { opacity: 1; transform: scale(1.03) translateY(-2px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes bumpRadarRing {
+            0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0.9; }
+            100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+        }
+        @keyframes fistBumpSmash {
+            0% { transform: scale(0.3) rotate(-18deg); opacity: 0; }
+            45% { transform: scale(1.28) rotate(8deg); opacity: 1; }
+            70% { transform: scale(0.94) rotate(-4deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes floatParticle {
+            0% { transform: translateY(0) scale(0.8); opacity: 1; }
+            100% { transform: translateY(-130px) scale(1.35); opacity: 0; }
+        }
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55); }
+            50% { transform: scale(1.03); box-shadow: 0 0 0 12px rgba(244, 63, 94, 0); }
+        }
+        @keyframes onlineSonar {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.65); }
+            70% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Overlay de Impacto Bump (quando envias ou recebes Bump) */
+        .bump-impact-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, rgba(244, 63, 94, 0.22) 0%, rgba(8, 12, 20, 0.72) 100%);
+            backdrop-filter: blur(4px);
+            animation: bumpPopIn 0.25s ease forwards;
+        }
+        .bump-impact-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 3px solid #f43f5e;
+            animation: bumpRadarRing 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .bump-impact-ring.r2 {
+            border-color: #10b981;
+            animation-delay: 0.16s;
+        }
+        .bump-impact-emoji {
+            font-size: 74px;
+            animation: fistBumpSmash 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            filter: drop-shadow(0 12px 28px rgba(244, 63, 94, 0.6));
+        }
+        .bump-impact-label {
+            margin-top: 12px;
+            background: rgba(15, 22, 36, 0.95);
+            border: 1px solid rgba(244, 63, 94, 0.55);
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 999px;
+            font-weight: 800;
+            font-size: 14px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* =========================================================
+           3. ECRÃ DE ENTRADA & ONBOARDING ESTILO BUMP
+           ========================================================= */
+        .auth-overlay {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 5000 !important;
+            background: radial-gradient(circle at 20% 15%, rgba(16, 185, 129, 0.18), transparent 45%),
+                        radial-gradient(circle at 85% 80%, rgba(244, 63, 94, 0.22), transparent 50%),
+                        #070b14 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            overflow-y: auto;
+        }
+        .auth-overlay.hidden {
+            display: none !important;
+        }
+        .bump-onboarding-shell {
+            width: min(96vw, 440px);
+            background: rgba(15, 22, 36, 0.92);
+            backdrop-filter: blur(18px);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-radius: 26px;
+            padding: 26px 24px;
+            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.72);
+            animation: bumpPopIn 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .bump-hero-radar {
+            position: relative;
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f43f5e, #8b5cf6, #10b981);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            box-shadow: 0 12px 32px rgba(244, 63, 94, 0.4);
+        }
+        .bump-hero-radar::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            border: 2px solid rgba(16, 185, 129, 0.6);
+            animation: bumpRadarRing 2.2s infinite;
+        }
+        .onboarding-progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 18px;
+        }
+        .onboarding-dot {
+            width: 26px;
+            height: 5px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.22);
+            transition: all 0.25s ease;
+        }
+        .onboarding-dot.active {
+            width: 42px;
+            background: linear-gradient(90deg, #10b981, #f43f5e);
+        }
+        .avatar-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin: 8px 0 14px;
+        }
+        .avatar-emoji-opt {
+            aspect-ratio: 1;
+            border-radius: 14px;
+            background: var(--surface-2);
+            border: 2px solid transparent;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+        .avatar-emoji-opt:hover { transform: scale(1.08); }
+        .avatar-emoji-opt.selected {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.18);
+            transform: scale(1.08);
+        }
+        .vibe-picker-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .vibe-opt-btn {
+            background: var(--surface-2);
+            border: 1.5px solid var(--border);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 9px 10px;
+            font-size: 12.5px;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .vibe-opt-btn.selected {
+            border-color: #f43f5e;
+            background: rgba(244, 63, 94, 0.16);
+        }
+
+        /* Cartões de Sessões Guardadas (Troca rápida de conta estilo Bump) */
+        .saved-sessions-box {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+        .saved-session-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 9px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .saved-session-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+        .saved-session-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            font-weight: 800;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        /* =========================================================
+           4. COMPONENTES DA APP, PINS & MODAIS
+           ========================================================= */
         .notif-wrap { position: relative; }
         .notif-dropdown {
             position: absolute;
@@ -103,11 +375,7 @@
             border-radius: 14px;
             color: var(--muted);
         }
-        .organizer-tag {
-            font-size: 11.5px;
-            color: var(--muted);
-            margin-bottom: 6px;
-        }
+        .organizer-tag { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
         .friends-going-badge {
             display: inline-block;
             background: rgba(244, 63, 94, 0.16);
@@ -119,12 +387,7 @@
             border-radius: 999px;
             margin-bottom: 6px;
         }
-        .registration-info {
-            font-size: 12px;
-            color: var(--primary);
-            font-weight: 600;
-            margin-top: 6px;
-        }
+        .registration-info { font-size: 12px; color: var(--primary); font-weight: 600; margin-top: 6px; }
         .badge-past {
             position: absolute;
             top: 8px;
@@ -150,7 +413,6 @@
             margin-left: 4px;
         }
 
-        /* Banner de Seleção no Mapa & Hangout */
         .pick-banner {
             position: absolute;
             bottom: 24px;
@@ -165,11 +427,7 @@
             padding: 12px 14px;
             box-shadow: var(--shadow);
         }
-        .pick-banner-row {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
+        .pick-banner-row { display: flex; gap: 8px; margin-top: 8px; }
         .hangout-banner {
             position: absolute;
             bottom: 22px;
@@ -182,15 +440,9 @@
             padding: 10px 16px;
             border-radius: 999px;
             cursor: pointer;
-            box-shadow: 0 10px 25px rgba(244, 63, 94, 0.45);
             animation: pulseGlow 2s infinite;
         }
-        @keyframes pulseGlow {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.03); }
-        }
 
-        /* Quick Mood Popover */
         .quick-mood-popover {
             position: absolute;
             top: 56px;
@@ -202,6 +454,7 @@
             border-radius: 16px;
             padding: 14px;
             box-shadow: var(--shadow);
+            animation: bumpPopIn 0.22s ease;
         }
         .quick-mood-popover h4 {
             margin: 0 0 10px;
@@ -251,7 +504,6 @@
             background: rgba(16, 185, 129, 0.15);
         }
 
-        /* Pódio Bump, Tiers & Pings */
         .bump-leaderboard-card {
             background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(139, 92, 246, 0.12));
             border: 1px solid var(--border-strong);
@@ -273,12 +525,7 @@
             text-align: center;
             font-size: 11.5px;
         }
-        .friendship-tier-pill {
-            display: inline-block;
-            font-size: 10.5px;
-            font-weight: 700;
-            color: #a78bfa;
-        }
+        .friendship-tier-pill { display: inline-block; font-size: 10.5px; font-weight: 700; color: #a78bfa; }
         .bump-progress-mini {
             width: 100%;
             height: 4px;
@@ -310,6 +557,7 @@
             border-radius: 14px;
             padding: 12px 14px;
             box-shadow: var(--shadow);
+            animation: bumpPopIn 0.3s ease;
         }
         .live-ping-replies {
             display: grid;
@@ -327,7 +575,6 @@
         }
         .live-ping-reply-btn:hover { border-color: var(--primary); }
 
-        /* Animações de Pedido de Amizade */
         .friend-req-burst-card {
             background: var(--surface);
             border: 1px solid var(--bump);
@@ -336,7 +583,7 @@
             width: min(90vw, 350px);
             text-align: center;
             box-shadow: 0 24px 60px rgba(244, 63, 94, 0.35);
-            animation: popScale 0.35s ease;
+            animation: bumpPopIn 0.35s ease;
         }
         .pill-tag {
             display: inline-block;
@@ -404,7 +651,7 @@
             overflow: hidden;
         }
         .friend-sent-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; }
-        .friend-sent-plane { font-size: 32px; animation: popScale 0.4s ease; }
+        .friend-sent-plane { font-size: 32px; animation: fistBumpSmash 0.45s ease; }
         .friend-sent-pill {
             margin-top: 8px;
             background: var(--surface);
@@ -415,7 +662,6 @@
             font-size: 13.5px;
         }
 
-        /* Detalhes, Comentários, Admin & MapLibre Markers */
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .form-group { margin-bottom: 11px; }
         .form-error {
@@ -445,12 +691,7 @@
             font-size: 12.5px;
             margin: 10px 0;
         }
-        .detail-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 12px 0;
-        }
+        .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
         .attendee-pill {
             display: inline-block;
             background: var(--surface-2);
@@ -509,18 +750,19 @@
             font-weight: 800;
             cursor: pointer;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
-            transition: transform 0.15s ease;
+            transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+            animation: bumpPopIn 0.3s ease;
         }
         .ls-event-marker:hover, .ls-event-marker.active {
-            transform: scale(1.14);
+            transform: scale(1.15);
             background: var(--primary);
             color: #04130d;
             z-index: 10;
         }
         .ls-friend-marker {
             position: relative;
-            width: 48px;
-            height: 48px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             border: 3px solid var(--bump);
             background: var(--surface);
@@ -531,9 +773,13 @@
             justify-content: center;
             font-weight: 800;
             color: #fff;
-            font-size: 15px;
+            font-size: 17px;
+            animation: bumpPopIn 0.35s ease;
         }
-        .ls-friend-marker.online { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25); }
+        .ls-friend-marker.online {
+            border-color: var(--primary);
+            animation: onlineSonar 2.2s infinite;
+        }
         .ls-friend-marker.business { border-color: #38bdf8; }
         .ls-friend-marker img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
         .ls-friend-mood-badge {
@@ -556,21 +802,22 @@
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
-            background: rgba(8, 12, 20, 0.9);
+            background: rgba(8, 12, 20, 0.92);
             color: #fff;
             font-size: 10.5px;
             font-weight: 700;
-            padding: 2px 7px;
+            padding: 2px 8px;
             border-radius: 999px;
             border: 1px solid var(--border);
         }
         .ls-user-pulse {
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             background: #38bdf8;
             border: 3px solid #fff;
-            box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.3);
+            box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.35);
+            animation: onlineSonar 2s infinite;
         }
         .maplibregl-popup-content {
             background: #0f1624 !important;
@@ -611,6 +858,7 @@
             </div>
 
             <button type="button" id="adminPanelBtn" class="btn-soft hidden">🛡️ Admin</button>
+            <button type="button" id="switchSessionBtn" class="btn-soft" title="Trocar de Sessão / Conta">🔄 Sessões</button>
             <div id="userBadge" class="user-badge hidden" title="Abrir Perfil"></div>
             <button type="button" id="logoutButton" class="btn-logout hidden">Sair</button>
         </nav>
@@ -694,8 +942,8 @@
             <div id="eventsList" class="events-list"></div>
         </aside>
 
-        <section class="map-container">
-            <div id="map"></div>
+        <section class="map-container" style="position:relative;flex:1;min-height:calc(100vh - 64px);">
+            <div id="map" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;min-height:450px;"></div>
 
             <div class="map-floating-controls">
                 <button type="button" id="mapStyleToggle" class="map-ctrl-btn">🛰️ Satélite 3D</button>
@@ -714,69 +962,176 @@
     </main>
 
     <!-- ==========================================
-         OVERLAY DE AUTENTICAÇÃO (LOGIN / REGISTO)
+         ENTRADA ESTILO BUMP: ONBOARDING & SESSÕES
          ========================================== -->
     <div id="authOverlay" class="auth-overlay hidden">
-        <div class="auth-card">
-            <div style="text-align:center; margin-bottom:16px;">
-                <h2 style="margin:0 0 4px; font-size:24px;">📍 LocalSpot</h2>
-                <p style="margin:0; font-size:13px; color:var(--muted);">Descobre eventos locais, faz Bump com amigos e explora o mapa ao vivo.</p>
+        <div class="bump-onboarding-shell">
+
+            <!-- ECRÃ 0: BOAS-VINDAS (PRIMEIRA ABERTURA / INSTALAÇÃO) -->
+            <div id="onboardingWelcomeScreen">
+                <div class="bump-hero-radar">👊</div>
+                <div style="text-align:center; margin-bottom:20px;">
+                    <span class="pill-tag" style="margin-bottom:8px;">RADAR SOCIAL & EVENTOS AO VIVO</span>
+                    <h2 style="margin:0 0 8px; font-size:26px; font-weight:900; letter-spacing:-0.03em;">Bem-vindo ao LocalSpot</h2>
+                    <p style="margin:0; font-size:13.5px; line-height:1.5; color:var(--muted);">
+                        Vê onde os teus amigos estão em tempo real, manda um <strong>Bump</strong> quando estiverem perto e descobre os melhores eventos à tua volta.
+                    </p>
+                </div>
+
+                <div style="display:grid; gap:10px;">
+                    <button type="button" id="startOnboardingBtn" class="btn-primary" style="width:100%; padding:13px; font-size:14.5px; border-radius:14px;">
+                        🚀 Criar o meu Perfil (Estilo Bump)
+                    </button>
+                    <button type="button" id="goToLoginScreenBtn" class="btn-soft" style="width:100%; padding:11px; font-size:13.5px; border-radius:14px;">
+                        Já tenho conta · Iniciar Sessão
+                    </button>
+                </div>
+
+                <div id="savedSessionsContainer" class="saved-sessions-box hidden">
+                    <div style="font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">
+                        ⚡ Sessões Guardadas neste Dispositivo
+                    </div>
+                    <div id="savedSessionsList"></div>
+                </div>
             </div>
 
-            <div class="auth-tabs">
-                <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
-                <button type="button" id="tabRegister" class="auth-tab">Criar Conta</button>
+            <!-- ECRÃ 1: ASSISTENTE DE CRIAÇÃO DE CONTA EM 3 PASSOS -->
+            <div id="onboardingWizardScreen" class="hidden">
+                <div class="onboarding-progress-dots">
+                    <span class="onboarding-dot active" data-step-dot="1"></span>
+                    <span class="onboarding-dot" data-step-dot="2"></span>
+                    <span class="onboarding-dot" data-step-dot="3"></span>
+                </div>
+
+                <form id="registerForm">
+                    <div id="registerError" class="form-error hidden"></div>
+
+                    <!-- PASSO 1: IDENTIDADE -->
+                    <div id="wizardStep1">
+                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Como te chamas?</h3>
+                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">Cria o teu cartão no radar social.</p>
+
+                        <div class="form-group">
+                            <label for="regAccountType">Tipo de Perfil</label>
+                            <select id="regAccountType">
+                                <option value="user">👤 Conta Pessoal (Amigos & Eventos)</option>
+                                <option value="business">🏛️ Empresa / Entidade / Município</option>
+                            </select>
+                        </div>
+
+                        <div id="businessTypeGroup" class="form-group hidden">
+                            <label for="regBusinessType">Setor da Entidade</label>
+                            <select id="regBusinessType">
+                                <option value="Câmara Municipal / Junta">🏛️ Câmara Municipal / Junta</option>
+                                <option value="Associação / Coletividade">🤝 Associação / Coletividade</option>
+                                <option value="Restauração / Café">🍽️ Restauração / Café</option>
+                                <option value="Cultura / Espetáculos">🎭 Cultura / Espetáculos</option>
+                                <option value="Desporto / Ginásio">🏟️ Desporto / Ginásio</option>
+                                <option value="Empresa / Comércio">🏢 Empresa / Comércio</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label id="regNameLabel" for="regName">Nome de exibição *</label>
+                            <input type="text" id="regName" placeholder="Ex: Miguel Silva" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="regEmail">E-mail *</label>
+                            <input type="email" id="regEmail" placeholder="miguel@email.pt" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="regPassword">Palavra-passe *</label>
+                            <input type="password" id="regPassword" minlength="6" placeholder="Mínimo 6 caracteres" required>
+                        </div>
+
+                        <div style="display:flex; gap:8px; margin-top:14px;">
+                            <button type="button" id="backToWelcomeBtn" class="btn-soft" style="flex:1;">← Voltar</button>
+                            <button type="button" id="nextToStep2Btn" class="btn-primary" style="flex:2; padding:11px;">Continuar →</button>
+                        </div>
+                    </div>
+
+                    <!-- PASSO 2: AVATAR & VIBE INICIAL -->
+                    <div id="wizardStep2" class="hidden">
+                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Escolhe o teu Avatar & Vibe</h3>
+                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 12px;">É assim que os teus amigos te vão ver no mapa.</p>
+
+                        <label>Ícone do teu Pin</label>
+                        <div class="avatar-picker-grid" id="avatarPickerGrid">
+                            <button type="button" class="avatar-emoji-opt selected" data-emoji="😎">😎</button>
+                            <button type="button" class="avatar-emoji-opt" data-emoji="🦊">🦊</button>
+                            <button type="button" class="avatar-emoji-opt" data-emoji="🔥">🔥</button>
+                            <button type="button" class="avatar-emoji-opt" data-emoji="🎧">🎧</button>
+                            <button type="button" class="avatar-emoji-opt" data-emoji="⚡">⚡</button>
+                            <button type="button" class="avatar-emoji-opt" data-emoji="🚀">🚀</button>
+                        </div>
+
+                        <label>O teu estado atual</label>
+                        <div class="vibe-picker-grid" id="vibePickerGrid">
+                            <button type="button" class="vibe-opt-btn selected" data-vibe-emoji="🎉" data-vibe-text="Pronto pra sair">🎉 Pronto pra sair</button>
+                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="☕" data-vibe-text="A tomar café">☕ A tomar café</button>
+                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="🎧" data-vibe-text="A curtir música">🎧 A curtir música</button>
+                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="📚" data-vibe-text="A estudar / trabalhar">📚 A estudar</button>
+                        </div>
+
+                        <div style="display:flex; gap:8px; margin-top:14px;">
+                            <button type="button" id="backToStep1Btn" class="btn-soft" style="flex:1;">← Anterior</button>
+                            <button type="button" id="nextToStep3Btn" class="btn-primary" style="flex:2; padding:11px;">Continuar →</button>
+                        </div>
+                    </div>
+
+                    <!-- PASSO 3: PRIVACIDADE & ATIVAÇÃO DO RADAR -->
+                    <div id="wizardStep3" class="hidden">
+                        <div style="text-align:center; font-size:42px; margin-bottom:6px;">🛰️</div>
+                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Ativar o Radar LocalSpot</h3>
+                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">
+                            Tu controlas sempre quem vê a tua localização. Podes mudar a qualquer momento.
+                        </p>
+
+                        <div class="privacy-selector-grid" id="onboardingPrivacyGrid">
+                            <button type="button" class="privacy-opt-btn active" data-privacy="precise">📍 Exata<br><small style="font-weight:400;">Amigos próximos</small></button>
+                            <button type="button" class="privacy-opt-btn" data-privacy="blurred">🌫️ Borrão<br><small style="font-weight:400;">Área ~400m</small></button>
+                            <button type="button" class="privacy-opt-btn" data-privacy="ghost">👻 Fantasma<br><small style="font-weight:400;">Invisível</small></button>
+                        </div>
+
+                        <div style="display:flex; gap:8px; margin-top:16px;">
+                            <button type="button" id="backToStep2Btn" class="btn-soft" style="flex:1;">← Anterior</button>
+                            <button type="submit" id="registerSubmitBtn" class="btn-primary" style="flex:2; padding:12px; font-weight:800;">
+                                👊 Entrar no Mapa!
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
 
-            <form id="loginForm">
-                <div id="loginError" class="form-error hidden"></div>
-                <div class="form-group">
-                    <label for="loginEmail">E-mail</label>
-                    <input type="email" id="loginEmail" placeholder="o.teu@email.pt" required>
+            <!-- ECRÃ 2: INICIAR SESSÃO (CONTA EXISTENTE) -->
+            <div id="onboardingLoginScreen" class="hidden">
+                <div style="text-align:center; margin-bottom:16px;">
+                    <div style="font-size:36px; margin-bottom:4px;">📍</div>
+                    <h3 style="margin:0 0 4px; font-size:21px;">Iniciar Sessão</h3>
+                    <p class="muted" style="font-size:12.5px; margin:0;">Entra na tua conta LocalSpot para veres o mapa e os teus amigos.</p>
                 </div>
-                <div class="form-group">
-                    <label for="loginPassword">Palavra-passe</label>
-                    <input type="password" id="loginPassword" placeholder="••••••••" required>
-                </div>
-                <button type="submit" id="loginSubmitBtn" class="btn-primary" style="width:100%; padding:11px;">Entrar no LocalSpot</button>
-            </form>
 
-            <form id="registerForm" class="hidden">
-                <div id="registerError" class="form-error hidden"></div>
-                <div class="form-group">
-                    <label for="regAccountType">Tipo de Conta</label>
-                    <select id="regAccountType">
-                        <option value="user">👤 Conta Pessoal (Utilizador)</option>
-                        <option value="business">🏛️ Empresa / Entidade / Município</option>
-                    </select>
-                </div>
-                <div id="businessTypeGroup" class="form-group hidden">
-                    <label for="regBusinessType">Setor da Entidade</label>
-                    <select id="regBusinessType">
-                        <option value="Câmara Municipal / Junta">🏛️ Câmara Municipal / Junta</option>
-                        <option value="Associação / Coletividade">🤝 Associação / Coletividade</option>
-                        <option value="Restauração / Café">🍽️ Restauração / Café</option>
-                        <option value="Cultura / Espetáculos">🎭 Cultura / Espetáculos</option>
-                        <option value="Desporto / Ginásio">🏟️ Desporto / Ginásio</option>
-                        <option value="Empresa / Comércio">🏢 Empresa / Comércio</option>
-                        <option value="Educação / Universidade">🎓 Educação / Universidade</option>
-                        <option value="Serviços / Instituição">💼 Serviços / Instituição</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label id="regNameLabel" for="regName">Nome completo *</label>
-                    <input type="text" id="regName" placeholder="Ex: João Silva" required>
-                </div>
-                <div class="form-group">
-                    <label for="regEmail">E-mail *</label>
-                    <input type="email" id="regEmail" placeholder="o.teu@email.pt" required>
-                </div>
-                <div class="form-group">
-                    <label for="regPassword">Palavra-passe (mín. 6 caracteres) *</label>
-                    <input type="password" id="regPassword" minlength="6" placeholder="••••••••" required>
-                </div>
-                <button type="submit" id="registerSubmitBtn" class="btn-primary" style="width:100%; padding:11px;">Criar Perfil</button>
-            </form>
+                <form id="loginForm">
+                    <div id="loginError" class="form-error hidden"></div>
+                    <div class="form-group">
+                        <label for="loginEmail">E-mail</label>
+                        <input type="email" id="loginEmail" placeholder="o.teu@email.pt" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Palavra-passe</label>
+                        <input type="password" id="loginPassword" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" id="loginSubmitBtn" class="btn-primary" style="width:100%; padding:12px; margin-bottom:8px;">
+                        Entrar no Radar
+                    </button>
+                    <button type="button" id="loginBackToWelcomeBtn" class="btn-soft" style="width:100%;">
+                        ← Voltar ou Criar Conta
+                    </button>
+                </form>
+            </div>
+
         </div>
     </div>
 
@@ -1044,5 +1399,6 @@
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/auth-onboarding.js"></script>
 </body>
 </html>
