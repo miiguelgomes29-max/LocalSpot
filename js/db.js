@@ -1,5 +1,5 @@
 // ==========================================
-// LOCALSPOT — LIGAÇÃO À BASE DE DADOS SUPABASE
+// LOCALSPOT — BASE DE DADOS SUPABASE (PERFIS, AMIGOS & EVENTOS)
 // ==========================================
 
 const SUPABASE_URL = "https://ufzjexbihnwflqktpomm.supabase.co";
@@ -20,13 +20,13 @@ window.LocalSpotDB = {
     },
 
     // ==========================================
-    // 1. UTILIZADORES (CRIAR / ENTRAR / ATUALIZAR)
+    // 1. PERFIS & SESSÕES NA BASE DE DADOS
     // ==========================================
     async upsertProfile(profileData) {
         if (!this.isReady() || !profileData?.email) return profileData;
 
         const payload = {
-            full_name: profileData.full_name,
+            full_name: profileData.full_name || "Explorador",
             email: profileData.email.toLowerCase().trim(),
             role: profileData.role || "user",
             business_type: profileData.business_type || "",
@@ -35,8 +35,14 @@ window.LocalSpotDB = {
             status_emoji: profileData.status_emoji || "🎉",
             status_text: profileData.status_text || "Pronto pra sair",
             privacy_mode: profileData.privacy_mode || "precise",
+            ghost_mode: profileData.privacy_mode === "ghost",
             updated_at: new Date().toISOString()
         };
+
+        if (typeof profileData.last_lat === "number" && typeof profileData.last_lng === "number") {
+            payload.last_lat = profileData.last_lat;
+            payload.last_lng = profileData.last_lng;
+        }
 
         const { data, error } = await window.supabaseClient
             .from("profiles")
@@ -45,7 +51,7 @@ window.LocalSpotDB = {
             .single();
 
         if (error) {
-            console.error("Erro ao guardar perfil:", error.message);
+            console.error("Erro ao guardar perfil na BD:", error.message);
             return profileData;
         }
         return data;
@@ -53,16 +59,62 @@ window.LocalSpotDB = {
 
     async getProfileByEmail(email) {
         if (!this.isReady() || !email) return null;
-        const { data } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from("profiles")
             .select("*")
             .eq("email", email.toLowerCase().trim())
             .maybeSingle();
+
+        if (error) {
+            console.error("Erro ao procurar perfil:", error.message);
+            return null;
+        }
         return data || null;
     },
 
+    async searchProfiles(queryText, excludeUserId) {
+        if (!this.isReady()) return [];
+        let req = window.supabaseClient
+            .from("profiles")
+            .select("*")
+            .order("updated_at", { ascending: false })
+            .limit(25);
+
+        if (excludeUserId) {
+            req = req.neq("id", excludeUserId);
+        }
+
+        const q = (queryText || "").trim();
+        if (q.length > 0) {
+            req = req.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
+        }
+
+        const { data, error } = await req;
+        if (error) {
+            console.error("Erro ao pesquisar utilizadores:", error.message);
+            return [];
+        }
+        return data || [];
+    },
+
+    async updateProfileStatus(userId, updates) {
+        if (!this.isReady() || !userId) return null;
+        const { data, error } = await window.supabaseClient
+            .from("profiles")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", userId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Erro ao atualizar estado:", error.message);
+            return null;
+        }
+        return data;
+    },
+
     async syncLiveLocation(userId, lat, lng, extra = {}) {
-        if (!this.isReady() || !userId || String(userId).startsWith("local-")) return;
+        if (!this.isReady() || !userId || String(userId).startsWith("user-")) return;
         await window.supabaseClient
             .from("profiles")
             .update({
@@ -78,7 +130,174 @@ window.LocalSpotDB = {
     },
 
     // ==========================================
-    // 2. EVENTOS & PESSOAS INSCRITAS
+    // 2. SISTEMA DE AMIGOS (PEDIDOS & LISTA)
+    // ==========================================
+    async fetchFriendsData(userId) {
+        if (!this.isReady() || !userId || String(userId).startsWith("user-")) {
+            return { friends: [], incoming: [], outgoing: [] };
+        }
+
+        const { data: rows, error } = await window.supabaseClient
+            .from("friendships")
+            .select("*")
+            .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+        if (error || !rows || rows.length === 0) {
+            return { friends: [], incoming: [], outgoing: [] };
+        }
+
+        const otherIds = Array.from(
+            new Set(
+                rows.map(r => (r.requester_id === userId ? r.addressee_id : r.requester_id)).filter(Boolean)
+            )
+        );
+
+        const { data: profiles } = await window.supabaseClient
+            .from("profiles")
+            .select("*")
+            .in("id", otherIds);
+
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+        const friends = [];
+        const incoming = [];
+        const outgoing = [];
+
+        rows.forEach(r => {
+            const isRequester = r.requester_id === userId;
+            const otherId = isRequester ? r.addressee_id : r.requester_id;
+            const otherProfile = profileMap.get(otherId);
+            if (!otherProfile) return;
+
+            if (r.status === "accepted") {
+                friends.push({ ...otherProfile, friendship_id: r.id });
+            } else if (r.status === "pending") {
+                if (isRequester) {
+                    outgoing.push({ ...otherProfile, friendship_id: r.id });
+                } else {
+                    incoming.push({ ...otherProfile, friendship_id: r.id });
+                }
+            }
+        });
+
+        return { friends, incoming, outgoing };
+    },
+
+    async sendFriendRequest(fromUserId, toUserId) {
+        if (!this.isReady() || !fromUserId || !toUserId || fromUserId === toUserId) {
+            return { ok: false, error: "Utilizador inválido." };
+        }
+
+        const { data: existing } = await window.supabaseClient
+            .from("friendships")
+            .select("*")
+            .or(`and(requester_id.eq.${fromUserId},addressee_id.eq.${toUserId}),and(requester_id.eq.${toUserId},addressee_id.eq.${fromUserId})`)
+            .maybeSingle();
+
+        if (existing) {
+            if (existing.status === "accepted") {
+                return { ok: false, error: "Já são amigos!" };
+            }
+            if (existing.addressee_id === fromUserId) {
+                await this.respondFriendRequest(existing.id, true);
+                return { ok: true, autoAccepted: true };
+            }
+            return { ok: false, error: "Pedido já enviado." };
+        }
+
+        const { error } = await window.supabaseClient
+            .from("friendships")
+            .insert({
+                requester_id: fromUserId,
+                addressee_id: toUserId,
+                status: "pending"
+            });
+
+        if (error) {
+            console.error("Erro ao enviar pedido de amizade:", error.message);
+            return { ok: false, error: error.message };
+        }
+        return { ok: true };
+    },
+
+    async respondFriendRequest(friendshipId, accept) {
+        if (!this.isReady() || !friendshipId) return false;
+        if (accept) {
+            const { error } = await window.supabaseClient
+                .from("friendships")
+                .update({ status: "accepted" })
+                .eq("id", friendshipId);
+            return !error;
+        } else {
+            const { error } = await window.supabaseClient
+                .from("friendships")
+                .delete()
+                .eq("id", friendshipId);
+            return !error;
+        }
+    },
+
+    // ==========================================
+    // 3. BUMPS & CHAT EM TEMPO REAL
+    // ==========================================
+    async sendBump(fromUserId, toUserId, emoji = "👊", message = "Bump!") {
+        if (!this.isReady() || !fromUserId || !toUserId) return;
+
+        await window.supabaseClient.from("bumps").insert({
+            sender_id: fromUserId,
+            receiver_id: toUserId,
+            emoji,
+            message
+        });
+
+        const { data: target } = await window.supabaseClient
+            .from("profiles")
+            .select("bump_count")
+            .eq("id", toUserId)
+            .maybeSingle();
+
+        if (target) {
+            await window.supabaseClient
+                .from("profiles")
+                .update({ bump_count: (target.bump_count || 0) + 1 })
+                .eq("id", toUserId);
+        }
+    },
+
+    async fetchMessages(userId, friendId) {
+        if (!this.isReady() || !userId || !friendId) return [];
+        const { data, error } = await window.supabaseClient
+            .from("messages")
+            .select("*")
+            .or(`and(sender_id.eq.${userId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${userId})`)
+            .order("created_at", { ascending: true })
+            .limit(80);
+
+        if (error) return [];
+        return data || [];
+    },
+
+    async sendMessage(fromUserId, toUserId, content) {
+        if (!this.isReady() || !fromUserId || !toUserId || !content.trim()) return null;
+        const { data, error } = await window.supabaseClient
+            .from("messages")
+            .insert({
+                sender_id: fromUserId,
+                receiver_id: toUserId,
+                content: content.trim()
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Erro ao enviar mensagem:", error.message);
+            return null;
+        }
+        return data;
+    },
+
+    // ==========================================
+    // 4. EVENTOS & INSCRIÇÕES
     // ==========================================
     async fetchAllEventsWithAttendees() {
         if (!this.isReady()) return window.events || [];
@@ -88,10 +307,7 @@ window.LocalSpotDB = {
             window.supabaseClient.from("event_registrations").select("*")
         ]);
 
-        if (error || !dbEvents) {
-            console.error("Erro ao carregar eventos:", error?.message);
-            return window.events || [];
-        }
+        if (error || !dbEvents) return window.events || [];
 
         const regsByEvent = new Map();
         (regs || []).forEach(r => {
@@ -163,20 +379,12 @@ window.LocalSpotDB = {
             .select()
             .single();
 
-        if (error) {
-            console.error("Erro ao criar evento:", error.message);
-            throw error;
-        }
+        if (error) throw error;
         return data;
     },
 
-    async deleteEvent(eventId) {
-        if (!this.isReady()) return;
-        await window.supabaseClient.from("events").delete().eq("id", eventId);
-    },
-
     async toggleRegistration(eventId, user) {
-        if (!this.isReady() || !user?.id) return { enrolled: false };
+        if (!this.isReady() || !user?.id || String(user.id).startsWith("user-")) return { enrolled: false };
 
         const { data: existing } = await window.supabaseClient
             .from("event_registrations")
@@ -199,85 +407,7 @@ window.LocalSpotDB = {
             ticket_code: ticketCode
         });
 
-        if (error) {
-            console.error("Erro na inscrição:", error.message);
-            return { enrolled: false };
-        }
+        if (error) return { enrolled: false };
         return { enrolled: true, ticketCode };
-    },
-
-    // ==========================================
-    // 3. COMENTÁRIOS & AVALIAÇÕES
-    // ==========================================
-    async fetchCommentsAndReviews(eventId) {
-        if (!this.isReady()) return { comments: [], reviews: [] };
-        const [{ data: comments }, { data: reviews }] = await Promise.all([
-            window.supabaseClient.from("event_comments").select("*").eq("event_id", eventId).order("created_at", { ascending: true }),
-            window.supabaseClient.from("event_reviews").select("*").eq("event_id", eventId).order("created_at", { ascending: false })
-        ]);
-        return { comments: comments || [], reviews: reviews || [] };
-    },
-
-    async addComment(eventId, user, content) {
-        if (!this.isReady() || !user?.id || !content.trim()) return;
-        await window.supabaseClient.from("event_comments").insert({
-            event_id: eventId,
-            user_id: user.id,
-            user_name: user.full_name,
-            content: content.trim()
-        });
-    },
-
-    // ==========================================
-    // 4. TEMPO REAL (SINCRONIZAÇÃO AUTOMÁTICA)
-    // ==========================================
-    startRealtimeSync(onDataChanged) {
-        if (!this.isReady()) return;
-
-        window.supabaseClient
-            .channel("localspot-global-sync")
-            .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
-                this.fetchAllEventsWithAttendees().then(() => onDataChanged?.("events"));
-            })
-            .on("postgres_changes", { event: "*", schema: "public", table: "event_registrations" }, () => {
-                this.fetchAllEventsWithAttendees().then(() => onDataChanged?.("registrations"));
-            })
-            .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, async () => {
-                const { data } = await window.supabaseClient.from("profiles").select("*");
-                if (data && typeof window.showFriendsOnMap === "function") {
-                    window.showFriendsOnMap(data);
-                }
-            })
-            .subscribe();
     }
 };
-
-document.addEventListener("DOMContentLoaded", async () => {
-    if (!window.LocalSpotDB.isReady()) return;
-
-    if (window.currentLocalProfile) {
-        const dbProfile = await window.LocalSpotDB.upsertProfile(window.currentLocalProfile);
-        if (dbProfile?.id) {
-            window.currentLocalProfile = { ...window.currentLocalProfile, ...dbProfile };
-            localStorage.setItem("localspot_active_session_v1", JSON.stringify(window.currentLocalProfile));
-        }
-    }
-
-    const events = await window.LocalSpotDB.fetchAllEventsWithAttendees();
-    if (typeof window.showEventsOnMap === "function") {
-        window.showEventsOnMap(events);
-    }
-    if (typeof window.filterEvents === "function") {
-        window.filterEvents();
-    }
-
-    const { data: allProfiles } = await window.supabaseClient.from("profiles").select("*");
-    if (allProfiles && typeof window.showFriendsOnMap === "function") {
-        window.showFriendsOnMap(allProfiles);
-    }
-
-    window.LocalSpotDB.startRealtimeSync(async () => {
-        if (typeof window.showEventsOnMap === "function") window.showEventsOnMap(window.events);
-        if (typeof window.filterEvents === "function") window.filterEvents();
-    });
-});
