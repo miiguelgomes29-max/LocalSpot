@@ -2,400 +2,1034 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalSpot · Bump Edition</title>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LocalSpot — Eventos & Radar Social ao Vivo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
     <style>
-        :root {
-            --primary: #2563eb; --bg: #f4f6f8; --surface: #ffffff; --border: #e1e5ea;
-            --text: #18212b; --muted: #6b7380; --header-h: 64px;
+        /* Estilos complementares para MapLibre, Bump Social, Popovers e Modais */
+        .notif-wrap { position: relative; }
+        .notif-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 320px;
+            max-height: 380px;
+            overflow-y: auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            z-index: 1100;
         }
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        .hidden { display: none !important; }
+        .notif-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+        .notif-item {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .notif-item:hover { background: var(--surface-2); }
+        .notif-item.unread {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 3px solid var(--primary);
+        }
+        .notif-item strong { display: block; font-size: 12.5px; margin-bottom: 2px; }
+        .notif-item p { margin: 0; font-size: 12px; color: var(--muted); }
 
-        /* Header */
-        .header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; z-index: 10; }
-        .logo { font-weight: bold; font-size: 20px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
-        nav { display: flex; gap: 16px; align-items: center; }
-        .btn-soft { border: none; background: #eef3ff; color: var(--primary); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-        .btn-link { background: none; border: none; cursor: pointer; color: var(--text); font-weight: 500; font-size: 14px; }
-        .btn-link.active { color: var(--primary); font-weight: bold; }
+        .sidebar-actions-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 6px;
+        }
+        .filters-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .radius-box {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 12px;
+        }
+        .radius-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+        .radius-header strong { color: var(--primary); }
+        input[type="range"] { padding: 0; accent-color: var(--primary); }
 
-        /* Layout */
-        .main { display: flex; flex: 1; overflow: hidden; position: relative; }
-        .sidebar { width: 360px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 5; overflow-y: auto; }
-        .sidebar-content { padding: 20px; }
-        .sidebar-footer { padding: 20px; border-top: 1px solid var(--border); margin-top: auto; }
+        .results-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12.5px;
+            color: var(--muted);
+            padding-top: 4px;
+            border-top: 1px solid var(--border);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 28px 14px;
+            background: var(--surface-2);
+            border: 1px dashed var(--border);
+            border-radius: 14px;
+            color: var(--muted);
+        }
+        .organizer-tag {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .friends-going-badge {
+            display: inline-block;
+            background: rgba(244, 63, 94, 0.16);
+            color: #fda4af;
+            border: 1px solid rgba(244, 63, 94, 0.35);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-bottom: 6px;
+        }
+        .registration-info {
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 600;
+            margin-top: 6px;
+        }
+        .badge-past {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(239, 68, 68, 0.9);
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 999px;
+        }
+        .verified-check {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #38bdf8;
+            color: #04131d;
+            font-size: 10px;
+            font-weight: 900;
+            margin-left: 4px;
+        }
 
-        /* MAPA - Correção Crítica */
-        .map-container { flex: 1; position: relative; background: #e5e7eb; }
-        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        /* Banner de Seleção no Mapa & Hangout */
+        .pick-banner {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            width: min(92%, 520px);
+            background: rgba(15, 22, 36, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--primary);
+            border-radius: 16px;
+            padding: 12px 14px;
+            box-shadow: var(--shadow);
+        }
+        .pick-banner-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .hangout-banner {
+            position: absolute;
+            bottom: 22px;
+            left: 16px;
+            z-index: 25;
+            background: linear-gradient(135deg, #f43f5e, #8b5cf6);
+            color: #fff;
+            font-weight: 800;
+            font-size: 13px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(244, 63, 94, 0.45);
+            animation: pulseGlow 2s infinite;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
 
-        /* UI Elements */
-        input, select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-family: inherit; }
-        .submit-button { width: 100%; padding: 12px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .modal-content { background: #fff; padding: 24px; border-radius: 12px; width: 100%; max-width: 400px; position: relative; }
-        .close-button { position: absolute; right: 15px; top: 15px; font-size: 24px; background: none; border: none; cursor: pointer; }
+        /* Quick Mood Popover */
+        .quick-mood-popover {
+            position: absolute;
+            top: 56px;
+            left: 14px;
+            z-index: 35;
+            width: 300px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .quick-mood-popover h4 {
+            margin: 0 0 10px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .quick-mood-grid, .status-pills-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .quick-mood-item, .status-pill-btn {
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            padding: 6px 8px;
+            font-size: 11.5px;
+            text-align: left;
+        }
+        .quick-mood-item:hover, .status-pill-btn.active {
+            border-color: var(--primary);
+            background: rgba(16, 185, 129, 0.16);
+        }
+        .privacy-selector-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .privacy-selector-grid.two-cols { grid-template-columns: 1fr 1fr; }
+        .privacy-opt-btn {
+            background: var(--surface-2);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            padding: 7px 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+        .privacy-opt-btn.active {
+            border-color: var(--primary);
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.15);
+        }
 
-        /* Pin do Mapa */
-        .pin { width: 20px; height: 20px; background: var(--primary); border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+        /* Pódio Bump, Tiers & Pings */
+        .bump-leaderboard-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(139, 92, 246, 0.12));
+            border: 1px solid var(--border-strong);
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        .bump-podium-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .bump-podium-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 6px;
+            text-align: center;
+            font-size: 11.5px;
+        }
+        .friendship-tier-pill {
+            display: inline-block;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #a78bfa;
+        }
+        .bump-progress-mini {
+            width: 100%;
+            height: 4px;
+            background: var(--bg);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+        .bump-progress-mini span {
+            display: block;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--bump));
+        }
+        .typing-indicator-pill {
+            min-height: 18px;
+            font-size: 11.5px;
+            color: var(--primary);
+            font-style: italic;
+            margin-bottom: 6px;
+        }
+        .live-ping-toast {
+            position: fixed;
+            top: 72px;
+            right: 18px;
+            z-index: 2200;
+            width: min(92vw, 330px);
+            background: var(--surface);
+            border: 1px solid var(--bump);
+            border-radius: 14px;
+            padding: 12px 14px;
+            box-shadow: var(--shadow);
+        }
+        .live-ping-replies {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .live-ping-reply-btn {
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 11.5px;
+        }
+        .live-ping-reply-btn:hover { border-color: var(--primary); }
 
-        /* Chat */
-        #chatMessages { height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; background: #fafafa; border-radius: 8px; }
-        .msg { padding: 8px 12px; border-radius: 12px; max-width: 80%; font-size: 14px; }
-        .msg.me { align-self: flex-end; background: var(--primary); color: white; }
-        .msg.other { align-self: flex-start; background: #eee; color: black; }
-        .friend-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        /* Animações de Pedido de Amizade */
+        .friend-req-burst-card {
+            background: var(--surface);
+            border: 1px solid var(--bump);
+            border-radius: 22px;
+            padding: 24px 20px;
+            width: min(90vw, 350px);
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(244, 63, 94, 0.35);
+            animation: popScale 0.35s ease;
+        }
+        .pill-tag {
+            display: inline-block;
+            background: rgba(244, 63, 94, 0.18);
+            color: #fda4af;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-bottom: 14px;
+        }
+        .friend-req-photo-ring {
+            position: relative;
+            width: 84px;
+            height: 84px;
+            margin: 0 auto 12px;
+            border-radius: 50%;
+            padding: 3px;
+            background: linear-gradient(135deg, var(--bump), var(--accent), var(--primary));
+        }
+        .friend-req-photo-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: var(--surface-2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: 800;
+            overflow: hidden;
+        }
+        .friend-req-photo-inner img { width: 100%; height: 100%; object-fit: cover; }
+        .friend-req-badge-fist {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            background: var(--bump);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+        }
+        .friend-req-actions-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .friend-sent-stage { text-align: center; }
+        .friend-sent-avatar-wrap {
+            width: 74px;
+            height: 74px;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            overflow: hidden;
+        }
+        .friend-sent-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; }
+        .friend-sent-plane { font-size: 32px; animation: popScale 0.4s ease; }
+        .friend-sent-pill {
+            margin-top: 8px;
+            background: var(--surface);
+            border: 1px solid var(--primary);
+            padding: 8px 16px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 13.5px;
+        }
+
+        /* Detalhes, Comentários, Admin & MapLibre Markers */
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .form-group { margin-bottom: 11px; }
+        .form-error {
+            background: rgba(244, 63, 94, 0.16);
+            border: 1px solid var(--bump);
+            color: #fda4af;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12.5px;
+            margin-bottom: 10px;
+        }
+        .detail-hero {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        .detail-meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 12.5px;
+            margin: 10px 0;
+        }
+        .detail-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .attendee-pill {
+            display: inline-block;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            margin: 3px 4px 3px 0;
+        }
+        .comment-item {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 11px;
+            margin-bottom: 7px;
+            font-size: 12.5px;
+        }
+        .comment-item p { margin: 4px 0 0; color: var(--muted); }
+        .admin-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .admin-stat-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 6px;
+            text-align: center;
+        }
+        .admin-stat-card strong { display: block; font-size: 18px; color: var(--primary); }
+        .admin-stat-card span { font-size: 11px; color: var(--muted); }
+        .admin-user-row {
+            padding: 9px 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 7px;
+            font-size: 12.5px;
+        }
+        .admin-user-row span { display: block; font-size: 11.5px; color: var(--muted); }
+        .muted { color: var(--muted); }
+
+        /* Pins MapLibre GL JS (Eventos & Amigos Bump) */
+        .ls-event-marker {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(15, 22, 36, 0.94);
+            color: #f8fafc;
+            border: 2px solid var(--primary);
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
+            transition: transform 0.15s ease;
+        }
+        .ls-event-marker:hover, .ls-event-marker.active {
+            transform: scale(1.14);
+            background: var(--primary);
+            color: #04130d;
+            z-index: 10;
+        }
+        .ls-friend-marker {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid var(--bump);
+            background: var(--surface);
+            box-shadow: 0 8px 22px rgba(244, 63, 94, 0.45);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: #fff;
+            font-size: 15px;
+        }
+        .ls-friend-marker.online { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25); }
+        .ls-friend-marker.business { border-color: #38bdf8; }
+        .ls-friend-marker img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+        .ls-friend-mood-badge {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ls-friend-name-tag {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            background: rgba(8, 12, 20, 0.9);
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+        }
+        .ls-user-pulse {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #38bdf8;
+            border: 3px solid #fff;
+            box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.3);
+        }
+        .maplibregl-popup-content {
+            background: #0f1624 !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(148, 163, 184, 0.25) !important;
+            border-radius: 14px !important;
+            padding: 12px !important;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65) !important;
+            font-family: "Inter", sans-serif !important;
+        }
+        .maplibregl-popup-tip { border-top-color: #0f1624 !important; }
+        .maplibregl-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
     </style>
 </head>
 <body>
 
+    <!-- ==========================================
+         CABEÇALHO PRINCIPAL
+         ========================================== -->
     <header class="header">
-        <div class="logo">📍 LocalSpot <span style="font-size:12px; background:#eef3ff; padding:2px 6px; border-radius:4px;">Bump</span></div>
+        <h1 class="brand">📍 LocalSpot</h1>
         <nav>
-            <button id="tabMapBtn" class="btn-link active">🗺️ Mapa</button>
-            <button id="tabSocialBtn" class="btn-link">👥 Amigos & Chat</button>
-            <button id="authBtn" class="btn-soft">Entrar</button>
+            <button type="button" id="mobileViewToggle" class="btn-soft">🗺️ Ver Mapa</button>
+            <button type="button" id="aboutButton" class="btn-soft">ℹ️ Sobre</button>
+            <button type="button" id="addEventButton" class="btn-primary hidden">+ Novo Evento</button>
+
+            <div class="notif-wrap">
+                <button type="button" id="notifBtn" class="btn-soft hidden" aria-label="Notificações">
+                    🔔 <span id="notifBadge" class="friends-req-badge hidden">0</span>
+                </button>
+                <div id="notifDropdown" class="notif-dropdown hidden">
+                    <div class="notif-head">
+                        <strong>Notificações</strong>
+                        <button type="button" id="markAllReadBtn" class="btn-soft" style="padding:3px 8px; font-size:11px;">Marcar lidas</button>
+                    </div>
+                    <div id="notifList"></div>
+                </div>
+            </div>
+
+            <button type="button" id="adminPanelBtn" class="btn-soft hidden">🛡️ Admin</button>
+            <div id="userBadge" class="user-badge hidden" title="Abrir Perfil"></div>
+            <button type="button" id="logoutButton" class="btn-logout hidden">Sair</button>
         </nav>
     </header>
 
-    <main class="main">
-        <!-- Sidebar -->
+    <!-- ==========================================
+         ÁREA PRINCIPAL: LISTA DE EVENTOS + MAPA 3D
+         ========================================== -->
+    <main id="main" data-view="list">
         <aside class="sidebar">
-            <!-- Vista Social (Amigos/Chat) -->
-            <div id="socialView" class="hidden" style="display:flex; flex-direction:column; height:100%;">
-                <div class="sidebar-content" style="flex:1; overflow-y:auto;">
-                    <h3>Procurar Amigos</h3>
-                    <div style="display:flex; gap:5px;">
-                        <input type="text" id="searchUserInput" placeholder="Username...">
-                        <button id="searchUserBtn" class="btn-soft" style="margin-bottom:10px;">🔍</button>
+            <input type="search" id="searchInput" placeholder="Pesquisar eventos, locais, organizadores...">
+
+            <div class="sidebar-actions-row">
+                <button type="button" id="locationButton" class="btn-soft"><span aria-hidden="true">📍</span> Perto de mim</button>
+                <button type="button" id="exportCsvBtn" class="btn-soft" title="Exportar lista para CSV">📥 CSV</button>
+                <button type="button" id="resetFilters" class="btn-soft" title="Repor filtros">↺ Limpar</button>
+            </div>
+
+            <div id="categoryChips" class="category-chips">
+                <button type="button" class="chip active" data-category="all">Todos</button>
+                <button type="button" class="chip" data-category="Música">🎵 Música</button>
+                <button type="button" class="chip" data-category="Desporto">⚽ Desporto</button>
+                <button type="button" class="chip" data-category="Cultura">🎭 Cultura</button>
+                <button type="button" class="chip" data-category="Gastronomia">🍽️ Gastronomia</button>
+                <button type="button" class="chip" data-category="Festa">🎉 Festa</button>
+                <button type="button" class="chip" data-category="Tecnologia">💻 Tecnologia</button>
+            </div>
+
+            <div class="filters-grid">
+                <div>
+                    <label for="districtFilter">Distrito</label>
+                    <select id="districtFilter">
+                        <option value="all">Todos os distritos</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="periodFilter">Quando</label>
+                    <select id="periodFilter">
+                        <option value="all">Todas as datas</option>
+                        <option value="upcoming">Próximos</option>
+                        <option value="today">Hoje</option>
+                        <option value="week">Esta semana</option>
+                        <option value="past">Terminados</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filters-grid">
+                <div class="radius-box">
+                    <div class="radius-header">
+                        <span>Raio</span>
+                        <strong id="radiusValue">Todo o país</strong>
                     </div>
-                    <div id="searchResults" style="margin-bottom:20px;"></div>
-
-                    <h3>Os Meus Amigos</h3>
-                    <div id="friendsList"></div>
+                    <input type="range" id="radiusSlider" min="5" max="300" step="5" value="300">
+                </div>
+                <div>
+                    <label for="sortFilter">Ordenar por</label>
+                    <select id="sortFilter">
+                        <option value="date">📅 Data mais próxima</option>
+                        <option value="distance">📍 Mais perto de mim</option>
+                        <option value="popular">🔥 Mais populares</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Vista Mapa (Locais) -->
-            <div id="mapView" style="display:flex; flex-direction:column; height:100%;">
-                <div class="sidebar-content">
-                    <h3>Locais Perto de Ti</h3>
-                    <p style="font-size:13px; color:var(--muted);">Clica no mapa para adicionar um local.</p>
-                    <div id="placesList" style="margin-top:15px;"></div>
-                </div>
-                <div class="sidebar-footer">
-                    <button id="ghostModeBtn" class="submit-button" style="background:#6b7380;">👻 Ghost Mode</button>
-                </div>
+            <div class="toggle-pills">
+                <button type="button" id="favoritesToggle" class="toggle-pill">★ Favoritos</button>
+                <button type="button" id="freeOnlyToggle" class="toggle-pill">🎟️ Gratuitos</button>
+                <button type="button" id="followingOnlyToggle" class="toggle-pill">🏛️ A Seguir</button>
             </div>
+
+            <div class="results-bar">
+                <span id="eventCount">0 eventos encontrados</span>
+            </div>
+
+            <div id="emptyState" class="empty-state hidden">
+                <p style="font-size:26px; margin:0 0 6px;">🔍</p>
+                <p style="margin:0; font-size:13px;">Nenhum evento encontrado com estes filtros.</p>
+            </div>
+
+            <div id="eventsList" class="events-list"></div>
         </aside>
 
-        <!-- Mapa -->
         <section class="map-container">
             <div id="map"></div>
+
+            <div class="map-floating-controls">
+                <button type="button" id="mapStyleToggle" class="map-ctrl-btn">🛰️ Satélite 3D</button>
+                <button type="button" id="mapPitchToggle" class="map-ctrl-btn">🧊 Vista 3D</button>
+            </div>
+
+            <div id="pickBanner" class="pick-banner hidden">
+                <strong style="font-size:13px; color:var(--primary);">📍 Clica no mapa para marcar a localização do evento</strong>
+                <div class="pick-banner-row">
+                    <input type="text" id="pickSearchInput" placeholder="Ou pesquisa uma morada em Portugal...">
+                    <button type="button" id="pickSearchBtn" class="btn-primary-sm">Procurar</button>
+                    <button type="button" id="cancelPickButton" class="btn-logout">Cancelar</button>
+                </div>
+            </div>
         </section>
     </main>
 
-    <!-- Modal de Autenticação -->
-    <div id="authModal" class="modal hidden">
-        <div class="modal-content">
-            <button class="close-button" onclick="document.getElementById('authModal').classList.add('hidden')">×</button>
-            <h2 id="authTitle">Entrar</h2>
-            <form id="authForm">
-                <input type="text" id="authUsername" placeholder="Username (só no registo)" class="hidden">
-                <input type="email" id="authEmail" placeholder="Email" required>
-                <input type="password" id="authPassword" placeholder="Palavra-passe" required>
-                <button type="submit" id="authSubmitBtn" class="submit-button">Entrar</button>
+    <!-- ==========================================
+         OVERLAY DE AUTENTICAÇÃO (LOGIN / REGISTO)
+         ========================================== -->
+    <div id="authOverlay" class="auth-overlay hidden">
+        <div class="auth-card">
+            <div style="text-align:center; margin-bottom:16px;">
+                <h2 style="margin:0 0 4px; font-size:24px;">📍 LocalSpot</h2>
+                <p style="margin:0; font-size:13px; color:var(--muted);">Descobre eventos locais, faz Bump com amigos e explora o mapa ao vivo.</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
+                <button type="button" id="tabRegister" class="auth-tab">Criar Conta</button>
+            </div>
+
+            <form id="loginForm">
+                <div id="loginError" class="form-error hidden"></div>
+                <div class="form-group">
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="o.teu@email.pt" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Palavra-passe</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required>
+                </div>
+                <button type="submit" id="loginSubmitBtn" class="btn-primary" style="width:100%; padding:11px;">Entrar no LocalSpot</button>
             </form>
-            <p style="text-align:center; margin-top:10px; font-size:14px;">
-                <a href="#" id="toggleAuth" style="color:var(--primary);">Criar conta</a>
+
+            <form id="registerForm" class="hidden">
+                <div id="registerError" class="form-error hidden"></div>
+                <div class="form-group">
+                    <label for="regAccountType">Tipo de Conta</label>
+                    <select id="regAccountType">
+                        <option value="user">👤 Conta Pessoal (Utilizador)</option>
+                        <option value="business">🏛️ Empresa / Entidade / Município</option>
+                    </select>
+                </div>
+                <div id="businessTypeGroup" class="form-group hidden">
+                    <label for="regBusinessType">Setor da Entidade</label>
+                    <select id="regBusinessType">
+                        <option value="Câmara Municipal / Junta">🏛️ Câmara Municipal / Junta</option>
+                        <option value="Associação / Coletividade">🤝 Associação / Coletividade</option>
+                        <option value="Restauração / Café">🍽️ Restauração / Café</option>
+                        <option value="Cultura / Espetáculos">🎭 Cultura / Espetáculos</option>
+                        <option value="Desporto / Ginásio">🏟️ Desporto / Ginásio</option>
+                        <option value="Empresa / Comércio">🏢 Empresa / Comércio</option>
+                        <option value="Educação / Universidade">🎓 Educação / Universidade</option>
+                        <option value="Serviços / Instituição">💼 Serviços / Instituição</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label id="regNameLabel" for="regName">Nome completo *</label>
+                    <input type="text" id="regName" placeholder="Ex: João Silva" required>
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">E-mail *</label>
+                    <input type="email" id="regEmail" placeholder="o.teu@email.pt" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Palavra-passe (mín. 6 caracteres) *</label>
+                    <input type="password" id="regPassword" minlength="6" placeholder="••••••••" required>
+                </div>
+                <button type="submit" id="registerSubmitBtn" class="btn-primary" style="width:100%; padding:11px;">Criar Perfil</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL CRIAR / EDITAR EVENTO
+         ========================================== -->
+    <div id="eventModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">&times;</button>
+            <h2 id="eventModalTitle" style="margin:0 0 14px;">Novo Evento</h2>
+
+            <form id="eventForm">
+                <div id="formError" class="form-error hidden"></div>
+
+                <div class="form-group">
+                    <label for="eventName">Nome do Evento *</label>
+                    <input type="text" id="eventName" placeholder="Ex: Concerto ao Pôr do Sol" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="eventCategory">Categoria *</label>
+                        <select id="eventCategory" required>
+                            <option value="Música">🎵 Música</option>
+                            <option value="Desporto">⚽ Desporto</option>
+                            <option value="Cultura">🎭 Cultura</option>
+                            <option value="Gastronomia">🍽️ Gastronomia</option>
+                            <option value="Festa">🎉 Festa</option>
+                            <option value="Tecnologia">💻 Tecnologia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="eventDistrito">Distrito *</label>
+                        <select id="eventDistrito" required></select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="eventDate">Data *</label>
+                        <input type="date" id="eventDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="eventTime">Hora *</label>
+                        <input type="time" id="eventTime" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="eventLocation">Local / Morada *</label>
+                    <input type="text" id="eventLocation" placeholder="Ex: Parque Verde da Cidade" required>
+                </div>
+
+                <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--surface-2); padding:9px 12px; border-radius:10px; border:1px solid var(--border);">
+                    <span id="selectedCoordinates" style="font-size:12px; color:var(--muted);">Localização ainda não selecionada</span>
+                    <button type="button" id="changeLocationButton" class="btn-soft">📍 Escolher no Mapa</button>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="eventMaxParticipants">Lotação Máxima (opcional)</label>
+                        <input type="number" id="eventMaxParticipants" min="1" placeholder="Ex: 150">
+                    </div>
+                    <div class="form-group">
+                        <label for="eventPrice">Preço</label>
+                        <input type="text" id="eventPrice" value="Gratuito" placeholder="Ex: Gratuito ou 10€">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="eventExternalUrl">Link de Bilhetes / Website (opcional)</label>
+                    <input type="url" id="eventExternalUrl" placeholder="https://...">
+                </div>
+
+                <div class="form-group">
+                    <label for="eventDescription">Descrição</label>
+                    <textarea id="eventDescription" rows="3" placeholder="Detalhes sobre o programa, acesso, etc."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="eventImage">Imagem de Capa (opcional)</label>
+                    <input type="file" id="eventImage" accept="image/*">
+                    <img id="imagePreview" class="hidden" alt="Pré-visualização" style="width:100%; height:130px; object-fit:cover; border-radius:10px; margin-top:8px;">
+                </div>
+
+                <button type="submit" id="submitEventBtn" class="btn-primary" style="width:100%; padding:11px;">Publicar Evento</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL DETALHES DO EVENTO
+         ========================================== -->
+    <div id="detailModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="max-width:560px;">
+            <button type="button" id="closeDetail" class="close-button" aria-label="Fechar">&times;</button>
+            <img id="detailHeroImg" class="detail-hero" src="" alt="">
+
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+                <span id="detailCategory" class="chip active"></span>
+                <span id="detailPrice" class="chip"></span>
+                <span id="detailRatingBadge" class="chip hidden"></span>
+            </div>
+
+            <h2 id="detailTitle" style="margin:4px 0 6px;"></h2>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                <span id="detailOrganizer" class="muted" style="font-size:13px;"></span>
+                <button type="button" id="detailFollowBtn" class="btn-soft hidden">+ Seguir</button>
+            </div>
+
+            <p id="detailDescription" style="font-size:13.5px; line-height:1.5; color:var(--text);"></p>
+
+            <div class="detail-meta-grid">
+                <div><strong>📅 Data & Hora</strong><div id="detailDateTime" class="muted"></div></div>
+                <div><strong>📍 Local</strong><div id="detailLocation" class="muted"></div></div>
+                <div><strong>👥 Participantes</strong><div id="detailCapacity" class="muted"></div></div>
+                <div><strong>🔗 Website</strong><div><a id="detailExternalLink" href="#" target="_blank" class="hidden" style="color:var(--primary);">Abrir link externo ↗</a></div></div>
+            </div>
+
+            <div class="detail-actions">
+                <button type="button" id="detailRegisterBtn" class="register-btn">Inscrever-me</button>
+                <button type="button" id="detailTicketBtn" class="btn-soft hidden">🎟️ Bilhete QR</button>
+                <button type="button" id="detailFavBtn" class="btn-soft">☆ Guardar</button>
+                <a id="detailDirectionsBtn" href="#" target="_blank" class="btn-soft" style="text-decoration:none;">🧭 Como chegar</a>
+                <button type="button" id="detailCalendarBtn" class="btn-soft">📅 .ICS</button>
+                <button type="button" id="detailShareBtn" class="btn-soft">🔗 Partilhar</button>
+                <button type="button" id="detailReportBtn" class="btn-logout">🚩</button>
+            </div>
+
+            <div id="detailOwnerBar" class="owner-card-bar hidden" style="margin-bottom:12px;">
+                <button type="button" id="detailEditBtn" class="edit-btn">✏️ Editar Evento</button>
+                <button type="button" id="detailDeleteBtn" class="delete-btn">🗑️ Eliminar Evento</button>
+            </div>
+
+            <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
+            <h4 style="margin:0 0 8px; font-size:13.5px;">👥 Inscritos</h4>
+            <div id="detailAttendeesList" style="margin-bottom:14px;"></div>
+
+            <h4 style="margin:0 0 8px; font-size:13.5px;">💬 Comentários</h4>
+            <div id="detailCommentsList" style="margin-bottom:8px;"></div>
+            <form id="commentForm" style="display:flex; gap:8px; margin-bottom:14px;">
+                <input type="text" id="commentInput" placeholder="Escreve uma dúvida ou comentário..." required>
+                <button type="submit" class="btn-primary-sm">Enviar</button>
+            </form>
+
+            <h4 style="margin:0 0 8px; font-size:13.5px;">⭐ Avaliações</h4>
+            <div id="detailReviewsList" style="margin-bottom:8px;"></div>
+            <form id="reviewForm" class="hidden" style="display:flex; gap:8px;">
+                <select id="reviewRating" style="width:95px;">
+                    <option value="5">⭐⭐⭐⭐⭐</option>
+                    <option value="4">⭐⭐⭐⭐</option>
+                    <option value="3">⭐⭐⭐</option>
+                    <option value="2">⭐⭐</option>
+                    <option value="1">⭐</option>
+                </select>
+                <input type="text" id="reviewComment" placeholder="Deixa a tua avaliação...">
+                <button type="submit" class="btn-primary-sm">Avaliar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL BILHETE QR
+         ========================================== -->
+    <div id="ticketModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="max-width:360px; text-align:center;">
+            <button type="button" id="closeTicket" class="close-button" aria-label="Fechar">&times;</button>
+            <h3 id="ticketEventTitle" style="margin:0 0 6px;"></h3>
+            <p id="ticketEventMeta" class="muted" style="font-size:12.5px; margin:0 0 14px;"></p>
+            <img id="ticketQrImage" src="" alt="Bilhete QR" style="width:200px; height:200px; border-radius:12px; background:#fff; padding:8px;">
+            <p id="ticketCodeText" style="font-family:monospace; font-weight:800; color:var(--primary); margin:10px 0 4px;"></p>
+            <p id="ticketHolderName" class="muted" style="font-size:12.5px; margin:0;"></p>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL DENÚNCIA
+         ========================================== -->
+    <div id="reportModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="max-width:400px;">
+            <button type="button" id="closeReport" class="close-button" aria-label="Fechar">&times;</button>
+            <h3 style="margin:0 0 6px;">🚩 Denunciar Evento</h3>
+            <p id="reportEventName" class="muted" style="font-size:13px; margin:0 0 12px;"></p>
+            <form id="reportForm">
+                <div class="form-group">
+                    <label for="reportReason">Motivo</label>
+                    <select id="reportReason">
+                        <option value="Informação falsa">Informação falsa ou enganosa</option>
+                        <option value="Spam">Spam ou publicidade indevida</option>
+                        <option value="Conteúdo impróprio">Conteúdo impróprio</option>
+                        <option value="Evento cancelado">Evento já cancelado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reportDetails">Detalhes adicionais</label>
+                    <textarea id="reportDetails" rows="3" placeholder="Explica brevemente o problema..."></textarea>
+                </div>
+                <button type="submit" class="btn-bump" style="width:100%; padding:10px;">Enviar Denúncia</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL PERFIL DO UTILIZADOR
+         ========================================== -->
+    <div id="profileModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" id="closeProfile" class="close-button" aria-label="Fechar">&times;</button>
+            <h2 style="margin:0 0 2px;">O Meu Perfil</h2>
+            <p id="profileEmailDisplay" class="muted" style="font-size:12.5px; margin:0 0 14px;"></p>
+
+            <div class="profile-edit-box" style="margin-bottom:16px;">
+                <form id="profileUpdateForm">
+                    <div class="form-group">
+                        <label for="profileNameInput">Nome</label>
+                        <input type="text" id="profileNameInput" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="profileBioInput">Bio / Descrição</label>
+                        <input type="text" id="profileBioInput" maxlength="120" placeholder="Uma frase sobre ti...">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width:100%;">Guardar Perfil</button>
+                </form>
+            </div>
+
+            <div class="auth-tabs three-cols">
+                <button type="button" id="tabMyEnrollments" class="auth-tab active">Inscrições</button>
+                <button type="button" id="tabMyCreated" class="auth-tab">Criados</button>
+                <button type="button" id="tabMyFollowing" class="auth-tab">A Seguir</button>
+            </div>
+
+            <div id="profileEnrolledList" class="profile-events-list"></div>
+            <div id="profileCreatedList" class="profile-events-list hidden"></div>
+            <div id="profileFollowingList" class="profile-events-list hidden"></div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL ADMIN
+         ========================================== -->
+    <div id="adminModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">&times;</button>
+            <h2 style="margin:0 0 12px;">🛡️ Painel de Administração</h2>
+            <div id="adminStatsGrid" class="admin-stats-grid"></div>
+            <div id="adminUsersList"></div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL SOBRE
+         ========================================== -->
+    <div id="aboutModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content" style="max-width:440px;">
+            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">&times;</button>
+            <h2 style="margin:0 0 8px;">📍 Sobre o LocalSpot</h2>
+            <p style="font-size:13.5px; line-height:1.55; color:var(--muted);">
+                O <strong>LocalSpot</strong> liga a tua comunidade local em tempo real: descobre eventos perto de ti, cria iniciativas próprias, partilha a tua localização com amigos ao estilo <strong>Bump</strong>, deteta <em>Hangouts</em> espontâneos e conversa em direto.
             </p>
         </div>
     </div>
 
-    <!-- Modal de Chat -->
-    <div id="chatModal" class="modal hidden">
-        <div class="modal-content">
-            <button class="close-button" onclick="document.getElementById('chatModal').classList.add('hidden')">×</button>
-            <h2 id="chatTitle">Chat</h2>
-            <div id="chatMessages"></div>
-            <form id="chatForm" style="display:flex; gap:5px;">
-                <input type="text" id="chatInput" placeholder="Mensagem..." style="margin:0;">
-                <button type="submit" class="btn-soft">Enviar</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- SDKs -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-
-    <script>
-        // ==========================================
-        // CONFIGURAÇÃO - SUBSTITUI AQUI!
-        // ==========================================
-        const SUPABASE_URL = 'https://O_TEU_PROJETO.supabase.co';
-        const SUPABASE_ANON_KEY = 'A_TUA_ANON_KEY';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // ==========================================
-        // ESTADO GLOBAL
-        // ==========================================
-        let currentUser = null;
-        let userPosition = null;
-        let currentChatRoomId = null;
-        let isRegisterMode = false;
-        const $ = id => document.getElementById(id);
-
-        // ==========================================
-        // INICIALIZAÇÃO DO MAPA (SATÉLITE)
-        // ==========================================
-        const map = new maplibregl.Map({
-            container: 'map',
-            style: {
-                version: 8,
-                sources: {
-                    satellite: {
-                        type: 'raster',
-                        tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'],
-                        tileSize: 256
-                    }
-                },
-                layers: [{ id: 'satellite', type: 'raster', source: 'satellite' }]
-            },
-            center: [-8.0, 39.6],
-            zoom: 6
-        });
-        map.addControl(new maplibregl.NavigationControl());
-
-        // Marcador do Utilizador
-        const userMarker = new maplibregl.Marker({ color: '#2563eb' }).setLngLat([-8.0, 39.6]).addTo(map);
-
-        // Adicionar Local ao clicar no mapa
-        map.on('click', async (e) => {
-            if (!currentUser) return alert("Faz login para adicionar locais.");
-            const lat = e.lngLat.lat;
-            const lng = e.lngLat.lng;
-            
-            new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
-            
-            const { error } = await supabase.from('places').insert({
-                name: `Local (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
-                latitude: lat,
-                longitude: lng,
-                created_by: currentUser.id
-            });
-            if (error) alert("Erro ao guardar local: " + error.message);
-            else loadPlaces();
-        });
-
-        // ==========================================
-        // AUTENTICAÇÃO
-        // ==========================================
-        $("authBtn").addEventListener("click", () => $("authModal").classList.remove("hidden"));
-        $("toggleAuth").addEventListener("click", (e) => {
-            e.preventDefault();
-            isRegisterMode = !isRegisterMode;
-            $("authTitle").textContent = isRegisterMode ? "Criar Conta" : "Entrar";
-            $("authUsername").classList.toggle("hidden", !isRegisterMode);
-            $("authSubmitBtn").textContent = isRegisterMode ? "Registar" : "Entrar";
-        });
-
-        $("authForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const email = $("authEmail").value;
-            const pass = $("authPassword").value;
-            
-            if (isRegisterMode) {
-                const { error } = await supabase.auth.signUp({ 
-                    email, 
-                    password: pass, 
-                    options: { data: { username: $("authUsername").value } } 
-                });
-                if (error) alert(error.message); 
-                else { alert("Registado! Já podes entrar."); $("toggleAuth").click(); }
-            } else {
-                const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-                if (error) alert(error.message); 
-                else { 
-                    currentUser = data.user; 
-                    $("authBtn").textContent = "Sair"; 
-                    $("authBtn").onclick = async () => { await supabase.auth.signOut(); location.reload(); };
-                    $("authModal").classList.add("hidden"); 
-                    loadFriends();
-                    loadPlaces();
-                }
-            }
-        });
-
-        // ==========================================
-        // FUNÇÕES BUMP: AMIGOS E CHAT
-        // ==========================================
-        async function loadFriends() {
-            if (!currentUser) return;
-            const { data } = await supabase.from('friends')
-                .select('friend_id, profiles:friend_id(username)')
-                .eq('user_id', currentUser.id);
-            
-            if (data) {
-                $("friendsList").innerHTML = data.map(f => `
-                    <div class="friend-item">
-                        <span>👤 ${f.profiles.username}</span>
-                        <button class="btn-soft" onclick="openChat('${f.friend_id}')">💬</button>
-                    </div>
-                `).join("") || "<p style='font-size:13px; color:#666;'>Ainda não tens amigos.</p>";
-            }
-        }
-
-        $("searchUserBtn").addEventListener("click", async () => {
-            const q = $("searchUserInput").value;
-            if (!q || !currentUser) return;
-            const { data } = await supabase.from('profiles')
-                .select('id, username')
-                .ilike('username', `%${q}%`)
-                .neq('id', currentUser.id);
-            
-            if (data) {
-                $("searchResults").innerHTML = data.map(u => `
-                    <div class="friend-item">
-                        <span>${u.username}</span>
-                        <button class="btn-soft" onclick="addFriend('${u.id}')">Adicionar</button>
-                    </div>
-                `).join("");
-            }
-        });
-
-        window.addFriend = async (friendId) => {
-            await supabase.from('friends').insert({ user_id: currentUser.id, friend_id: friendId });
-            await supabase.from('friends').insert({ user_id: friendId, friend_id: currentUser.id });
-            alert("Amigo adicionado!");
-            loadFriends();
-            $("searchResults").innerHTML = "";
-        };
-
-        // CHAT
-        window.openChat = async (friendId) => {
-            // Verificar ou criar sala
-            let { data: room } = await supabase.from('chat_rooms').select('id').limit(1).maybeSingle();
-            // Simplificação: cria sempre nova sala para teste
-            const { data: newRoom } = await supabase.from('chat_rooms').insert({}).select().single();
-            await supabase.from('chat_participants').insert([
-                { room_id: newRoom.id, user_id: currentUser.id },
-                { room_id: newRoom.id, user_id: friendId }
-            ]);
-            currentChatRoomId = newRoom.id;
-            $("chatModal").classList.remove("hidden");
-            loadMessages();
-        };
-
-        async function loadMessages() {
-            if (!currentChatRoomId) return;
-            const { data } = await supabase.from('chat_messages')
-                .select('*, profiles:sender_id(username)')
-                .eq('room_id', currentChatRoomId)
-                .order('created_at');
-            
-            if (data) {
-                $("chatMessages").innerHTML = data.map(m => `
-                    <div class="msg ${m.sender_id === currentUser.id ? 'me' : 'other'}">
-                        <strong>${m.profiles.username}</strong><br>${m.content}
-                    </div>
-                `).join("");
-                $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
-            }
-        }
-
-        $("chatForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const content = $("chatInput").value;
-            if (!content || !currentChatRoomId) return;
-            await supabase.from('chat_messages').insert({
-                room_id: currentChatRoomId,
-                sender_id: currentUser.id,
-                content: content
-            });
-            $("chatInput").value = "";
-            loadMessages();
-        });
-
-        // ==========================================
-        // FUNÇÕES DE LOCALIZAÇÃO E LOCAIS
-        // ==========================================
-        async function loadPlaces() {
-            const { data } = await supabase.from('places').select('*');
-            if (data) {
-                $("placesList").innerHTML = data.map(p => `
-                    <div style="padding:10px; border-bottom:1px solid #eee; font-size:14px;">
-                        📍 ${p.name}
-                    </div>
-                `).join("");
-            }
-        }
-
-        async function updateLocation() {
-            if (!navigator.geolocation || !currentUser) return;
-            navigator.geolocation.watchPosition(async (pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                userPosition = { lat, lng };
-                userMarker.setLngLat([lng, lat]);
-                
-                await supabase.from('profiles').update({ latitude: lat, longitude: lng, last_seen: new Date() }).eq('id', currentUser.id);
-            }, (err) => console.error(err), { enableHighAccuracy: true });
-        }
-
-        $("ghostModeBtn").addEventListener("click", async () => {
-            if (!currentUser) return alert("Faz login.");
-            const { data } = await supabase.from('profiles').select('ghost_mode').eq('id', currentUser.id).single();
-            const newMode = !data.ghost_mode;
-            await supabase.from('profiles').update({ ghost_mode: newMode }).eq('id', currentUser.id);
-            alert(`Ghost Mode: ${newMode ? 'Ligado (invisível)' : 'Desligado (visível)'}`);
-        });
-
-        // ==========================================
-        // TABS (Navegação)
-        // ==========================================
-        $("tabMapBtn").addEventListener("click", () => {
-            $("mapView").classList.remove("hidden");
-            $("socialView").classList.add("hidden");
-            $("tabMapBtn").classList.add("active");
-            $("tabSocialBtn").classList.remove("active");
-        });
-        $("tabSocialBtn").addEventListener("click", () => {
-            if (!currentUser) return alert("Faz login para ver Amigos.");
-            $("mapView").classList.add("hidden");
-            $("socialView").classList.remove("hidden");
-            $("tabSocialBtn").classList.add("active");
-            $("tabMapBtn").classList.remove("active");
-            loadFriends();
-        });
-
-        // ==========================================
-        // ARRANQUE
-        // ==========================================
-        async function init() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                $("authBtn").textContent = "Sair";
-                $("authBtn").onclick = async () => { await supabase.auth.signOut(); location.reload(); };
-                loadFriends();
-                loadPlaces();
-                updateLocation();
-            } else {
-                // Tentar obter localização só para mostrar o mapa
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(pos => {
-                        map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 12 });
-                        userMarker.setLngLat([pos.coords.longitude, pos.coords.latitude]);
-                    });
-                }
-            }
-        }
-
-        init();
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="events.php"></script>
+    <script src="map.php"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
