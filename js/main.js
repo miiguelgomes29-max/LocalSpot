@@ -28,37 +28,55 @@ const aboutModal = $("aboutModal");
 const pickBanner = $("pickBanner");
 const mainEl = $("main");
 
-const STORAGE_EVENTS = "localspot_events";
-const STORAGE_FAVS = "localspot_favorites";
+// Elementos de Autenticação
+const authModal = $("authModal");
+const authForm = $("authForm");
+const authError = $("authError");
+const toggleAuthMode = $("toggleAuthMode");
+const usernameField = $("usernameField");
+const authTitle = $("authTitle");
+const authSubmitBtn = $("authSubmitBtn");
 
-// ---------- Armazenamento seguro ----------
-function loadJSON(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-    } catch (e) {
-        return fallback;
-    }
-}
-
-function saveJSON(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
+// Elementos de Detalhes
+const detailsModal = $("detailsModal");
+const detailsImage = $("detailsImage");
+const detailsTitle = $("detailsTitle");
+const detailsMeta = $("detailsMeta");
+const detailsDesc = $("detailsDesc");
+const detailsLikeBtn = $("detailsLikeBtn");
+const detailsLikeCount = $("detailsLikeCount");
+const detailsCheckinBtn = $("detailsCheckinBtn");
+const commentsList = $("commentsList");
+const commentForm = $("commentForm");
+const commentInput = $("commentInput");
 
 // ---------- Estado ----------
 const state = { search: "", category: "all", district: "all", period: "all", sort: "date", onlyFavorites: false };
-let favorites = new Set(loadJSON(STORAGE_FAVS, []));
+let favorites = new Set();
 let activeId = null;
 let pendingLocation = null;
 let currentList = [];
+let currentUser = null;
+let currentDetailsEventId = null;
+let isRegisterMode = false;
 
-// Eventos criados pelo utilizador
-loadJSON(STORAGE_EVENTS, []).forEach(ev => events.push(ev));
+// ---------- Inicialização Assíncrona ----------
+async function init() {
+    setupControls();
+    
+    // Verificar sessão atual
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+        currentUser = session.user;
+        updateAuthUI(true);
+        favorites = await dbLoadFavorites();
+    }
+
+    // Carregar eventos da BD
+    events = await dbLoadEvents();
+    
+    filterEvents({ fit: true });
+}
 
 // ---------- Mensagens (toast) ----------
 let toastTimer;
@@ -130,7 +148,7 @@ function getFilteredEvents() {
         const haystack = normalizeText(`${ev.name} ${ev.location} ${ev.description || ""}`);
         return (!q || haystack.includes(q)) &&
             (state.category === "all" || ev.category === state.category) &&
-            (state.district === "all" || ev.distrito === state.district) &&
+            (state.district === "all" || ev.district === state.district) &&
             matchesPeriod(ev) &&
             (!state.onlyFavorites || favorites.has(ev.id));
     });
@@ -173,7 +191,7 @@ function displayEvents(list) {
         card.dataset.id = ev.id;
         card.tabIndex = 0;
         card.setAttribute("role", "button");
-        card.setAttribute("aria-label", `${ev.name}, ver no mapa`);
+        card.setAttribute("aria-label", `${ev.name}, ver detalhes`);
 
         card.innerHTML = `
             <div class="event-image-wrap">
@@ -189,8 +207,8 @@ function displayEvents(list) {
             </div>
             <h4>${escapeHTML(ev.name)}</h4>
             <p>📅 ${escapeHTML(formatEventDate(ev))}</p>
-            <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.distrito))}</p>
-            ${ev.custom ? `<button type="button" class="delete-btn" data-action="delete">🗑 Apagar evento</button>` : ""}
+            <p>📍 ${escapeHTML(ev.location)} · ${escapeHTML(districtLabel(ev.district))}</p>
+            ${ev.custom && currentUser && ev.created_by === currentUser.id ? `<button type="button" class="delete-btn" data-action="delete">🗑 Apagar evento</button>` : ""}
         `;
         frag.appendChild(card);
     });
@@ -201,62 +219,124 @@ function displayEvents(list) {
 function setActive(id, scroll = true) {
     activeId = id;
     eventsList.querySelectorAll(".event-card").forEach(c => {
-        const on = Number(c.dataset.id) === id;
+        const on = String(c.dataset.id) === String(id);
         c.classList.toggle("active", on);
         if (on && scroll) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
 }
 
-function openEventOnMap(id) {
-    setActive(id, false);
-    setView("map");
-    focusEvent(id);
-}
-
+// Ao clicar no card, abre os detalhes
 eventsList.addEventListener("click", e => {
     const card = e.target.closest(".event-card");
     if (!card) return;
-    const id = Number(card.dataset.id);
+    const id = card.dataset.id;
     const action = e.target.closest("[data-action]")?.dataset.action;
 
     if (action === "fav") {
-        toggleFavorite(id);
+        e.stopPropagation();
+        handleToggleFav(id);
     } else if (action === "delete") {
-        deleteEvent(id);
+        e.stopPropagation();
+        handleDeleteEvent(id);
     } else {
-        openEventOnMap(id);
+        openEventDetails(id);
     }
 });
 
-eventsList.addEventListener("keydown", e => {
-    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("event-card")) {
-        e.preventDefault();
-        openEventOnMap(Number(e.target.dataset.id));
+// ---------- Favoritos e Deleção ----------
+async function handleToggleFav(id) {
+    if (!currentUser) {
+        showToast("Inicia sessão para guardar favoritos.", "error");
+        openAuthModal();
+        return;
     }
-});
-
-window.onEventMarkerClick = id => setActive(id, true);
-
-function toggleFavorite(id) {
-    if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
-    saveJSON(STORAGE_FAVS, [...favorites]);
-    filterEvents();
+    try {
+        const isFav = await dbToggleFavorite(id);
+        if (isFav) favorites.add(id); else favorites.delete(id);
+        filterEvents();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
 }
 
-function deleteEvent(id) {
+async function handleDeleteEvent(id) {
     const ev = events.find(x => x.id === id);
     if (!ev || !confirm(`Apagar o evento "${ev.name}"?`)) return;
-    events.splice(events.indexOf(ev), 1);
-    favorites.delete(id);
-    saveJSON(STORAGE_FAVS, [...favorites]);
-    persistCustomEvents();
-    filterEvents();
-    showToast("Evento apagado.");
+    
+    try {
+        await dbDeleteEvent(id);
+        events = events.filter(e => e.id !== id);
+        filterEvents();
+        showToast("Evento apagado.", "success");
+    } catch (err) {
+        showToast("Erro ao apagar: " + err.message, "error");
+    }
 }
 
-function persistCustomEvents() {
-    return saveJSON(STORAGE_EVENTS, events.filter(e => e.custom));
+// ---------- Detalhes do Evento (Bump-style) ----------
+async function openEventDetails(id) {
+    currentDetailsEventId = id;
+    const ev = events.find(e => e.id === id);
+    if (!ev) return;
+
+    detailsImage.src = ev.image || DEFAULT_IMAGE;
+    detailsImage.style.display = 'block';
+    detailsTitle.textContent = ev.name;
+    detailsMeta.textContent = `📅 ${formatEventDate(ev)} · 📍 ${ev.location} (${districtLabel(ev.district)})`;
+    detailsDesc.textContent = ev.description || "Sem descrição.";
+    
+    openModal(detailsModal);
+    await refreshEventDetails();
 }
+
+async function refreshEventDetails() {
+    if (!currentDetailsEventId) return;
+    
+    const { likeCount, hasLiked, comments } = await dbGetEventDetails(currentDetailsEventId);
+    
+    detailsLikeCount.textContent = likeCount;
+    detailsLikeBtn.style.color = hasLiked ? 'var(--danger)' : 'var(--primary)';
+    
+    commentsList.innerHTML = comments.map(c => `
+        <div style="border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px;">
+            <strong>${escapeHTML(c.profiles?.username || "Utilizador")}</strong>: ${escapeHTML(c.content)}
+        </div>
+    `).join("") || '<p class="muted" style="font-size:13px;">Ainda não há comentários.</p>';
+}
+
+detailsLikeBtn.addEventListener('click', async () => {
+    if (!currentUser) return openAuthModal();
+    try {
+        await dbToggleLike(currentDetailsEventId);
+        await refreshEventDetails();
+    } catch (err) { showToast(err.message, "error"); }
+});
+
+detailsCheckinBtn.addEventListener('click', async () => {
+    if (!currentUser) return openAuthModal();
+    try {
+        await dbCheckIn(currentDetailsEventId);
+        showToast("Check-in realizado com sucesso!", "success");
+    } catch (err) { showToast("Erro no check-in: " + err.message, "error"); }
+});
+
+commentForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser) return openAuthModal();
+    const txt = commentInput.value.trim();
+    if (!txt) return;
+    try {
+        await dbAddComment(currentDetailsEventId, txt);
+        commentInput.value = "";
+        await refreshEventDetails();
+    } catch (err) { showToast(err.message, "error"); }
+});
+
+$("closeDetails").addEventListener('click', () => {
+    detailsModal.classList.add("hidden");
+    detailsModal.setAttribute("aria-hidden", "true");
+    currentDetailsEventId = null;
+});
 
 // ---------- Listeners de filtros ----------
 let searchTimer;
@@ -295,6 +375,7 @@ sortFilter.addEventListener("change", async () => {
 });
 
 favoritesToggle.addEventListener("click", () => {
+    if (!currentUser) return openAuthModal();
     state.onlyFavorites = !state.onlyFavorites;
     favoritesToggle.setAttribute("aria-pressed", state.onlyFavorites);
     favoritesToggle.classList.toggle("on", state.onlyFavorites);
@@ -350,7 +431,7 @@ function setView(view) {
 $("tabList").addEventListener("click", () => setView("list"));
 $("tabMap").addEventListener("click", () => setView("map"));
 
-// ---------- Modais ----------
+// ---------- Modais Genéricos ----------
 function openModal(el) {
     el.classList.remove("hidden");
     el.setAttribute("aria-hidden", "false");
@@ -382,22 +463,6 @@ $("closeAbout").addEventListener("click", () => {
     aboutModal.classList.add("hidden");
     aboutModal.setAttribute("aria-hidden", "true");
 });
-aboutModal.addEventListener("mousedown", e => {
-    if (e.target === aboutModal) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
-});
-
-document.addEventListener("keydown", e => {
-    if (e.key !== "Escape") return;
-    if (!modal.classList.contains("hidden")) { closeEventModal(); resetEventForm(); }
-    else if (!aboutModal.classList.contains("hidden")) {
-        aboutModal.classList.add("hidden");
-        aboutModal.setAttribute("aria-hidden", "true");
-    }
-    else if (!pickBanner.classList.contains("hidden")) stopPicking();
-});
 
 // ---------- Adicionar evento ----------
 function startPicking() {
@@ -422,6 +487,7 @@ function stopPicking() {
 }
 
 addEventButton.addEventListener("click", () => {
+    if (!currentUser) return openAuthModal();
     if (pendingLocation) openModal(modal); else startPicking();
 });
 changeLocationButton.addEventListener("click", startPicking);
@@ -430,34 +496,12 @@ $("cancelPick").addEventListener("click", () => {
     if (pendingLocation) openModal(modal);
 });
 
-// Pré-visualização da imagem
 eventImageInput.addEventListener("change", () => {
     const file = eventImageInput.files[0];
     if (!file) { imagePreview.classList.add("hidden"); return; }
     imagePreview.src = URL.createObjectURL(file);
     imagePreview.classList.remove("hidden");
 });
-
-function resizeImage(file, maxSize = 800) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
-        reader.onload = () => {
-            const img = new Image();
-            img.onerror = () => reject(new Error("Ficheiro de imagem inválido."));
-            img.onload = () => {
-                const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-                const canvas = document.createElement("canvas");
-                canvas.width = Math.round(img.width * scale);
-                canvas.height = Math.round(img.height * scale);
-                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.78));
-            };
-            img.src = reader.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
 
 function showFormError(message) {
     formError.textContent = message;
@@ -467,56 +511,134 @@ function showFormError(message) {
 eventForm.addEventListener("submit", async e => {
     e.preventDefault();
     formError.classList.add("hidden");
+    const submitBtn = $("submitEventBtn");
 
     if (!pendingLocation) {
-        showFormError("Escolhe primeiro a localização no mapa (botão «Alterar no mapa»).");
-        return;
+        return showFormError("Escolhe primeiro a localização no mapa (botão «Alterar no mapa»).");
     }
     if (!eventForm.checkValidity()) {
         eventForm.reportValidity();
         return;
     }
 
-    let image = DEFAULT_IMAGE;
-    const file = eventImageInput.files[0];
-    if (file) {
-        try {
-            image = await resizeImage(file);
-        } catch (err) {
-            showFormError(err.message);
-            return;
-        }
+    submitBtn.disabled = true;
+    submitBtn.textContent = "A publicar...";
+
+    try {
+        const eventData = {
+            name: $("eventName").value.trim(),
+            description: $("eventDescription").value.trim(),
+            category: $("eventCategory").value,
+            date: $("eventDate").value,
+            time: $("eventTime").value,
+            location: $("eventLocation").value.trim(),
+            distrito: $("eventFormDistrict").value,
+            latitude: pendingLocation.lat,
+            longitude: pendingLocation.lng
+        };
+
+        const newEvent = await dbCreateEvent(eventData, eventImageInput.files[0]);
+        
+        // Recarregar eventos da BD para garantir consistência
+        events = await dbLoadEvents();
+        
+        closeEventModal();
+        resetEventForm();
+        filterEvents();
+        
+        if (!getFilteredEvents().some(ev => ev.id === newEvent.id)) resetFiltersBtn.click();
+        
+        showToast("Evento adicionado com sucesso!", "success");
+    } catch (err) {
+        showFormError(err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Publicar evento";
     }
+});
 
-    const newEvent = {
-        id: Date.now(),
-        name: $("eventName").value.trim(),
-        description: $("eventDescription").value.trim(),
-        category: $("eventCategory").value,
-        date: $("eventDate").value,
-        time: $("eventTime").value,
-        location: $("eventLocation").value.trim(),
-        distrito: $("eventFormDistrict").value,
-        latitude: pendingLocation.lat,
-        longitude: pendingLocation.lng,
-        image,
-        custom: true
-    };
+// ---------- AUTENTICAÇÃO ----------
+function updateAuthUI(isLoggedIn) {
+    const authArea = $("authArea");
+    if (isLoggedIn) {
+        authArea.innerHTML = `
+            <button type="button" id="logoutButton" class="btn-soft">Sair (${currentUser.user_metadata?.username || 'User'})</button>
+        `;
+        $("logoutButton").addEventListener("click", async () => {
+            await supabase.auth.signOut();
+            currentUser = null;
+            favorites = new Set();
+            updateAuthUI(false);
+            filterEvents();
+            showToast("Sessão terminada.");
+        });
+    } else {
+        authArea.innerHTML = `<button type="button" id="loginButton" class="btn-soft">Entrar</button>`;
+        $("loginButton").addEventListener("click", openAuthModal);
+    }
+}
 
-    events.push(newEvent);
-    const saved = persistCustomEvents();
+function openAuthModal() {
+    authModal.classList.remove("hidden");
+    authModal.setAttribute("aria-hidden", "false");
+}
 
-    closeEventModal();
-    resetEventForm();
+$("closeAuth").addEventListener("click", () => {
+    authModal.classList.add("hidden");
+    authModal.setAttribute("aria-hidden", "true");
+});
 
-    if (!getFilteredEvents().some(ev => ev.id === newEvent.id)) resetFiltersBtn.click();
-    else filterEvents();
+toggleAuthMode.addEventListener("click", (e) => {
+    e.preventDefault();
+    isRegisterMode = !isRegisterMode;
+    authTitle.textContent = isRegisterMode ? "Criar Conta" : "Entrar";
+    authSubmitBtn.textContent = isRegisterMode ? "Registar" : "Entrar";
+    toggleAuthMode.textContent = isRegisterMode ? "Já tens conta? Entra" : "Não tens conta? Regista-te";
+    usernameField.classList.toggle("hidden", !isRegisterMode);
+    authError.classList.add("hidden");
+});
 
-    setActive(newEvent.id);
-    focusEvent(newEvent.id);
-    showToast(saved ? "Evento adicionado com sucesso!" : "Evento adicionado, mas não foi possível guardá-lo neste dispositivo.", saved ? "success" : "error");
+authForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    authError.classList.add("hidden");
+    authSubmitBtn.disabled = true;
+    authSubmitBtn.textContent = "A processar...";
+
+    const email = $("authEmail").value;
+    const password = $("authPassword").value;
+    const username = $("authUsername").value;
+
+    try {
+        if (isRegisterMode) {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: { data: { username: username || 'user_' + Date.now() } }
+            });
+            if (error) throw error;
+            showToast("Registo efetuado! Já podes entrar.", "success");
+            // Mudar para modo login
+            toggleAuthMode.click();
+        } else {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            
+            currentUser = data.user;
+            favorites = await dbLoadFavorites();
+            updateAuthUI(true);
+            authModal.classList.add("hidden");
+            authModal.setAttribute("aria-hidden", "true");
+            filterEvents();
+            showToast("Bem-vindo de volta!", "success");
+        }
+    } catch (err) {
+        authError.textContent = err.message;
+        authError.classList.remove("hidden");
+    } finally {
+        authSubmitBtn.disabled = false;
+        authSubmitBtn.textContent = isRegisterMode ? "Registar" : "Entrar";
+    }
 });
 
 // ---------- Arranque ----------
-setupControls();
-filterEvents({ fit: true });
+init();
