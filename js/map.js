@@ -15,6 +15,8 @@ let pickingMarker = null;
 let latestTrailCoords = [];
 let latestTrailVisible = false;
 let latestSocialEntities = [];
+let pendingEventsToRender = null;
+let mapInitStarted = false;
 
 const DARK_MAP_STYLE = {
     version: 8,
@@ -64,24 +66,115 @@ const SATELLITE_MAP_STYLE = {
     ]
 };
 
-window.initMap = function () {
-    const mapContainer = document.getElementById("map");
-    if (!mapContainer || typeof maplibregl === "undefined") return;
+function ensureMapLibreLoaded() {
+    return new Promise((resolve, reject) => {
+        if (typeof window.maplibregl !== "undefined") {
+            resolve();
+            return;
+        }
 
-    window.map = new maplibregl.Map({
-        container: "map",
-        style: DARK_MAP_STYLE,
-        center: [-8.5944, 40.3465],
-        zoom: 13,
-        pitch: 0,
-        bearing: 0,
-        attributionControl: false
+        const cdns = [
+            {
+                js: "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+                css: "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+            },
+            {
+                js: "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js",
+                css: "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css"
+            }
+        ];
+
+        let idx = 0;
+        function tryNext() {
+            if (typeof window.maplibregl !== "undefined") {
+                resolve();
+                return;
+            }
+            if (idx >= cdns.length) {
+                reject(new Error("Não foi possível carregar o motor do mapa."));
+                return;
+            }
+
+            const current = cdns[idx++];
+            if (!document.querySelector(`link[href="${current.css}"]`)) {
+                const link = document.createElement("link");
+                link.rel = "stylesheet";
+                link.href = current.css;
+                document.head.appendChild(link);
+            }
+
+            const script = document.createElement("script");
+            script.src = current.js;
+            script.async = true;
+            script.onload = () => {
+                if (typeof window.maplibregl !== "undefined") resolve();
+                else tryNext();
+            };
+            script.onerror = () => tryNext();
+            document.head.appendChild(script);
+        }
+
+        tryNext();
     });
+}
+
+window.initMap = async function () {
+    if (mapInitStarted && window.map) return;
+    const mapContainer = document.getElementById("map");
+    if (!mapContainer) return;
+
+    mapInitStarted = true;
+
+    try {
+        await ensureMapLibreLoaded();
+    } catch (err) {
+        mapInitStarted = false;
+        mapContainer.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:14px;padding:20px;text-align:center;">
+                ⚠️ Não foi possível ligar ao servidor de mapas. Verifica a ligação à internet e recarrega a página.
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        window.map = new maplibregl.Map({
+            container: "map",
+            style: DARK_MAP_STYLE,
+            center: [-8.5944, 40.3465],
+            zoom: 13,
+            pitch: 0,
+            bearing: 0,
+            attributionControl: false
+        });
+    } catch (webglErr) {
+        mapInitStarted = false;
+        mapContainer.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:14px;padding:20px;text-align:center;">
+                ⚠️ O navegador bloqueou o WebGL necessário para o mapa 3D.
+            </div>
+        `;
+        return;
+    }
 
     window.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left");
 
+    if (typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(() => {
+            if (window.map) window.map.resize();
+        });
+        ro.observe(mapContainer);
+    }
+    setTimeout(() => { if (window.map) window.map.resize(); }, 150);
+    setTimeout(() => { if (window.map) window.map.resize(); }, 800);
+
     window.map.on("load", () => {
         window.map.resize();
+        if (pendingEventsToRender) {
+            window.showEventsOnMap(pendingEventsToRender);
+        } else if (Array.isArray(window.events) && window.events.length > 0) {
+            window.showEventsOnMap(window.events);
+        }
     });
 
     window.map.on("style.load", () => {
@@ -260,6 +353,7 @@ window.stopLocationPicking = function () {
 // MARCADORES DE EVENTOS NO MAPA
 // ==========================================
 window.showEventsOnMap = function (eventsList) {
+    pendingEventsToRender = eventsList;
     if (!window.map) return;
 
     eventMarkersMap.forEach(entry => entry.marker.remove());
@@ -367,7 +461,7 @@ window.showFriendsOnMap = function (entities) {
 
         const avatarInner = person.avatar_url
             ? `<img src="${window.escapeHTML(person.avatar_url)}" alt="" onerror="this.remove()">`
-            : window.escapeHTML(initials);
+            : window.escapeHTML(person.avatar_emoji || initials);
 
         const moodBadge = isBiz ? "🏛️" : (person.status_emoji || "📍");
         const shortName = (person.full_name || "Amigo").split(" ")[0];
@@ -414,7 +508,7 @@ window.showFriendsOnMap = function (entities) {
                         ${placeInfo}${batInfo}${speedInfo}
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:5px;">
-                        <button type="button" onclick="window.sendBump('${person.id}', '👊', 'Bump!')" style="background:#f43f5e; color:#fff; border:none; border-radius:8px; padding:6px 4px; font-weight:800; font-size:11.5px; cursor:pointer;">👊 Bump</button>
+                        <button type="button" onclick="window.triggerBumpImpactAnimation('👊 Bump enviado para ${window.escapeHTML(shortName)}!'); window.sendBump('${person.id}', '👊', 'Bump!')" style="background:#f43f5e; color:#fff; border:none; border-radius:8px; padding:6px 4px; font-weight:800; font-size:11.5px; cursor:pointer;">👊 Bump</button>
                         <button type="button" onclick="window.openFriendChat('${person.id}')" style="background:#10b981; color:#04130d; border:none; border-radius:8px; padding:6px 4px; font-weight:800; font-size:11.5px; cursor:pointer;">💬 Chat</button>
                         <button type="button" onclick="window.sendWhereAreYouPing('${person.id}')" style="background:#1e293b; color:#f8fafc; border:1px solid rgba(148,163,184,0.3); border-radius:8px; padding:6px 4px; font-weight:700; font-size:11.5px; cursor:pointer;">👀 Onde?</button>
                     </div>
@@ -546,3 +640,13 @@ window.setTodayTrailCoords = function (coordsArray, isVisible) {
         ]
     });
 };
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        if (!window.map) window.initMap();
+    });
+} else {
+    setTimeout(() => {
+        if (!window.map) window.initMap();
+    }, 0);
+}
