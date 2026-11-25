@@ -1,6 +1,3 @@
-<?php
-header('Content-Type: application/javascript; charset=utf-8');
-?>
 // ==========================================
 // LOCALSPOT — MOTOR DE MAPA 3D & RADAR BUMP
 // ==========================================
@@ -8,7 +5,7 @@ header('Content-Type: application/javascript; charset=utf-8');
 window.map = null;
 window.userPosition = null;
 
-let mapStyleMode = "dark"; // "dark" | "satellite"
+let mapStyleMode = "dark";
 let mapIs3D = false;
 let eventMarkersMap = new Map();
 let socialMarkersMap = new Map();
@@ -74,7 +71,7 @@ window.initMap = function () {
     window.map = new maplibregl.Map({
         container: "map",
         style: DARK_MAP_STYLE,
-        center: [-8.5944, 40.3465], // Cantanhede / Centro de Portugal
+        center: [-8.5944, 40.3465],
         zoom: 13,
         pitch: 0,
         bearing: 0,
@@ -82,6 +79,10 @@ window.initMap = function () {
     });
 
     window.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left");
+
+    window.map.on("load", () => {
+        window.map.resize();
+    });
 
     window.map.on("style.load", () => {
         ensureCustomGeoJsonLayers();
@@ -117,7 +118,6 @@ window.initMap = function () {
 function ensureCustomGeoJsonLayers() {
     if (!window.map || !window.map.isStyleLoaded()) return;
 
-    // 1. Camada do Percurso de Exploração de Hoje
     if (!window.map.getSource("today-trail-src")) {
         window.map.addSource("today-trail-src", {
             type: "geojson",
@@ -146,7 +146,6 @@ function ensureCustomGeoJsonLayers() {
         });
     }
 
-    // 2. Camada de Ligações Hangout entre Amigos Próximos
     if (!window.map.getSource("hangout-links-src")) {
         window.map.addSource("hangout-links-src", {
             type: "geojson",
@@ -164,7 +163,6 @@ function ensureCustomGeoJsonLayers() {
         });
     }
 
-    // 3. Camada de Círculos de Privacidade (Modo Borrão ~400m)
     if (!window.map.getSource("blurred-zones-src")) {
         window.map.addSource("blurred-zones-src", {
             type: "geojson",
@@ -433,7 +431,6 @@ window.showFriendsOnMap = function (entities) {
         socialMarkersMap.set(String(person.id), { marker, person });
     });
 
-    // Atualizar círculos de modo borrão
     ensureCustomGeoJsonLayers();
     if (window.map.getSource("blurred-zones-src")) {
         window.map.getSource("blurred-zones-src").setData({
@@ -442,7 +439,6 @@ window.showFriendsOnMap = function (entities) {
         });
     }
 
-    // Deteção automática de Hangouts (amigos a menos de 150 metros)
     detectFriendHangouts(visibleFriends);
 };
 
@@ -451,7 +447,6 @@ function detectFriendHangouts(visibleFriends) {
     const hangoutLabels = [];
     let firstHangoutFriend = null;
 
-    // 1. Verificar proximidade entre o utilizador atual e amigos
     if (window.userPosition && typeof window.distanceKm === "function") {
         visibleFriends.forEach(f => {
             const dist = window.distanceKm(window.userPosition.lat, window.userPosition.lng, f.last_lat, f.last_lng);
@@ -472,7 +467,6 @@ function detectFriendHangouts(visibleFriends) {
         });
     }
 
-    // 2. Verificar proximidade entre pares de amigos
     for (let i = 0; i < visibleFriends.length; i++) {
         for (let j = i + 1; j < visibleFriends.length; j++) {
             const a = visibleFriends[i];
