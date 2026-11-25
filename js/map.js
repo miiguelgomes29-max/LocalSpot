@@ -1,12 +1,13 @@
 // ==========================================
-// LOCALSPOT — MOTOR DE MAPA 3D & RADAR BUMP
+// LOCALSPOT — OPENSTREETMAP 3D + SATÉLITE 3D
+// 100% Gratuito · Sem Chaves API
 // ==========================================
 
 window.map = null;
 window.userPosition = null;
 
-let mapStyleMode = "dark";
-let mapIs3D = false;
+let mapStyleMode = "osm"; // "osm" (OpenStreetMap 3D) ou "satellite" (Satélite 3D)
+let mapIs3D = true;       // Começa com inclinação 3D ativa para ver edifícios e relevo
 let eventMarkersMap = new Map();
 let socialMarkersMap = new Map();
 let userLocationMarker = null;
@@ -18,32 +19,11 @@ let latestSocialEntities = [];
 let pendingEventsToRender = null;
 let mapInitStarted = false;
 
-const DARK_MAP_STYLE = {
-    version: 8,
-    sources: {
-        cartoDark: {
-            type: "raster",
-            tiles: [
-                "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"
-            ],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap &copy; CARTO"
-        }
-    },
-    layers: [
-        {
-            id: "carto-dark-layer",
-            type: "raster",
-            source: "cartoDark",
-            minzoom: 0,
-            maxzoom: 20
-        }
-    ]
-};
+// Estilo OpenStreetMap Vetorial Gratuito (OpenFreeMap)
+const OPEN_MAP_3D_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
-const SATELLITE_MAP_STYLE = {
+// Estilo Satélite + Edifícios 3D OpenStreetMap (Gratuito, sem API Key)
+const SATELLITE_3D_STYLE = {
     version: 8,
     sources: {
         esriSat: {
@@ -52,7 +32,12 @@ const SATELLITE_MAP_STYLE = {
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             ],
             tileSize: 256,
-            attribution: "&copy; Esri World Imagery"
+            maxzoom: 19,
+            attribution: "&copy; Esri World Imagery &copy; OpenStreetMap"
+        },
+        openfreemap: {
+            type: "vector",
+            url: "https://tiles.openfreemap.org/planet"
         }
     },
     layers: [
@@ -61,7 +46,29 @@ const SATELLITE_MAP_STYLE = {
             type: "raster",
             source: "esriSat",
             minzoom: 0,
-            maxzoom: 19
+            maxzoom: 22
+        },
+        {
+            id: "osm-3d-buildings-sat",
+            type: "fill-extrusion",
+            source: "openfreemap",
+            "source-layer": "building",
+            minzoom: 14,
+            filter: ["!=", ["get", "hide_3d"], true],
+            paint: {
+                "fill-extrusion-color": "#38bdf8",
+                "fill-extrusion-height": [
+                    "interpolate", ["linear"], ["zoom"],
+                    14, 0,
+                    14.5, ["coalesce", ["get", "render_height"], 10]
+                ],
+                "fill-extrusion-base": [
+                    "interpolate", ["linear"], ["zoom"],
+                    14, 0,
+                    14.5, ["coalesce", ["get", "render_min_height"], 0]
+                ],
+                "fill-extrusion-opacity": 0.42
+            }
         }
     ]
 };
@@ -118,6 +125,81 @@ function ensureMapLibreLoaded() {
     });
 }
 
+function setup3DBuildingsAndTerrain() {
+    if (!window.map || !window.map.isStyleLoaded()) return;
+
+    // 1. Terreno / Montanhas 3D Gratuito (AWS Terrarium DEM)
+    if (!window.map.getSource("terrainDem")) {
+        window.map.addSource("terrainDem", {
+            type: "raster-dem",
+            tiles: [
+                "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+            ],
+            tileSize: 256,
+            maxzoom: 14,
+            encoding: "terrarium"
+        });
+    }
+
+    if (mapIs3D) {
+        window.map.setTerrain({ source: "terrainDem", exaggeration: 1.25 });
+    } else {
+        window.map.setTerrain(null);
+    }
+
+    // 2. Edifícios 3D OpenStreetMap no modo Open Map
+    if (mapStyleMode === "osm") {
+        if (!window.map.getSource("openfreemap")) {
+            window.map.addSource("openfreemap", {
+                type: "vector",
+                url: "https://tiles.openfreemap.org/planet"
+            });
+        }
+
+        if (!window.map.getLayer("osm-3d-buildings")) {
+            const layers = window.map.getStyle().layers || [];
+            let labelLayerId = null;
+            for (let i = 0; i < layers.length; i++) {
+                if (layers[i].type === "symbol" && layers[i].layout && layers[i].layout["text-field"]) {
+                    labelLayerId = layers[i].id;
+                    break;
+                }
+            }
+
+            window.map.addLayer(
+                {
+                    id: "osm-3d-buildings",
+                    source: "openfreemap",
+                    "source-layer": "building",
+                    type: "fill-extrusion",
+                    minzoom: 14,
+                    filter: ["!=", ["get", "hide_3d"], true],
+                    paint: {
+                        "fill-extrusion-color": [
+                            "interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
+                            0, "#cbd5e1",
+                            25, "#94a3b8",
+                            60, "#64748b"
+                        ],
+                        "fill-extrusion-height": [
+                            "interpolate", ["linear"], ["zoom"],
+                            14, 0,
+                            14.5, ["coalesce", ["get", "render_height"], 10]
+                        ],
+                        "fill-extrusion-base": [
+                            "interpolate", ["linear"], ["zoom"],
+                            14, 0,
+                            14.5, ["coalesce", ["get", "render_min_height"], 0]
+                        ],
+                        "fill-extrusion-opacity": 0.85
+                    }
+                },
+                labelLayerId || undefined
+            );
+        }
+    }
+}
+
 window.initMap = async function () {
     if (mapInitStarted && window.map) return;
     const mapContainer = document.getElementById("map");
@@ -140,11 +222,12 @@ window.initMap = async function () {
     try {
         window.map = new maplibregl.Map({
             container: "map",
-            style: DARK_MAP_STYLE,
-            center: [-8.5944, 40.3465],
-            zoom: 13,
-            pitch: 0,
-            bearing: 0,
+            style: OPEN_MAP_3D_STYLE_URL,
+            center: [-8.5944, 40.3465], // Cantanhede / Centro PT
+            zoom: 15,
+            pitch: 52,
+            bearing: -15,
+            maxPitch: 75,
             attributionControl: false
         });
     } catch (webglErr) {
@@ -170,6 +253,9 @@ window.initMap = async function () {
 
     window.map.on("load", () => {
         window.map.resize();
+        setup3DBuildingsAndTerrain();
+        ensureCustomGeoJsonLayers();
+
         if (pendingEventsToRender) {
             window.showEventsOnMap(pendingEventsToRender);
         } else if (Array.isArray(window.events) && window.events.length > 0) {
@@ -178,6 +264,7 @@ window.initMap = async function () {
     });
 
     window.map.on("style.load", () => {
+        setup3DBuildingsAndTerrain();
         ensureCustomGeoJsonLayers();
         if (latestTrailCoords.length > 1) {
             window.setTodayTrailCoords(latestTrailCoords, latestTrailVisible);
@@ -276,21 +363,38 @@ function ensureCustomGeoJsonLayers() {
     }
 }
 
+// Alternar entre OpenStreetMap 3D e Satélite 3D
 window.toggleMapStyleMode = function () {
     if (!window.map) return mapStyleMode;
-    mapStyleMode = mapStyleMode === "dark" ? "satellite" : "dark";
-    window.map.setStyle(mapStyleMode === "satellite" ? SATELLITE_MAP_STYLE : DARK_MAP_STYLE);
+    mapStyleMode = mapStyleMode === "osm" ? "satellite" : "osm";
+    window.map.setStyle(mapStyleMode === "satellite" ? SATELLITE_3D_STYLE : OPEN_MAP_3D_STYLE_URL);
+
+    const btn = document.getElementById("mapStyleToggle");
+    if (btn) {
+        btn.textContent = mapStyleMode === "satellite" ? "🗺️ OpenMap 3D" : "🛰️ Satélite 3D";
+    }
     return mapStyleMode;
 };
 
+// Alternar inclinação 3D (Edifícios + Montanhas) vs Vista 2D de topo
 window.toggleMapPitchMode = function () {
     if (!window.map) return mapIs3D;
     mapIs3D = !mapIs3D;
+
+    if (window.map.getSource("terrainDem")) {
+        window.map.setTerrain(mapIs3D ? { source: "terrainDem", exaggeration: 1.25 } : null);
+    }
+
     window.map.easeTo({
-        pitch: mapIs3D ? 58 : 0,
-        bearing: mapIs3D ? -18 : 0,
+        pitch: mapIs3D ? 55 : 0,
+        bearing: mapIs3D ? -15 : 0,
         duration: 650
     });
+
+    const btn = document.getElementById("mapPitchToggle");
+    if (btn) {
+        btn.textContent = mapIs3D ? "📐 Vista 2D" : "🧊 Vista 3D";
+    }
     return mapIs3D;
 };
 
@@ -325,7 +429,12 @@ window.locateUser = function () {
                         .setLngLat([coords.lng, coords.lat])
                         .addTo(window.map);
 
-                    window.map.flyTo({ center: [coords.lng, coords.lat], zoom: 14.5, duration: 900 });
+                    window.map.flyTo({
+                        center: [coords.lng, coords.lat],
+                        zoom: 15.5,
+                        pitch: mapIs3D ? 55 : 0,
+                        duration: 900
+                    });
                 }
                 resolve(coords);
             },
@@ -411,7 +520,8 @@ window.focusEventOnMap = function (eventId) {
 
     window.map.flyTo({
         center: [target.event.longitude, target.event.latitude],
-        zoom: 15.5,
+        zoom: 16,
+        pitch: mapIs3D ? 55 : 0,
         duration: 850
     });
     target.marker.togglePopup();
@@ -602,7 +712,8 @@ window.focusFriendOnMap = function (friendId) {
 
     window.map.flyTo({
         center: [entry.person.last_lng, entry.person.last_lat],
-        zoom: 16,
+        zoom: 16.5,
+        pitch: mapIs3D ? 55 : 0,
         duration: 850
     });
     entry.marker.togglePopup();
