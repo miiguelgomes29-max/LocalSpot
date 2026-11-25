@@ -1,12 +1,3 @@
-<?php
-// Se chamado com ?api=1 devolve JSON; caso contrário serve o módulo JS diretamente
-if (isset($_GET['api'])) {
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['status' => 'ok', 'app' => 'LocalSpot', 'year' => 2026]);
-    exit;
-}
-header('Content-Type: application/javascript; charset=utf-8');
-?>
 // ==========================================
 // LOCALSPOT — DADOS BASE E FUNÇÕES AUXILIARES
 // ==========================================
