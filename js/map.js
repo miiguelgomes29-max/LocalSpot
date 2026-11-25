@@ -1,10 +1,9 @@
 // ==========================================
-// MAPA (MapLibre GL JS - Estilo Vetorial 3D Fluído)
+// MAPA (MapLibre GL JS)
 // ==========================================
 
 window.onEventMarkerClick = null;
 
-// Inicializa o mapa com estilo vetorial rápido e 100% interativo
 const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -13,9 +12,6 @@ const map = new maplibregl.Map({
     pitch: 50,
     bearing: -15,
     interactive: true,
-    dragPan: true,
-    scrollZoom: true,
-    touchZoomRotate: true,
     attributionControl: false
 });
 
