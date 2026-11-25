@@ -3,233 +3,318 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="LocalSpot – descobre eventos, atividades e oportunidades perto de ti em todo o país.">
-    <meta name="theme-color" content="#2563eb">
-    <title>LocalSpot · Eventos perto de ti</title>
-    <link rel="icon" href="assets/images/logo.png">
+    <title>LocalSpot · Bump Edition</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- CABEÇALHO -->
     <header class="header">
-        <a class="logo" href="./" aria-label="LocalSpot – início">
-            <img src="assets/images/logo.png" alt="" class="logo-img" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📍'}))">
-            <h1>LocalSpot</h1>
-        </a>
-        <nav aria-label="Navegação principal">
-            <button type="button" id="aboutButton" class="btn-link">Sobre</button>
-            <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
-            <!-- NOVO: Autenticação -->
-            <div id="authArea">
-                <button type="button" id="loginButton" class="btn-soft">Entrar</button>
-            </div>
+        <div class="logo">📍 LocalSpot</div>
+        <nav>
+            <button id="tabEventsBtn" class="btn-link" style="color:var(--primary); font-weight:bold;">Eventos</button>
+            <button id="tabSocialBtn" class="btn-link">Amigos & Chat</button>
+            <button id="authBtn" class="btn-soft">Entrar</button>
         </nav>
     </header>
 
-    <!-- SEPARADORES (só em telemóvel) -->
-    <div class="tabs" role="tablist" aria-label="Vista">
-        <button type="button" role="tab" id="tabList" class="tab active" aria-selected="true">📋 Eventos</button>
-        <button type="button" role="tab" id="tabMap" class="tab" aria-selected="false">🗺️ Mapa</button>
-    </div>
-
-    <!-- CONTEÚDO PRINCIPAL -->
-    <main class="main" id="main" data-view="list">
-
-        <!-- BARRA LATERAL -->
-        <aside class="sidebar" aria-label="Lista e filtros de eventos">
-            <div class="sidebar-body">
-                <div class="sidebar-header">
-                    <h2>Descobre o que acontece perto de ti</h2>
-                    <p>Encontra eventos, atividades e oportunidades na tua zona.</p>
-                </div>
-
-                <div class="search">
-                    <label for="searchInput" class="sr-only">Procurar eventos</label>
-                    <input type="search" id="searchInput" placeholder="🔎 Procurar por nome, local ou descrição..." autocomplete="off">
-                </div>
-
-                <div class="chips" id="categoryChips" role="group" aria-label="Filtrar por categoria"></div>
-
-                <div class="filters">
-                    <div class="field">
-                        <label for="districtFilter">Distrito</label>
-                        <select id="districtFilter"></select>
-                    </div>
-                    <div class="field">
-                        <label for="periodFilter">Quando</label>
-                        <select id="periodFilter">
-                            <option value="all">Qualquer data</option>
-                            <option value="upcoming">A partir de hoje</option>
-                            <option value="week">Próximos 7 dias</option>
-                            <option value="month">Próximos 30 dias</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="sortFilter">Ordenar por</label>
-                        <select id="sortFilter">
-                            <option value="date">Data</option>
-                            <option value="distance">Proximidade</option>
-                            <option value="name">Nome (A–Z)</option>
-                        </select>
-                    </div>
-                    <div class="field field-toggle">
-                        <label class="sr-only" for="favoritesToggle">Mostrar só favoritos</label>
-                        <button type="button" id="favoritesToggle" class="btn-toggle" aria-pressed="false">☆ Só favoritos</button>
-                    </div>
-                </div>
-
-                <div class="events-container">
-                    <div class="events-title">
-                        <h3>Eventos</h3>
-                        <span id="eventCount" aria-live="polite">0</span>
-                        <button type="button" id="resetFilters" class="btn-link small hidden">Limpar filtros</button>
-                    </div>
-                    <div id="eventsList"></div>
-                    <div id="emptyState" class="empty hidden">
-                        <p class="empty-icon">🔍</p>
-                        <p><strong>Nenhum evento encontrado</strong></p>
-                        <p>Experimenta alterar os filtros ou adiciona tu um novo evento.</p>
-                    </div>
-                </div>
+    <main class="main">
+        <!-- VISTA 1: EVENTOS -->
+        <aside class="sidebar" id="sidebarEvents">
+            <div class="sidebar-content">
+                <h2>Descobre Eventos</h2>
+                <input type="search" id="searchInput" placeholder="🔎 Procurar...">
+                <div class="chips" id="categoryChips"></div>
+                <div id="eventsList"></div>
             </div>
-
             <div class="sidebar-footer">
-                <button type="button" id="addEventButton" class="add-event-button">＋ Adicionar evento</button>
+                <button id="addEventBtn" class="submit-button">＋ Adicionar Evento</button>
+            </div>
+        </aside>
+
+        <!-- VISTA 2: AMIGOS & CHAT (BUMP STYLE) -->
+        <aside class="sidebar hidden" id="sidebarSocial">
+            <div class="sidebar-content">
+                <h2>Amigos</h2>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="searchUserInput" placeholder="Procurar utilizador...">
+                    <button id="searchUserBtn" class="btn-soft">🔍</button>
+                </div>
+                <div id="userSearchResults" style="margin-bottom:20px;"></div>
+                <div id="friendsList"></div>
+
+                <h2 style="margin-top:20px;">Chat</h2>
+                <div id="chatRoomsList"></div>
             </div>
         </aside>
 
         <!-- MAPA -->
-        <section class="map-container" aria-label="Mapa de eventos">
-            <div id="pickBanner" class="pick-banner hidden" role="status">
-                <span>📍 Clica no mapa para escolher o local do evento</span>
-                <button type="button" id="cancelPick">Cancelar</button>
-            </div>
+        <section class="map-container">
             <div id="map"></div>
         </section>
     </main>
 
-    <!-- MODAL: CRIAR EVENTO -->
-    <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle" aria-hidden="true">
+    <!-- MODAL: AUTENTICAÇÃO -->
+    <div id="authModal" class="modal hidden">
         <div class="modal-content">
-            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">×</button>
-            <h2 id="eventModalTitle">Adicionar evento</h2>
+            <button class="close-button" onclick="document.getElementById('authModal').classList.add('hidden')">×</button>
+            <h2 id="authTitle">Entrar</h2>
+            <form id="authForm">
+                <input type="text" id="authUsername" placeholder="Username (só no registo)" class="hidden">
+                <input type="email" id="authEmail" placeholder="Email" required>
+                <input type="password" id="authPassword" placeholder="Palavra-passe" required>
+                <button type="submit" id="authSubmitBtn" class="submit-button">Entrar</button>
+            </form>
+            <p style="text-align:center; margin-top:10px;">
+                <a href="#" id="toggleAuth" style="color:var(--primary);">Criar conta</a>
+            </p>
+        </div>
+    </div>
 
-            <form id="eventForm" novalidate>
-                <div class="location-box">
-                    <p id="selectedCoordinates">📍 Nenhuma localização selecionada no mapa</p>
-                    <button type="button" id="changeLocationButton" class="btn-soft">Alterar no mapa</button>
-                </div>
-
-                <label for="eventName">Nome do evento *</label>
-                <input type="text" id="eventName" maxlength="80" placeholder="Ex: Torneio de Futebol" required>
-
-                <label for="eventDescription">Descrição</label>
-                <textarea id="eventDescription" maxlength="300" rows="3" placeholder="Descreve o evento..."></textarea>
-
-                <label for="eventCategory">Categoria *</label>
-                <select id="eventCategory" required></select>
-
-                <div class="form-row">
-                    <div>
-                        <label for="eventDate">Data *</label>
-                        <input type="date" id="eventDate" required>
-                    </div>
-                    <div>
-                        <label for="eventTime">Hora *</label>
-                        <input type="time" id="eventTime" required>
-                    </div>
-                </div>
-
-                <label for="eventLocation">Local (nome do sítio) *</label>
-                <input type="text" id="eventLocation" maxlength="80" placeholder="Ex: Parque da Cidade" required>
-
-                <label for="eventFormDistrict">Distrito *</label>
-                <select id="eventFormDistrict" required></select>
-
-                <label for="eventImage">Fotografia (opcional)</label>
-                <input type="file" id="eventImage" accept="image/png, image/jpeg, image/webp">
-                <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização da fotografia">
-
-                <p id="formError" class="form-error hidden" role="alert"></p>
-                <button type="submit" class="submit-button" id="submitEventBtn">Publicar evento</button>
+    <!-- MODAL: CRIAR EVENTO -->
+    <div id="eventModal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-button" onclick="document.getElementById('eventModal').classList.add('hidden')">×</button>
+            <h2>Criar Evento</h2>
+            <form id="eventForm">
+                <input type="text" id="evName" placeholder="Nome do evento" required>
+                <select id="evCategory" required>
+                    <option value="desporto">Desporto</option>
+                    <option value="musica">Música</option>
+                    <option value="cultura">Cultura</option>
+                </select>
+                <input type="date" id="evDate" required>
+                <input type="time" id="evTime" required>
+                <input type="text" id="evLocation" placeholder="Local (ex: Parque)" required>
+                <p id="pickText" style="font-size:12px; color:var(--danger);">Clica no mapa para escolher a localização!</p>
+                <input type="file" id="evImage" accept="image/*">
+                <button type="submit" class="submit-button" id="submitEvBtn">Publicar</button>
             </form>
         </div>
     </div>
 
-    <!-- NOVO: MODAL DE DETALHES DO EVENTO (Comentários, Gostos, Check-in) -->
-    <div id="detailsModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <!-- MODAL: CHAT DA SALA -->
+    <div id="chatModal" class="modal hidden">
         <div class="modal-content">
-            <button type="button" id="closeDetails" class="close-button" aria-label="Fechar">×</button>
-            <img id="detailsImage" class="image-preview" style="max-height: 250px;" alt="">
-            <h2 id="detailsTitle"></h2>
-            <p id="detailsMeta" class="muted"></p>
-            <p id="detailsDesc"></p>
-            
-            <div style="display:flex; gap:10px; margin: 15px 0;">
-                <button type="button" id="detailsLikeBtn" class="btn-soft">❤️ Gosto (<span id="detailsLikeCount">0</span>)</button>
-                <button type="button" id="detailsCheckinBtn" class="btn-soft">📍 Check-in</button>
-            </div>
-
-            <h3>Comentários</h3>
-            <div id="commentsList" style="max-height: 150px; overflow-y: auto; margin-bottom: 10px;"></div>
-            
-            <form id="commentForm" style="display:flex; gap:10px;">
-                <input type="text" id="commentInput" placeholder="Escreve um comentário..." style="margin:0; flex:1;" maxlength="500">
+            <button class="close-button" onclick="document.getElementById('chatModal').classList.add('hidden')">×</button>
+            <h2>Chat</h2>
+            <div id="chatMessages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; display:flex; flex-direction:column; gap:8px;"></div>
+            <form id="chatForm" style="display:flex; gap:5px;">
+                <input type="text" id="chatInput" placeholder="Mensagem..." style="margin:0;">
                 <button type="submit" class="btn-soft">Enviar</button>
             </form>
         </div>
     </div>
 
-    <!-- NOVO: MODAL DE AUTENTICAÇÃO -->
-    <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="width: 400px;">
-            <button type="button" id="closeAuth" class="close-button" aria-label="Fechar">×</button>
-            <h2 id="authTitle">Entrar</h2>
-            <form id="authForm">
-                <div id="usernameField" class="hidden">
-                    <label for="authUsername">Nome de utilizador</label>
-                    <input type="text" id="authUsername" placeholder="ex: joao123">
-                </div>
-                <label for="authEmail">Email</label>
-                <input type="email" id="authEmail" required>
-                <label for="authPassword">Palavra-passe</label>
-                <input type="password" id="authPassword" required minlength="6">
-                <p id="authError" class="form-error hidden"></p>
-                <button type="submit" class="submit-button" id="authSubmitBtn">Entrar</button>
-            </form>
-            <p style="text-align:center; margin-top:15px; font-size:14px;">
-                <a href="#" id="toggleAuthMode" style="color: var(--primary);">Não tens conta? Regista-te</a>
-            </p>
-        </div>
-    </div>
-
-    <!-- MODAL: SOBRE -->
-    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-hidden="true">
-        <div class="modal-content">
-            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">×</button>
-            <h2 id="aboutTitle">Sobre o LocalSpot</h2>
-            <p>O LocalSpot ajuda-te a descobrir eventos, torneios, workshops e atividades perto de ti, num mapa simples de usar.</p>
-            <ul class="about-list">
-                <li>🔎 Pesquisa e filtra por categoria, distrito e data.</li>
-                <li>📍 Usa a tua localização para ordenar por proximidade.</li>
-                <li>⭐ Guarda os teus eventos favoritos.</li>
-                <li>＋ Publica os teus próprios eventos escolhendo o local no mapa.</li>
-                <li>❤️ Interage, comenta e faz check-in nos eventos.</li>
-            </ul>
-        </div>
-    </div>
-
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
     <!-- SDK do Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <!-- Scripts Locais -->
     <script src="js/supabase-client.js"></script>
-    <script src="js/events.js"></script>
-    <script src="js/map.js"></script>
-    <script src="js/main.js"></script>
+    
+    <!-- SCRIPTS (Tudo num só ficheiro para facilidade de teste) -->
+    <script>
+        const SUPABASE_URL = 'https://O_TEU_PROJETO.supabase.co';
+        const SUPABASE_ANON_KEY = 'A_TUA_ANON_KEY';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const $ = id => document.getElementById(id);
+        let currentUser = null;
+        let currentList = [];
+        let pendingLocation = null;
+        let isRegisterMode = false;
+
+        // --- INICIALIZAÇÃO DO MAPA (SATÉLITE) ---
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: { sat: { type: 'raster', tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'], tileSize: 256 } },
+                layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
+            },
+            center: [-8.0, 39.6],
+            zoom: 7
+        });
+        map.addControl(new maplibregl.NavigationControl());
+
+        let pickHandler = null;
+        map.on('click', (e) => {
+            if (pickHandler) {
+                pendingLocation = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+                $("pickText").textContent = `📍 Local escolhido: ${pendingLocation.lat.toFixed(3)}, ${pendingLocation.lng.toFixed(3)}`;
+                $("pickText").style.color = "green";
+                new maplibregl.Marker().setLngLat([pendingLocation.lng, pendingLocation.lat]).addTo(map);
+                pickHandler = null;
+            }
+        });
+
+        // --- INICIALIZAÇÃO GERAL ---
+        async function init() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) { currentUser = session.user; updateAuthUI(true); }
+            await loadEvents();
+            await loadFriends();
+        }
+
+        // --- EVENTOS ---
+        async function loadEvents() {
+            const { data } = await supabase.from('events').select('*');
+            if (data) {
+                currentList = data;
+                renderEventsList();
+                renderMapMarkers();
+            }
+        }
+
+        function renderEventsList() {
+            $("eventsList").innerHTML = currentList.map(ev => `
+                <div class="event-card">
+                    <h4>${ev.name}</h4>
+                    <p>📅 ${ev.date} | 📍 ${ev.location_name}</p>
+                </div>
+            `).join("");
+        }
+
+        function renderMapMarkers() {
+            currentList.forEach(ev => {
+                const el = document.createElement('div');
+                el.className = 'pin';
+                el.style.cssText = `--pin: #2563eb; width:20px; height:20px; border-radius:50%; border:2px solid white;`;
+                new maplibregl.Marker({element: el}).setLngLat([ev.longitude, ev.latitude]).addTo(map);
+            });
+        }
+
+        // CRIAR EVENTO
+        $("addEventBtn").addEventListener("click", () => {
+            if (!currentUser) return alert("Faz login primeiro!");
+            pickHandler = true;
+            $("eventModal").classList.remove("hidden");
+            map.flyTo({ center: [-8.0, 39.6], zoom: 7 });
+            $("pickText").textContent = "Clica no mapa para escolher a localização!";
+            $("pickText").style.color = "red";
+        });
+
+        $("eventForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            if (!pendingLocation) return alert("Escolhe a localização no mapa!");
+            
+            const { error } = await supabase.from('events').insert({
+                created_by: currentUser.id, name: $("evName").value, category: $("evCategory").value,
+                date: $("evDate").value, time: $("evTime").value, location_name: $("evLocation").value,
+                district: "geral", latitude: pendingLocation.lat, longitude: pendingLocation.lng
+            });
+            if (error) alert("Erro: " + error.message);
+            else { $("eventModal").classList.add("hidden"); pendingLocation = null; loadEvents(); }
+        });
+
+        // --- FUNÇÕES BUMP: AMIGOS E CHAT ---
+        async function loadFriends() {
+            if (!currentUser) return;
+            const { data } = await supabase.from('friends').select('friend_id, profiles:friend_id(username)').eq('user_id', currentUser.id);
+            if (data) {
+                $("friendsList").innerHTML = data.map(f => `
+                    <div style="padding:10px; border-bottom:1px solid #ccc; display:flex; justify-content:space-between;">
+                        <span>👤 ${f.profiles.username}</span>
+                        <button class="btn-soft" onclick="startChat('${f.friend_id}')">💬 Chat</button>
+                    </div>
+                `).join("");
+            }
+        }
+
+        $("searchUserBtn").addEventListener("click", async () => {
+            const q = $("searchUserInput").value;
+            if (!q) return;
+            const { data } = await supabase.from('profiles').select('id, username').ilike('username', `%${q}%`).neq('id', currentUser.id);
+            if (data) {
+                $("userSearchResults").innerHTML = data.map(u => `
+                    <div style="padding:10px; display:flex; justify-content:space-between; background:#f0f0f0; margin-bottom:5px;">
+                        <span>${u.username}</span>
+                        <button class="btn-soft" onclick="addFriend('${u.id}')">Adicionar</button>
+                    </div>
+                `).join("");
+            }
+        });
+
+        window.addFriend = async (id) => {
+            await supabase.from('friends').insert({ user_id: currentUser.id, friend_id: id });
+            await supabase.from('friends').insert({ user_id: id, friend_id: currentUser.id });
+            loadFriends();
+            $("userSearchResults").innerHTML = "";
+            alert("Amigo adicionado!");
+        };
+
+        window.startChat = async (friendId) => {
+            // Lógica simplificada: cria sala, adiciona os dois e abre
+            const { data: room } = await supabase.from('chat_rooms').insert({}).select().single();
+            await supabase.from('chat_participants').insert([
+                { room_id: room.id, user_id: currentUser.id },
+                { room_id: room.id, user_id: friendId }
+            ]);
+            openChatRoom(room.id);
+        };
+
+        async function openChatRoom(roomId) {
+            $("chatModal").classList.remove("hidden");
+            $("chatMessages").innerHTML = "A carregar...";
+            
+            const loadMsgs = async () => {
+                const { data } = await supabase.from('chat_messages').select('*, profiles(sender_id, username)').eq('room_id', roomId).order('created_at');
+                if (data) {
+                    $("chatMessages").innerHTML = data.map(m => `
+                        <div style="align-self: ${m.sender_id === currentUser.id ? 'flex-end' : 'flex-start'}; background: ${m.sender_id === currentUser.id ? '#2563eb' : '#eee'}; color: ${m.sender_id === currentUser.id ? 'white' : 'black'}; padding: 8px; border-radius: 8px;">
+                            <small>${m.profiles.username}</small><br>${m.content}
+                        </div>
+                    `).join("");
+                }
+            };
+            await loadMsgs();
+
+            $("chatForm").onsubmit = async (e) => {
+                e.preventDefault();
+                await supabase.from('chat_messages').insert({ room_id: roomId, sender_id: currentUser.id, content: $("chatInput").value });
+                $("chatInput").value = "";
+                await loadMsgs();
+            };
+        }
+
+        // --- AUTENTICAÇÃO ---
+        $("authBtn").addEventListener("click", () => $("authModal").classList.remove("hidden"));
+        $("toggleAuth").addEventListener("click", (e) => {
+            e.preventDefault();
+            isRegisterMode = !isRegisterMode;
+            $("authTitle").textContent = isRegisterMode ? "Criar Conta" : "Entrar";
+            $("authUsername").classList.toggle("hidden", !isRegisterMode);
+            $("authSubmitBtn").textContent = isRegisterMode ? "Registar" : "Entrar";
+        });
+
+        $("authForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = $("authEmail").value, pass = $("authPassword").value;
+            if (isRegisterMode) {
+                const { error } = await supabase.auth.signUp({ email, password: pass, options: { data: { username: $("authUsername").value } } });
+                if (error) alert(error.message); else alert("Registado! Já podes entrar.");
+            } else {
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+                if (error) alert(error.message); else { currentUser = data.user; updateAuthUI(true); $("authModal").classList.add("hidden"); loadFriends(); }
+            }
+        });
+
+        function updateAuthUI(logged) {
+            $("authBtn").textContent = logged ? "Sair" : "Entrar";
+            $("authBtn").onclick = logged ? async () => { await supabase.auth.signOut(); location.reload(); } : () => $("authModal").classList.remove("hidden");
+        }
+
+        // --- TABS (TROCA DE VISTAS) ---
+        $("tabEventsBtn").addEventListener("click", () => {
+            $("sidebarEvents").classList.remove("hidden");
+            $("sidebarSocial").classList.add("hidden");
+        });
+        $("tabSocialBtn").addEventListener("click", () => {
+            if (!currentUser) return alert("Faz login para aceder aos Amigos!");
+            $("sidebarEvents").classList.add("hidden");
+            $("sidebarSocial").classList.remove("hidden");
+            loadFriends();
+        });
+
+        init();
+    </script>
 </body>
 </html>
