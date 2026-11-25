@@ -21,6 +21,10 @@
         <nav aria-label="Navegação principal">
             <button type="button" id="aboutButton" class="btn-link">Sobre</button>
             <button type="button" id="locationButton" class="btn-soft">📍 <span>Minha localização</span></button>
+            <!-- NOVO: Autenticação -->
+            <div id="authArea">
+                <button type="button" id="loginButton" class="btn-soft">Entrar</button>
+            </div>
         </nav>
     </header>
 
@@ -149,8 +153,55 @@
                 <img id="imagePreview" class="image-preview hidden" alt="Pré-visualização da fotografia">
 
                 <p id="formError" class="form-error hidden" role="alert"></p>
-                <button type="submit" class="submit-button">Publicar evento</button>
+                <button type="submit" class="submit-button" id="submitEventBtn">Publicar evento</button>
             </form>
+        </div>
+    </div>
+
+    <!-- NOVO: MODAL DE DETALHES DO EVENTO (Comentários, Gostos, Check-in) -->
+    <div id="detailsModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" id="closeDetails" class="close-button" aria-label="Fechar">×</button>
+            <img id="detailsImage" class="image-preview" style="max-height: 250px;" alt="">
+            <h2 id="detailsTitle"></h2>
+            <p id="detailsMeta" class="muted"></p>
+            <p id="detailsDesc"></p>
+            
+            <div style="display:flex; gap:10px; margin: 15px 0;">
+                <button type="button" id="detailsLikeBtn" class="btn-soft">❤️ Gosto (<span id="detailsLikeCount">0</span>)</button>
+                <button type="button" id="detailsCheckinBtn" class="btn-soft">📍 Check-in</button>
+            </div>
+
+            <h3>Comentários</h3>
+            <div id="commentsList" style="max-height: 150px; overflow-y: auto; margin-bottom: 10px;"></div>
+            
+            <form id="commentForm" style="display:flex; gap:10px;">
+                <input type="text" id="commentInput" placeholder="Escreve um comentário..." style="margin:0; flex:1;" maxlength="500">
+                <button type="submit" class="btn-soft">Enviar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- NOVO: MODAL DE AUTENTICAÇÃO -->
+    <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="width: 400px;">
+            <button type="button" id="closeAuth" class="close-button" aria-label="Fechar">×</button>
+            <h2 id="authTitle">Entrar</h2>
+            <form id="authForm">
+                <div id="usernameField" class="hidden">
+                    <label for="authUsername">Nome de utilizador</label>
+                    <input type="text" id="authUsername" placeholder="ex: joao123">
+                </div>
+                <label for="authEmail">Email</label>
+                <input type="email" id="authEmail" required>
+                <label for="authPassword">Palavra-passe</label>
+                <input type="password" id="authPassword" required minlength="6">
+                <p id="authError" class="form-error hidden"></p>
+                <button type="submit" class="submit-button" id="authSubmitBtn">Entrar</button>
+            </form>
+            <p style="text-align:center; margin-top:15px; font-size:14px;">
+                <a href="#" id="toggleAuthMode" style="color: var(--primary);">Não tens conta? Regista-te</a>
+            </p>
         </div>
     </div>
 
@@ -165,14 +216,18 @@
                 <li>📍 Usa a tua localização para ordenar por proximidade.</li>
                 <li>⭐ Guarda os teus eventos favoritos.</li>
                 <li>＋ Publica os teus próprios eventos escolhendo o local no mapa.</li>
+                <li>❤️ Interage, comenta e faz check-in nos eventos.</li>
             </ul>
-            <p class="muted">Os eventos que adicionares ficam guardados neste dispositivo.</p>
         </div>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <!-- SDK do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Scripts Locais -->
+    <script src="js/supabase-client.js"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
