@@ -1,5 +1,5 @@
 // ==========================================
-// LOCALSPOT — ONBOARDING & SESSÕES ESTILO BUMP
+// LOCALSPOT — ONBOARDING & SESSÕES LIGADAS À BD
 // ==========================================
 
 (function () {
@@ -11,9 +11,6 @@
     let selectedVibeText = "Pronto pra sair";
     let selectedPrivacy = "precise";
 
-    // ==========================================
-    // 1. ANIMAÇÃO DE IMPACTO BUMP (👊 SHOCKWAVE)
-    // ==========================================
     window.triggerBumpImpactAnimation = function (labelText = "👊 Bump enviado!", emoji = "👊") {
         if (navigator.vibrate) {
             try { navigator.vibrate([45, 30, 70]); } catch (e) {}
@@ -39,9 +36,6 @@
         }, 1150);
     };
 
-    // ==========================================
-    // 2. GESTÃO DE SESSÕES LOCAIS & PERSISTÊNCIA
-    // ==========================================
     function getSavedSessions() {
         try {
             return JSON.parse(localStorage.getItem(SESSIONS_KEY) || "[]");
@@ -54,9 +48,9 @@
         if (!profile || !profile.email) return;
         const list = getSavedSessions().filter(s => s.email.toLowerCase() !== profile.email.toLowerCase());
         list.unshift({
-            id: profile.id || `local-${Date.now()}`,
+            id: profile.id || `user-${Date.now()}`,
             full_name: profile.full_name || "Utilizador",
-            email: profile.email,
+            email: profile.email.toLowerCase().trim(),
             role: profile.role || "user",
             business_type: profile.business_type || "",
             avatar_emoji: profile.avatar_emoji || "😎",
@@ -117,10 +111,20 @@
         });
     }
 
-    function activateSessionInUI(profile, showAnimation = true) {
+    async function activateSessionInUI(profile, showAnimation = true) {
         saveProfileSession(profile);
 
-        // Atualizar cabeçalho e permissões da interface
+        // Gravar/sincronizar imediatamente na tabela "profiles" do Supabase
+        if (window.LocalSpotDB && window.LocalSpotDB.isReady()) {
+            const dbProfile = await window.LocalSpotDB.upsertProfile(profile);
+            if (dbProfile && dbProfile.id) {
+                profile = { ...profile, ...dbProfile };
+                saveProfileSession(profile);
+            }
+        }
+
+        window.currentLocalProfile = profile;
+
         const authOverlay = document.getElementById("authOverlay");
         const userBadge = document.getElementById("userBadge");
         const logoutBtn = document.getElementById("logoutButton");
@@ -140,17 +144,18 @@
             `;
         }
 
-        // Sincronizar estado global caso main.js use currentUser
-        window.currentLocalProfile = profile;
         if (typeof window.applyExternalUserSession === "function") {
             window.applyExternalUserSession(profile);
+        }
+
+        if (typeof window.refreshFriendsSystem === "function") {
+            window.refreshFriendsSystem();
         }
 
         if (showAnimation) {
             window.triggerBumpImpactAnimation(`👊 Bem-vindo, ${profile.full_name.split(" ")[0]}!`, profile.avatar_emoji || "👊");
         }
 
-        // Tentar obter localização automática ao entrar no radar
         if (typeof window.locateUser === "function") {
             window.locateUser().catch(() => {});
         }
@@ -159,9 +164,6 @@
         }
     }
 
-    // ==========================================
-    // 3. NAVEGAÇÃO ENTRE OS ECRÃS DE ONBOARDING
-    // ==========================================
     function showOnboardingScreen(screenId) {
         const screens = ["onboardingWelcomeScreen", "onboardingWizardScreen", "onboardingLoginScreen"];
         screens.forEach(id => {
@@ -184,7 +186,6 @@
         const authOverlay = document.getElementById("authOverlay");
         if (!authOverlay) return;
 
-        // Botões de navegação do Onboarding
         document.getElementById("startOnboardingBtn")?.addEventListener("click", () => {
             showOnboardingScreen("onboardingWizardScreen");
             setWizardStep(1);
@@ -225,7 +226,6 @@
         document.getElementById("nextToStep3Btn")?.addEventListener("click", () => setWizardStep(3));
         document.getElementById("backToStep2Btn")?.addEventListener("click", () => setWizardStep(2));
 
-        // Seleção de Avatar Emoji
         document.querySelectorAll("#avatarPickerGrid .avatar-emoji-opt").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#avatarPickerGrid .avatar-emoji-opt").forEach(b => b.classList.remove("selected"));
@@ -234,7 +234,6 @@
             });
         });
 
-        // Seleção de Vibe Inicial
         document.querySelectorAll("#vibePickerGrid .vibe-opt-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#vibePickerGrid .vibe-opt-btn").forEach(b => b.classList.remove("selected"));
@@ -244,7 +243,6 @@
             });
         });
 
-        // Seleção de Privacidade
         document.querySelectorAll("#onboardingPrivacyGrid .privacy-opt-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#onboardingPrivacyGrid .privacy-opt-btn").forEach(b => b.classList.remove("active"));
@@ -253,7 +251,6 @@
             });
         });
 
-        // Tipo de Conta (Pessoal vs Empresa)
         document.getElementById("regAccountType")?.addEventListener("change", e => {
             const isBiz = e.target.value === "business";
             document.getElementById("businessTypeGroup")?.classList.toggle("hidden", !isBiz);
@@ -261,11 +258,16 @@
             if (label) label.textContent = isBiz ? "Nome da Entidade / Empresa *" : "Nome de exibição *";
         });
 
-        // Submissão de Criação de Conta (funciona com Supabase + Sessão Local imediata)
-        document.getElementById("registerForm")?.addEventListener("submit", e => {
+        // Criar Conta e Guardar Perfil na BD
+        document.getElementById("registerForm")?.addEventListener("submit", async e => {
             e.preventDefault();
+            const submitBtn = document.getElementById("registerSubmitBtn");
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = "A guardar perfil...";
+            }
+
             const profile = {
-                id: `user-${Date.now()}`,
                 full_name: document.getElementById("regName")?.value.trim() || "Explorador",
                 email: document.getElementById("regEmail")?.value.trim() || "user@localspot.pt",
                 role: document.getElementById("regAccountType")?.value || "user",
@@ -275,35 +277,55 @@
                 status_text: selectedVibeText,
                 privacy_mode: selectedPrivacy
             };
-            activateSessionInUI(profile, true);
+
+            await activateSessionInUI(profile, true);
+
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "👊 Entrar no Mapa!";
+            }
         }, true);
 
-        // Submissão de Login rápido
-        document.getElementById("loginForm")?.addEventListener("submit", e => {
+        // Iniciar Sessão procurando o perfil existente na BD
+        document.getElementById("loginForm")?.addEventListener("submit", async e => {
             e.preventDefault();
             const email = document.getElementById("loginEmail")?.value.trim() || "";
-            const saved = getSavedSessions().find(s => s.email.toLowerCase() === email.toLowerCase());
-            const profile = saved || {
-                id: `user-${Date.now()}`,
-                full_name: email.split("@")[0] || "Utilizador",
-                email,
-                role: "user",
-                avatar_emoji: "😎",
-                status_emoji: "📍",
-                status_text: "Online",
-                privacy_mode: "precise"
-            };
-            activateSessionInUI(profile, true);
+            const submitBtn = document.getElementById("loginSubmitBtn");
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = "A entrar...";
+            }
+
+            let profile = null;
+            if (window.LocalSpotDB && window.LocalSpotDB.isReady()) {
+                profile = await window.LocalSpotDB.getProfileByEmail(email);
+            }
+            if (!profile) {
+                profile = getSavedSessions().find(s => s.email.toLowerCase() === email.toLowerCase()) || {
+                    full_name: email.split("@")[0] || "Utilizador",
+                    email,
+                    role: "user",
+                    avatar_emoji: "😎",
+                    status_emoji: "📍",
+                    status_text: "Online",
+                    privacy_mode: "precise"
+                };
+            }
+
+            await activateSessionInUI(profile, true);
+
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Entrar no Radar";
+            }
         }, true);
 
-        // Botão de Trocar de Sessão no cabeçalho
         document.getElementById("switchSessionBtn")?.addEventListener("click", () => {
             renderSavedSessions();
             showOnboardingScreen("onboardingWelcomeScreen");
             authOverlay.classList.remove("hidden");
         });
 
-        // Botão Sair
         document.getElementById("logoutButton")?.addEventListener("click", () => {
             clearActiveLocalSession();
             renderSavedSessions();
@@ -311,7 +333,6 @@
             authOverlay.classList.remove("hidden");
         });
 
-        // Verificar ao abrir a app: se não houver sessão ativa, abre o Onboarding Bump!
         const activeSession = getActiveLocalSession();
         if (activeSession) {
             activateSessionInUI(activeSession, false);
