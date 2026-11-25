@@ -1,7 +1,3 @@
-// ==========================================
-// DADOS E UTILITÁRIOS
-// ==========================================
-
 const DEFAULT_IMAGE = "assets/images/default-event.jpg";
 
 const CATEGORIES = {
@@ -31,14 +27,12 @@ const DISTRICTS = [
     { value: "viana do castelo", label: "Viana do Castelo", lat: 41.6918, lng: -8.8344 },
     { value: "vila real", label: "Vila Real", lat: 41.3006, lng: -7.7441 },
     { value: "viseu", label: "Viseu", lat: 40.6566, lng: -7.9139 },
-    { value: "acores", label: "Açores (Região Autónoma)", lat: 37.7412, lng: -25.6756 },
-    { value: "madeira", label: "Madeira (Região Autónoma)", lat: 32.6669, lng: -16.9241 }
+    { value: "acores", label: "Açores", lat: 37.7412, lng: -25.6756 },
+    { value: "madeira", label: "Madeira", lat: 32.6669, lng: -16.9241 }
 ];
 
-// Array global que vai guardar os eventos vindos da BD
 let events = [];
 
-// ---------- Utilitários ----------
 function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>"']/g, ch => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -81,108 +75,59 @@ function nearestDistrict(lat, lng) {
     return best.value;
 }
 
-// ---------- Funções de Base de Dados (Supabase) ----------
+// ==========================================
+// FUNÇÕES DA BASE DE DADOS (SUPABASE)
+// ==========================================
 
 async function dbLoadEvents() {
     const { data, error } = await supabase
         .from('events')
-        .select(`
-            *,
-            profiles:created_by (username, avatar_url)
-        `)
+        .select(`*, profiles:created_by (username)`)
         .order('date', { ascending: true });
 
-    if (error) {
-        console.error("Erro ao carregar eventos:", error);
-        return [];
-    }
-    
-    // Adaptar os nomes dos campos da BD para os nomes que o teu frontend usa
-    return data.map(e => ({
-        ...e,
-        location: e.location_name, // O frontend usa 'location', a BD usa 'location_name'
-        image: e.image_url,        // O frontend usa 'image', a BD usa 'image_url'
-        custom: true               // Assumimos que todos vêm da BD para efeitos de delete
-    }));
+    if (error) { console.error(error); return []; }
+    return data.map(e => ({ ...e, location: e.location_name, image: e.image_url, custom: true }));
 }
 
 async function dbCreateEvent(eventData, imageFile) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Precisas de iniciar sessão para criar eventos.");
+    if (!user) throw new Error("Sessão expirada.");
 
     let image_url = null;
-
     if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-            .from('event-images')
-            .upload(fileName, imageFile);
-
-        if (uploadError) throw new Error("Erro ao carregar imagem: " + uploadError.message);
-
-        const { data: urlData } = supabase.storage
-            .from('event-images')
-            .getPublicUrl(fileName);
-
+        const fileName = `${user.id}/${Date.now()}.${imageFile.name.split('.').pop()}`;
+        const { error: uploadError } = await supabase.storage.from('event-images').upload(fileName, imageFile);
+        if (uploadError) throw new Error(uploadError.message);
+        const { data: urlData } = supabase.storage.from('event-images').getPublicUrl(fileName);
         image_url = urlData.publicUrl;
     }
 
-    const { data, error } = await supabase
-        .from('events')
-        .insert({
-            created_by: user.id,
-            name: eventData.name,
-            description: eventData.description,
-            category: eventData.category,
-            date: eventData.date,
-            time: eventData.time,
-            location_name: eventData.location,
-            district: eventData.distrito,
-            latitude: eventData.latitude,
-            longitude: eventData.longitude,
-            image_url: image_url
-        })
-        .select()
-        .single();
+    const { data, error } = await supabase.from('events').insert({
+        created_by: user.id, ...eventData, location_name: eventData.location,
+        district: eventData.distrito, image_url: image_url
+    }).select().single();
 
-    if (error) throw new Error("Erro ao criar evento: " + error.message);
+    if (error) throw new Error(error.message);
     return data;
 }
 
-async function dbDeleteEvent(eventId) {
-    const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', eventId);
+async function dbDeleteEvent(id) {
+    const { error } = await supabase.from('events').delete().eq('id', id);
     if (error) throw error;
 }
 
 async function dbLoadFavorites() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Set();
-
-    const { data, error } = await supabase
-        .from('favorites')
-        .select('event_id')
-        .eq('user_id', user.id);
-
-    if (error) return new Set();
-    return new Set(data.map(f => f.event_id));
+    const { data } = await supabase.from('favorites').select('event_id').eq('user_id', user.id);
+    return new Set((data || []).map(f => f.event_id));
 }
 
 async function dbToggleFavorite(eventId) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Precisas de iniciar sessão.");
+    if (!user) throw new Error("Inicia sessão.");
 
-    const { data: existing } = await supabase
-        .from('favorites')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('event_id', eventId)
-        .maybeSingle();
-
+    const { data: existing } = await supabase.from('favorites').select('id').eq('user_id', user.id).eq('event_id', eventId).maybeSingle();
     if (existing) {
         await supabase.from('favorites').delete().eq('id', existing.id);
         return false;
@@ -193,72 +138,57 @@ async function dbToggleFavorite(eventId) {
 }
 
 async function dbGetEventDetails(eventId) {
-    // Buscar likes
-    const { count: likeCount } = await supabase
-        .from('event_likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId);
-
-    // Verificar se o user atual deu like
-    let hasLiked = false;
+    const { count: likeCount } = await supabase.from('event_likes').select('*', { count: 'exact', head: true }).eq('event_id', eventId);
     const { data: { user } } = await supabase.auth.getUser();
+    let hasLiked = false;
     if (user) {
-        const { data: likeData } = await supabase
-            .from('event_likes')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('event_id', eventId)
-            .maybeSingle();
-        hasLiked = !!likeData;
+        const { data } = await supabase.from('event_likes').select('id').eq('user_id', user.id).eq('event_id', eventId).maybeSingle();
+        hasLiked = !!data;
     }
-
-    // Buscar comentários
-    const { data: comments } = await supabase
-        .from('event_comments')
-        .select(`*, profiles:user_id (username)`)
-        .eq('event_id', eventId)
-        .order('created_at', { ascending: true });
-
+    const { data: comments } = await supabase.from('event_comments').select(`*, profiles:user_id (username)`).eq('event_id', eventId).order('created_at');
     return { likeCount: likeCount || 0, hasLiked, comments: comments || [] };
 }
 
 async function dbToggleLike(eventId) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Precisas de iniciar sessão.");
-
-    const { data: existing } = await supabase
-        .from('event_likes')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('event_id', eventId)
-        .maybeSingle();
-
-    if (existing) {
-        await supabase.from('event_likes').delete().eq('id', existing.id);
-    } else {
-        await supabase.from('event_likes').insert({ user_id: user.id, event_id: eventId });
-    }
+    if (!user) throw new Error("Inicia sessão.");
+    const { data: existing } = await supabase.from('event_likes').select('id').eq('user_id', user.id).eq('event_id', eventId).maybeSingle();
+    if (existing) await supabase.from('event_likes').delete().eq('id', existing.id);
+    else await supabase.from('event_likes').insert({ user_id: user.id, event_id: eventId });
 }
 
 async function dbAddComment(eventId, content) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Precisas de iniciar sessão.");
-
-    const { error } = await supabase
-        .from('event_comments')
-        .insert({ user_id: user.id, event_id: eventId, content });
+    if (!user) throw new Error("Inicia sessão.");
+    const { error } = await supabase.from('event_comments').insert({ user_id: user.id, event_id: eventId, content });
     if (error) throw error;
 }
 
 async function dbCheckIn(eventId) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Precisas de iniciar sessão.");
+    if (!user) throw new Error("Inicia sessão.");
+    const { error } = await supabase.from('event_checkins').insert({ user_id: user.id, event_id: eventId });
+    if (error && error.code !== '23505') throw error;
+}
 
-    const { error } = await supabase
-        .from('event_checkins')
-        .insert({ user_id: user.id, event_id: eventId });
-    
-    if (error && error.code !== '23505') { // Ignorar se já fez check-in
-        throw error;
-    }
+// NOVAS FUNÇÕES BUMP STYLE (Amigos e Chat)
+async function dbSearchUsers(query) {
+    const { data, error } = await supabase.from('profiles').select('id, username').ilike('username', `%${query}%`).limit(5);
+    if (error) return [];
+    return data;
+}
+
+async function dbSendFriendRequest(receiverId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Inicia sessão.");
+    const { error } = await supabase.from('friend_requests').insert({ sender_id: user.id, receiver_id: receiverId });
+    if (error) throw error;
+}
+
+async function dbLoadFriends() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase.from('friends').select(`friend_id, profiles:friend_id (id, username)`).eq('user_id', user.id);
+    if (error) return [];
+    return data.map(f => f.profiles);
 }
