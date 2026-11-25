@@ -5,56 +5,100 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LocalSpot · Bump Edition</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/style.css">
+    <style>
+        :root {
+            --primary: #2563eb; --bg: #f4f6f8; --surface: #ffffff; --border: #e1e5ea;
+            --text: #18212b; --muted: #6b7380; --header-h: 64px;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .hidden { display: none !important; }
+
+        /* Header */
+        .header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; z-index: 10; }
+        .logo { font-weight: bold; font-size: 20px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+        nav { display: flex; gap: 16px; align-items: center; }
+        .btn-soft { border: none; background: #eef3ff; color: var(--primary); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-link { background: none; border: none; cursor: pointer; color: var(--text); font-weight: 500; font-size: 14px; }
+        .btn-link.active { color: var(--primary); font-weight: bold; }
+
+        /* Layout */
+        .main { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .sidebar { width: 360px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 5; overflow-y: auto; }
+        .sidebar-content { padding: 20px; }
+        .sidebar-footer { padding: 20px; border-top: 1px solid var(--border); margin-top: auto; }
+
+        /* MAPA - Correção Crítica */
+        .map-container { flex: 1; position: relative; background: #e5e7eb; }
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* UI Elements */
+        input, select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-family: inherit; }
+        .submit-button { width: 100%; padding: 12px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .modal-content { background: #fff; padding: 24px; border-radius: 12px; width: 100%; max-width: 400px; position: relative; }
+        .close-button { position: absolute; right: 15px; top: 15px; font-size: 24px; background: none; border: none; cursor: pointer; }
+
+        /* Pin do Mapa */
+        .pin { width: 20px; height: 20px; background: var(--primary); border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+
+        /* Chat */
+        #chatMessages { height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; background: #fafafa; border-radius: 8px; }
+        .msg { padding: 8px 12px; border-radius: 12px; max-width: 80%; font-size: 14px; }
+        .msg.me { align-self: flex-end; background: var(--primary); color: white; }
+        .msg.other { align-self: flex-start; background: #eee; color: black; }
+        .friend-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+    </style>
 </head>
 <body>
 
     <header class="header">
-        <div class="logo">📍 LocalSpot</div>
+        <div class="logo">📍 LocalSpot <span style="font-size:12px; background:#eef3ff; padding:2px 6px; border-radius:4px;">Bump</span></div>
         <nav>
-            <button id="tabEventsBtn" class="btn-link" style="color:var(--primary); font-weight:bold;">Eventos</button>
-            <button id="tabSocialBtn" class="btn-link">Amigos & Chat</button>
+            <button id="tabMapBtn" class="btn-link active">🗺️ Mapa</button>
+            <button id="tabSocialBtn" class="btn-link">👥 Amigos & Chat</button>
             <button id="authBtn" class="btn-soft">Entrar</button>
         </nav>
     </header>
 
     <main class="main">
-        <!-- VISTA 1: EVENTOS -->
-        <aside class="sidebar" id="sidebarEvents">
-            <div class="sidebar-content">
-                <h2>Descobre Eventos</h2>
-                <input type="search" id="searchInput" placeholder="🔎 Procurar...">
-                <div class="chips" id="categoryChips"></div>
-                <div id="eventsList"></div>
-            </div>
-            <div class="sidebar-footer">
-                <button id="addEventBtn" class="submit-button">＋ Adicionar Evento</button>
-            </div>
-        </aside>
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Vista Social (Amigos/Chat) -->
+            <div id="socialView" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+                <div class="sidebar-content" style="flex:1; overflow-y:auto;">
+                    <h3>Procurar Amigos</h3>
+                    <div style="display:flex; gap:5px;">
+                        <input type="text" id="searchUserInput" placeholder="Username...">
+                        <button id="searchUserBtn" class="btn-soft" style="margin-bottom:10px;">🔍</button>
+                    </div>
+                    <div id="searchResults" style="margin-bottom:20px;"></div>
 
-        <!-- VISTA 2: AMIGOS & CHAT (BUMP STYLE) -->
-        <aside class="sidebar hidden" id="sidebarSocial">
-            <div class="sidebar-content">
-                <h2>Amigos</h2>
-                <div style="display:flex; gap:5px;">
-                    <input type="text" id="searchUserInput" placeholder="Procurar utilizador...">
-                    <button id="searchUserBtn" class="btn-soft">🔍</button>
+                    <h3>Os Meus Amigos</h3>
+                    <div id="friendsList"></div>
                 </div>
-                <div id="userSearchResults" style="margin-bottom:20px;"></div>
-                <div id="friendsList"></div>
+            </div>
 
-                <h2 style="margin-top:20px;">Chat</h2>
-                <div id="chatRoomsList"></div>
+            <!-- Vista Mapa (Locais) -->
+            <div id="mapView" style="display:flex; flex-direction:column; height:100%;">
+                <div class="sidebar-content">
+                    <h3>Locais Perto de Ti</h3>
+                    <p style="font-size:13px; color:var(--muted);">Clica no mapa para adicionar um local.</p>
+                    <div id="placesList" style="margin-top:15px;"></div>
+                </div>
+                <div class="sidebar-footer">
+                    <button id="ghostModeBtn" class="submit-button" style="background:#6b7380;">👻 Ghost Mode</button>
+                </div>
             </div>
         </aside>
 
-        <!-- MAPA -->
+        <!-- Mapa -->
         <section class="map-container">
             <div id="map"></div>
         </section>
     </main>
 
-    <!-- MODAL: AUTENTICAÇÃO -->
+    <!-- Modal de Autenticação -->
     <div id="authModal" class="modal hidden">
         <div class="modal-content">
             <button class="close-button" onclick="document.getElementById('authModal').classList.add('hidden')">×</button>
@@ -65,40 +109,18 @@
                 <input type="password" id="authPassword" placeholder="Palavra-passe" required>
                 <button type="submit" id="authSubmitBtn" class="submit-button">Entrar</button>
             </form>
-            <p style="text-align:center; margin-top:10px;">
+            <p style="text-align:center; margin-top:10px; font-size:14px;">
                 <a href="#" id="toggleAuth" style="color:var(--primary);">Criar conta</a>
             </p>
         </div>
     </div>
 
-    <!-- MODAL: CRIAR EVENTO -->
-    <div id="eventModal" class="modal hidden">
-        <div class="modal-content">
-            <button class="close-button" onclick="document.getElementById('eventModal').classList.add('hidden')">×</button>
-            <h2>Criar Evento</h2>
-            <form id="eventForm">
-                <input type="text" id="evName" placeholder="Nome do evento" required>
-                <select id="evCategory" required>
-                    <option value="desporto">Desporto</option>
-                    <option value="musica">Música</option>
-                    <option value="cultura">Cultura</option>
-                </select>
-                <input type="date" id="evDate" required>
-                <input type="time" id="evTime" required>
-                <input type="text" id="evLocation" placeholder="Local (ex: Parque)" required>
-                <p id="pickText" style="font-size:12px; color:var(--danger);">Clica no mapa para escolher a localização!</p>
-                <input type="file" id="evImage" accept="image/*">
-                <button type="submit" class="submit-button" id="submitEvBtn">Publicar</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- MODAL: CHAT DA SALA -->
+    <!-- Modal de Chat -->
     <div id="chatModal" class="modal hidden">
         <div class="modal-content">
             <button class="close-button" onclick="document.getElementById('chatModal').classList.add('hidden')">×</button>
-            <h2>Chat</h2>
-            <div id="chatMessages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; display:flex; flex-direction:column; gap:8px;"></div>
+            <h2 id="chatTitle">Chat</h2>
+            <div id="chatMessages"></div>
             <form id="chatForm" style="display:flex; gap:5px;">
                 <input type="text" id="chatInput" placeholder="Mensagem..." style="margin:0;">
                 <button type="submit" class="btn-soft">Enviar</button>
@@ -106,176 +128,72 @@
         </div>
     </div>
 
-    <!-- SDK do Supabase -->
+    <!-- SDKs -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js"></script>
-    
-    <!-- SCRIPTS (Tudo num só ficheiro para facilidade de teste) -->
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
     <script>
+        // ==========================================
+        // CONFIGURAÇÃO - SUBSTITUI AQUI!
+        // ==========================================
         const SUPABASE_URL = 'https://O_TEU_PROJETO.supabase.co';
         const SUPABASE_ANON_KEY = 'A_TUA_ANON_KEY';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        const $ = id => document.getElementById(id);
+        // ==========================================
+        // ESTADO GLOBAL
+        // ==========================================
         let currentUser = null;
-        let currentList = [];
-        let pendingLocation = null;
+        let userPosition = null;
+        let currentChatRoomId = null;
         let isRegisterMode = false;
+        const $ = id => document.getElementById(id);
 
-        // --- INICIALIZAÇÃO DO MAPA (SATÉLITE) ---
+        // ==========================================
+        // INICIALIZAÇÃO DO MAPA (SATÉLITE)
+        // ==========================================
         const map = new maplibregl.Map({
             container: 'map',
             style: {
                 version: 8,
-                sources: { sat: { type: 'raster', tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'], tileSize: 256 } },
-                layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
+                sources: {
+                    satellite: {
+                        type: 'raster',
+                        tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'],
+                        tileSize: 256
+                    }
+                },
+                layers: [{ id: 'satellite', type: 'raster', source: 'satellite' }]
             },
             center: [-8.0, 39.6],
-            zoom: 7
+            zoom: 6
         });
         map.addControl(new maplibregl.NavigationControl());
 
-        let pickHandler = null;
-        map.on('click', (e) => {
-            if (pickHandler) {
-                pendingLocation = { lat: e.lngLat.lat, lng: e.lngLat.lng };
-                $("pickText").textContent = `📍 Local escolhido: ${pendingLocation.lat.toFixed(3)}, ${pendingLocation.lng.toFixed(3)}`;
-                $("pickText").style.color = "green";
-                new maplibregl.Marker().setLngLat([pendingLocation.lng, pendingLocation.lat]).addTo(map);
-                pickHandler = null;
-            }
-        });
+        // Marcador do Utilizador
+        const userMarker = new maplibregl.Marker({ color: '#2563eb' }).setLngLat([-8.0, 39.6]).addTo(map);
 
-        // --- INICIALIZAÇÃO GERAL ---
-        async function init() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) { currentUser = session.user; updateAuthUI(true); }
-            await loadEvents();
-            await loadFriends();
-        }
-
-        // --- EVENTOS ---
-        async function loadEvents() {
-            const { data } = await supabase.from('events').select('*');
-            if (data) {
-                currentList = data;
-                renderEventsList();
-                renderMapMarkers();
-            }
-        }
-
-        function renderEventsList() {
-            $("eventsList").innerHTML = currentList.map(ev => `
-                <div class="event-card">
-                    <h4>${ev.name}</h4>
-                    <p>📅 ${ev.date} | 📍 ${ev.location_name}</p>
-                </div>
-            `).join("");
-        }
-
-        function renderMapMarkers() {
-            currentList.forEach(ev => {
-                const el = document.createElement('div');
-                el.className = 'pin';
-                el.style.cssText = `--pin: #2563eb; width:20px; height:20px; border-radius:50%; border:2px solid white;`;
-                new maplibregl.Marker({element: el}).setLngLat([ev.longitude, ev.latitude]).addTo(map);
-            });
-        }
-
-        // CRIAR EVENTO
-        $("addEventBtn").addEventListener("click", () => {
-            if (!currentUser) return alert("Faz login primeiro!");
-            pickHandler = true;
-            $("eventModal").classList.remove("hidden");
-            map.flyTo({ center: [-8.0, 39.6], zoom: 7 });
-            $("pickText").textContent = "Clica no mapa para escolher a localização!";
-            $("pickText").style.color = "red";
-        });
-
-        $("eventForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            if (!pendingLocation) return alert("Escolhe a localização no mapa!");
+        // Adicionar Local ao clicar no mapa
+        map.on('click', async (e) => {
+            if (!currentUser) return alert("Faz login para adicionar locais.");
+            const lat = e.lngLat.lat;
+            const lng = e.lngLat.lng;
             
-            const { error } = await supabase.from('events').insert({
-                created_by: currentUser.id, name: $("evName").value, category: $("evCategory").value,
-                date: $("evDate").value, time: $("evTime").value, location_name: $("evLocation").value,
-                district: "geral", latitude: pendingLocation.lat, longitude: pendingLocation.lng
-            });
-            if (error) alert("Erro: " + error.message);
-            else { $("eventModal").classList.add("hidden"); pendingLocation = null; loadEvents(); }
-        });
-
-        // --- FUNÇÕES BUMP: AMIGOS E CHAT ---
-        async function loadFriends() {
-            if (!currentUser) return;
-            const { data } = await supabase.from('friends').select('friend_id, profiles:friend_id(username)').eq('user_id', currentUser.id);
-            if (data) {
-                $("friendsList").innerHTML = data.map(f => `
-                    <div style="padding:10px; border-bottom:1px solid #ccc; display:flex; justify-content:space-between;">
-                        <span>👤 ${f.profiles.username}</span>
-                        <button class="btn-soft" onclick="startChat('${f.friend_id}')">💬 Chat</button>
-                    </div>
-                `).join("");
-            }
-        }
-
-        $("searchUserBtn").addEventListener("click", async () => {
-            const q = $("searchUserInput").value;
-            if (!q) return;
-            const { data } = await supabase.from('profiles').select('id, username').ilike('username', `%${q}%`).neq('id', currentUser.id);
-            if (data) {
-                $("userSearchResults").innerHTML = data.map(u => `
-                    <div style="padding:10px; display:flex; justify-content:space-between; background:#f0f0f0; margin-bottom:5px;">
-                        <span>${u.username}</span>
-                        <button class="btn-soft" onclick="addFriend('${u.id}')">Adicionar</button>
-                    </div>
-                `).join("");
-            }
-        });
-
-        window.addFriend = async (id) => {
-            await supabase.from('friends').insert({ user_id: currentUser.id, friend_id: id });
-            await supabase.from('friends').insert({ user_id: id, friend_id: currentUser.id });
-            loadFriends();
-            $("userSearchResults").innerHTML = "";
-            alert("Amigo adicionado!");
-        };
-
-        window.startChat = async (friendId) => {
-            // Lógica simplificada: cria sala, adiciona os dois e abre
-            const { data: room } = await supabase.from('chat_rooms').insert({}).select().single();
-            await supabase.from('chat_participants').insert([
-                { room_id: room.id, user_id: currentUser.id },
-                { room_id: room.id, user_id: friendId }
-            ]);
-            openChatRoom(room.id);
-        };
-
-        async function openChatRoom(roomId) {
-            $("chatModal").classList.remove("hidden");
-            $("chatMessages").innerHTML = "A carregar...";
+            new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
             
-            const loadMsgs = async () => {
-                const { data } = await supabase.from('chat_messages').select('*, profiles(sender_id, username)').eq('room_id', roomId).order('created_at');
-                if (data) {
-                    $("chatMessages").innerHTML = data.map(m => `
-                        <div style="align-self: ${m.sender_id === currentUser.id ? 'flex-end' : 'flex-start'}; background: ${m.sender_id === currentUser.id ? '#2563eb' : '#eee'}; color: ${m.sender_id === currentUser.id ? 'white' : 'black'}; padding: 8px; border-radius: 8px;">
-                            <small>${m.profiles.username}</small><br>${m.content}
-                        </div>
-                    `).join("");
-                }
-            };
-            await loadMsgs();
+            const { error } = await supabase.from('places').insert({
+                name: `Local (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
+                latitude: lat,
+                longitude: lng,
+                created_by: currentUser.id
+            });
+            if (error) alert("Erro ao guardar local: " + error.message);
+            else loadPlaces();
+        });
 
-            $("chatForm").onsubmit = async (e) => {
-                e.preventDefault();
-                await supabase.from('chat_messages').insert({ room_id: roomId, sender_id: currentUser.id, content: $("chatInput").value });
-                $("chatInput").value = "";
-                await loadMsgs();
-            };
-        }
-
-        // --- AUTENTICAÇÃO ---
+        // ==========================================
+        // AUTENTICAÇÃO
+        // ==========================================
         $("authBtn").addEventListener("click", () => $("authModal").classList.remove("hidden"));
         $("toggleAuth").addEventListener("click", (e) => {
             e.preventDefault();
@@ -287,32 +205,195 @@
 
         $("authForm").addEventListener("submit", async (e) => {
             e.preventDefault();
-            const email = $("authEmail").value, pass = $("authPassword").value;
+            const email = $("authEmail").value;
+            const pass = $("authPassword").value;
+            
             if (isRegisterMode) {
-                const { error } = await supabase.auth.signUp({ email, password: pass, options: { data: { username: $("authUsername").value } } });
-                if (error) alert(error.message); else alert("Registado! Já podes entrar.");
+                const { error } = await supabase.auth.signUp({ 
+                    email, 
+                    password: pass, 
+                    options: { data: { username: $("authUsername").value } } 
+                });
+                if (error) alert(error.message); 
+                else { alert("Registado! Já podes entrar."); $("toggleAuth").click(); }
             } else {
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-                if (error) alert(error.message); else { currentUser = data.user; updateAuthUI(true); $("authModal").classList.add("hidden"); loadFriends(); }
+                if (error) alert(error.message); 
+                else { 
+                    currentUser = data.user; 
+                    $("authBtn").textContent = "Sair"; 
+                    $("authBtn").onclick = async () => { await supabase.auth.signOut(); location.reload(); };
+                    $("authModal").classList.add("hidden"); 
+                    loadFriends();
+                    loadPlaces();
+                }
             }
         });
 
-        function updateAuthUI(logged) {
-            $("authBtn").textContent = logged ? "Sair" : "Entrar";
-            $("authBtn").onclick = logged ? async () => { await supabase.auth.signOut(); location.reload(); } : () => $("authModal").classList.remove("hidden");
+        // ==========================================
+        // FUNÇÕES BUMP: AMIGOS E CHAT
+        // ==========================================
+        async function loadFriends() {
+            if (!currentUser) return;
+            const { data } = await supabase.from('friends')
+                .select('friend_id, profiles:friend_id(username)')
+                .eq('user_id', currentUser.id);
+            
+            if (data) {
+                $("friendsList").innerHTML = data.map(f => `
+                    <div class="friend-item">
+                        <span>👤 ${f.profiles.username}</span>
+                        <button class="btn-soft" onclick="openChat('${f.friend_id}')">💬</button>
+                    </div>
+                `).join("") || "<p style='font-size:13px; color:#666;'>Ainda não tens amigos.</p>";
+            }
         }
 
-        // --- TABS (TROCA DE VISTAS) ---
-        $("tabEventsBtn").addEventListener("click", () => {
-            $("sidebarEvents").classList.remove("hidden");
-            $("sidebarSocial").classList.add("hidden");
+        $("searchUserBtn").addEventListener("click", async () => {
+            const q = $("searchUserInput").value;
+            if (!q || !currentUser) return;
+            const { data } = await supabase.from('profiles')
+                .select('id, username')
+                .ilike('username', `%${q}%`)
+                .neq('id', currentUser.id);
+            
+            if (data) {
+                $("searchResults").innerHTML = data.map(u => `
+                    <div class="friend-item">
+                        <span>${u.username}</span>
+                        <button class="btn-soft" onclick="addFriend('${u.id}')">Adicionar</button>
+                    </div>
+                `).join("");
+            }
+        });
+
+        window.addFriend = async (friendId) => {
+            await supabase.from('friends').insert({ user_id: currentUser.id, friend_id: friendId });
+            await supabase.from('friends').insert({ user_id: friendId, friend_id: currentUser.id });
+            alert("Amigo adicionado!");
+            loadFriends();
+            $("searchResults").innerHTML = "";
+        };
+
+        // CHAT
+        window.openChat = async (friendId) => {
+            // Verificar ou criar sala
+            let { data: room } = await supabase.from('chat_rooms').select('id').limit(1).maybeSingle();
+            // Simplificação: cria sempre nova sala para teste
+            const { data: newRoom } = await supabase.from('chat_rooms').insert({}).select().single();
+            await supabase.from('chat_participants').insert([
+                { room_id: newRoom.id, user_id: currentUser.id },
+                { room_id: newRoom.id, user_id: friendId }
+            ]);
+            currentChatRoomId = newRoom.id;
+            $("chatModal").classList.remove("hidden");
+            loadMessages();
+        };
+
+        async function loadMessages() {
+            if (!currentChatRoomId) return;
+            const { data } = await supabase.from('chat_messages')
+                .select('*, profiles:sender_id(username)')
+                .eq('room_id', currentChatRoomId)
+                .order('created_at');
+            
+            if (data) {
+                $("chatMessages").innerHTML = data.map(m => `
+                    <div class="msg ${m.sender_id === currentUser.id ? 'me' : 'other'}">
+                        <strong>${m.profiles.username}</strong><br>${m.content}
+                    </div>
+                `).join("");
+                $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
+            }
+        }
+
+        $("chatForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const content = $("chatInput").value;
+            if (!content || !currentChatRoomId) return;
+            await supabase.from('chat_messages').insert({
+                room_id: currentChatRoomId,
+                sender_id: currentUser.id,
+                content: content
+            });
+            $("chatInput").value = "";
+            loadMessages();
+        });
+
+        // ==========================================
+        // FUNÇÕES DE LOCALIZAÇÃO E LOCAIS
+        // ==========================================
+        async function loadPlaces() {
+            const { data } = await supabase.from('places').select('*');
+            if (data) {
+                $("placesList").innerHTML = data.map(p => `
+                    <div style="padding:10px; border-bottom:1px solid #eee; font-size:14px;">
+                        📍 ${p.name}
+                    </div>
+                `).join("");
+            }
+        }
+
+        async function updateLocation() {
+            if (!navigator.geolocation || !currentUser) return;
+            navigator.geolocation.watchPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                userPosition = { lat, lng };
+                userMarker.setLngLat([lng, lat]);
+                
+                await supabase.from('profiles').update({ latitude: lat, longitude: lng, last_seen: new Date() }).eq('id', currentUser.id);
+            }, (err) => console.error(err), { enableHighAccuracy: true });
+        }
+
+        $("ghostModeBtn").addEventListener("click", async () => {
+            if (!currentUser) return alert("Faz login.");
+            const { data } = await supabase.from('profiles').select('ghost_mode').eq('id', currentUser.id).single();
+            const newMode = !data.ghost_mode;
+            await supabase.from('profiles').update({ ghost_mode: newMode }).eq('id', currentUser.id);
+            alert(`Ghost Mode: ${newMode ? 'Ligado (invisível)' : 'Desligado (visível)'}`);
+        });
+
+        // ==========================================
+        // TABS (Navegação)
+        // ==========================================
+        $("tabMapBtn").addEventListener("click", () => {
+            $("mapView").classList.remove("hidden");
+            $("socialView").classList.add("hidden");
+            $("tabMapBtn").classList.add("active");
+            $("tabSocialBtn").classList.remove("active");
         });
         $("tabSocialBtn").addEventListener("click", () => {
-            if (!currentUser) return alert("Faz login para aceder aos Amigos!");
-            $("sidebarEvents").classList.add("hidden");
-            $("sidebarSocial").classList.remove("hidden");
+            if (!currentUser) return alert("Faz login para ver Amigos.");
+            $("mapView").classList.add("hidden");
+            $("socialView").classList.remove("hidden");
+            $("tabSocialBtn").classList.add("active");
+            $("tabMapBtn").classList.remove("active");
             loadFriends();
         });
+
+        // ==========================================
+        // ARRANQUE
+        // ==========================================
+        async function init() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                $("authBtn").textContent = "Sair";
+                $("authBtn").onclick = async () => { await supabase.auth.signOut(); location.reload(); };
+                loadFriends();
+                loadPlaces();
+                updateLocation();
+            } else {
+                // Tentar obter localização só para mostrar o mapa
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(pos => {
+                        map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 12 });
+                        userMarker.setLngLat([pos.coords.longitude, pos.coords.latitude]);
+                    });
+                }
+            }
+        }
 
         init();
     </script>
