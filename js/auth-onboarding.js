@@ -25,7 +25,7 @@
             <div class="bump-impact-ring"></div>
             <div class="bump-impact-ring r2"></div>
             <div class="bump-impact-emoji">${emoji}</div>
-            <div class="bump-impact-label">${window.escapeHTML ? window.escapeHTML(labelText) : labelText}</div>
+            <div class="bump-impact-label">${window.escapeHTML(labelText)}</div>
         `;
         document.body.appendChild(overlay);
 
@@ -48,7 +48,7 @@
         if (!profile || !profile.email) return;
         const list = getSavedSessions().filter(s => s.email.toLowerCase() !== profile.email.toLowerCase());
         list.unshift({
-            id: profile.id || `user-${Date.now()}`,
+            id: profile.id || null,
             full_name: profile.full_name || "Utilizador",
             email: profile.email.toLowerCase().trim(),
             role: profile.role || "user",
@@ -114,7 +114,7 @@
     async function activateSessionInUI(profile, showAnimation = true) {
         saveProfileSession(profile);
 
-        // Gravar/sincronizar imediatamente na tabela "profiles" do Supabase
+        // Sincroniza e grava na tabela "profiles" do Supabase para obter o UUID real
         if (window.LocalSpotDB && window.LocalSpotDB.isReady()) {
             const dbProfile = await window.LocalSpotDB.upsertProfile(profile);
             if (dbProfile && dbProfile.id) {
@@ -258,7 +258,6 @@
             if (label) label.textContent = isBiz ? "Nome da Entidade / Empresa *" : "Nome de exibição *";
         });
 
-        // Criar Conta e Guardar Perfil na BD
         document.getElementById("registerForm")?.addEventListener("submit", async e => {
             e.preventDefault();
             const submitBtn = document.getElementById("registerSubmitBtn");
@@ -286,7 +285,6 @@
             }
         }, true);
 
-        // Iniciar Sessão procurando o perfil existente na BD
         document.getElementById("loginForm")?.addEventListener("submit", async e => {
             e.preventDefault();
             const email = document.getElementById("loginEmail")?.value.trim() || "";
