@@ -1,5 +1,5 @@
 // ==========================================
-// LOCALSPOT — SISTEMA DE AMIGOS, RADAR & CHAT
+// LOCALSPOT — SISTEMA DE AMIGOS, RADAR & CHAT (COMPLETO)
 // ==========================================
 
 (function () {
@@ -8,6 +8,7 @@
     let outgoingRequests = [];
     let activeChatFriend = null;
     const friendMapMarkers = new Map();
+    const mapFocusFriendOriginal = typeof window.focusFriendOnMap === "function" ? window.focusFriendOnMap : null;
 
     // Garante que o utilizador atual tem o UUID real da tabela "profiles"
     async function ensureSyncedMe() {
@@ -30,14 +31,12 @@
         return me;
     }
 
-    // Garante que o botão "👊 Amigos" existe na barra superior
     function ensureFriendsHeaderButton() {
         const nav = document.querySelector(".header nav");
         if (!nav) return;
 
         let btn = document.getElementById("lsHeaderFriendsBtn");
         if (!btn) {
-            // Verifica se já existe algum botão de amigos no HTML
             const existing = Array.from(nav.querySelectorAll("button")).find(b =>
                 b.textContent.toLowerCase().includes("amigos")
             );
@@ -99,25 +98,20 @@
             }
 
             const el = document.createElement("div");
-            el.style.cssText = `
-                width: 44px; height: 44px; border-radius: 50%;
-                background: linear-gradient(135deg, #10b981, #8b5cf6);
-                border: 3px solid #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.45);
-                display: flex; align-items: center; justify-content: center;
-                font-size: 22px; cursor: pointer; position: relative;
-            `;
+            el.className = "ls-friend-marker online";
             el.innerHTML = `
-                <span>${friend.avatar_emoji || "😎"}</span>
-                <span style="position:absolute; bottom:-4px; right:-4px; background:#0f1624; border-radius:50%; font-size:12px; padding:1px 3px;">${friend.status_emoji || "📍"}</span>
+                <span class="ls-friend-name-tag">🟢 ${window.escapeHTML((friend.full_name || "Amigo").split(" ")[0])}</span>
+                <span>${window.escapeHTML(friend.avatar_emoji || "😎")}</span>
+                <span class="ls-friend-mood-badge">${window.escapeHTML(friend.status_emoji || "📍")}</span>
             `;
 
             const popupHtml = `
-                <div style="color:#0f172a; font-family:Inter,sans-serif; min-width:170px;">
-                    <strong style="display:block; font-size:14px;">${friend.avatar_emoji || "😎"} ${friend.full_name}</strong>
-                    <span style="font-size:12px; color:#475569;">${friend.status_emoji || "📍"} ${friend.status_text || "Online"} · 👊 ${friend.bump_count || 0}</span>
-                    <div style="display:flex; gap:6px; margin-top:8px;">
-                        <button type="button" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')" style="flex:1; background:#f43f5e; color:#fff; border:none; border-radius:8px; padding:5px; font-weight:700; cursor:pointer;">👊 Bump</button>
-                        <button type="button" onclick="window.openFriendChat('${friend.id}')" style="flex:1; background:#10b981; color:#04130d; border:none; border-radius:8px; padding:5px; font-weight:700; cursor:pointer;">💬 Chat</button>
+                <div style="min-width:190px;">
+                    <strong style="display:block; font-size:14px;">${window.escapeHTML(friend.avatar_emoji || "😎")} ${window.escapeHTML(friend.full_name)}</strong>
+                    <span style="display:block; font-size:12px; color:#94a3b8; margin:3px 0 8px;">${window.escapeHTML(friend.status_emoji || "📍")} ${window.escapeHTML(friend.status_text || "Online")} · 👊 ${friend.bump_count || 0}</span>
+                    <div style="display:flex; gap:6px;">
+                        <button type="button" onclick="window.sendBump('${friend.id}', '👊', 'Bump!')" style="flex:1; background:#f43f5e; color:#fff; border:none; border-radius:8px; padding:6px; font-weight:800; cursor:pointer;">👊 Bump</button>
+                        <button type="button" onclick="window.openFriendChat('${friend.id}')" style="flex:1; background:#10b981; color:#04130d; border:none; border-radius:8px; padding:6px; font-weight:800; cursor:pointer;">💬 Chat</button>
                     </div>
                 </div>
             `;
@@ -130,7 +124,6 @@
             friendMapMarkers.set(String(friend.id), marker);
         });
 
-        // Remove marcadores de amigos que deixaram de estar visíveis
         friendMapMarkers.forEach((marker, id) => {
             if (!validIds.has(id)) {
                 marker.remove();
@@ -140,23 +133,50 @@
     }
 
     window.focusFriendOnMap = function (friendId) {
+        if (mapFocusFriendOriginal && mapFocusFriendOriginal(friendId)) {
+            return true;
+        }
         const friend = currentFriends.find(f => String(f.id) === String(friendId));
-        if (!friend || typeof friend.last_lat !== "number" || typeof friend.last_lng !== "number") return;
+        if (!friend || typeof friend.last_lat !== "number" || typeof friend.last_lng !== "number") return false;
         if (window.map) {
-            window.map.flyTo({ center: [friend.last_lng, friend.last_lat], zoom: 16, duration: 1000 });
+            window.map.flyTo({ center: [friend.last_lng, friend.last_lat], zoom: 16, duration: 900 });
             const marker = friendMapMarkers.get(String(friend.id));
             marker?.togglePopup();
+            return true;
         }
+        return false;
     };
 
     // ==========================================
     // 2. BUMPS & CHAT
     // ==========================================
+    window.getFriendshipTier = window.getFriendshipTier || function (bumpCount = 0) {
+        if (bumpCount >= 50) return { badge: "👑 Melhores Amigos" };
+        if (bumpCount >= 20) return { badge: "🔥 Parceiros" };
+        if (bumpCount >= 5) return { badge: "⚡ Próximos" };
+        return { badge: "🌱 Amigos" };
+    };
+
+    window.isFriendLiveOnline = window.isFriendLiveOnline || function (friendId) {
+        const f = currentFriends.find(item => String(item.id) === String(friendId));
+        if (!f || !f.updated_at) return false;
+        return Date.now() - new Date(f.updated_at).getTime() < 10 * 60 * 1000;
+    };
+
     window.sendBump = async function (friendId, emoji = "👊", message = "Bump!") {
         const me = await ensureSyncedMe();
         if (!me) return;
-        await window.LocalSpotDB.sendBump(me.id, friendId, emoji, message);
+        const senderFirst = (me.full_name || "Alguém").split(" ")[0];
+        await window.LocalSpotDB.sendBump(me.id, friendId, emoji, `${senderFirst}: ${message}`);
         window.triggerBumpImpactAnimation?.(`${emoji} Bump enviado!`, emoji);
+    };
+
+    window.sendWhereAreYouPing = async function (friendId) {
+        const me = await ensureSyncedMe();
+        if (!me) return;
+        const senderFirst = (me.full_name || "Alguém").split(" ")[0];
+        await window.LocalSpotDB.sendBump(me.id, friendId, "👀", `${senderFirst}: Onde andas?`);
+        window.triggerBumpImpactAnimation?.("👀 Ping 'Onde andas?' enviado!", "👀");
     };
 
     window.openFriendChat = async function (friendId) {
@@ -175,7 +195,7 @@
     };
 
     // ==========================================
-    // 3. ATUALIZAR LISTA DE AMIGOS & BADGE
+    // 3. ATUALIZAR LISTA DE AMIGOS & MAPA
     // ==========================================
     window.refreshFriendsSystem = async function () {
         ensureFriendsHeaderButton();
@@ -197,8 +217,9 @@
 
         if (typeof window.showFriendsOnMap === "function") {
             window.showFriendsOnMap(currentFriends);
+        } else {
+            renderFriendsOnMapFallback(currentFriends);
         }
-        renderFriendsOnMapFallback(currentFriends);
 
         const friendsModal = document.getElementById("lsSocialFriendsModal");
         if (friendsModal && !friendsModal.classList.contains("hidden")) {
@@ -308,32 +329,45 @@
         const listEl = document.getElementById("lsSearchResultsList");
         if (!listEl) return;
 
-        if (!me || !window.LocalSpotDB?.isReady()) {
-            listEl.innerHTML = `<p class="muted" style="font-size:12px;">Inicia sessão primeiro para procurar amigos.</p>`;
+        if (!window.LocalSpotDB?.isReady()) {
+            listEl.innerHTML = `<p class="muted" style="font-size:12px;">Base de dados Supabase não inicializada.</p>`;
             return;
         }
 
-        const results = await window.LocalSpotDB.searchProfiles(query, me.id);
-        if (results.length === 0) {
-            listEl.innerHTML = `<p class="muted" style="font-size:12px;">Nenhum outro utilizador encontrado na base de dados.</p>`;
+        const { profiles, error } = await window.LocalSpotDB.fetchAllProfiles(me?.id);
+        if (error) {
+            listEl.innerHTML = `<p style="color:#fda4af; font-size:12px;">Erro BD: ${window.escapeHTML(error)}</p>`;
             return;
         }
 
-        const friendIds = new Set(currentFriends.map(f => f.id));
-        const outgoingIds = new Set(outgoingRequests.map(f => f.id));
-        const incomingMap = new Map(incomingRequests.map(f => [f.id, f.friendship_id]));
+        const q = (query || "").trim().toLowerCase();
+        const filtered = profiles.filter(u => {
+            if (me && String(u.id) === String(me.id)) return false;
+            if (!q) return true;
+            return `${u.full_name || ""} ${u.email || ""}`.toLowerCase().includes(q);
+        });
 
-        listEl.innerHTML = results.map(u => {
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<p class="muted" style="font-size:12px;">Nenhum outro utilizador encontrado na tabela profiles.</p>`;
+            return;
+        }
+
+        const friendIds = new Set(currentFriends.map(f => String(f.id)));
+        const outgoingIds = new Set(outgoingRequests.map(f => String(f.id)));
+        const incomingMap = new Map(incomingRequests.map(f => [String(f.id), f.friendship_id]));
+
+        listEl.innerHTML = filtered.map(u => {
+            const uid = String(u.id);
             let actionHtml = "";
-            if (friendIds.has(u.id)) {
+            if (friendIds.has(uid)) {
                 actionHtml = `<span style="font-size:11.5px; color:var(--primary); font-weight:700;">✓ Amigo</span>`;
-            } else if (outgoingIds.has(u.id)) {
+            } else if (outgoingIds.has(uid)) {
                 actionHtml = `<span style="font-size:11.5px; color:var(--muted);">⏳ Pendente</span>`;
-            } else if (incomingMap.has(u.id)) {
-                const reqId = incomingMap.get(u.id);
+            } else if (incomingMap.has(uid)) {
+                const reqId = incomingMap.get(uid);
                 actionHtml = `<button type="button" class="btn-primary-sm" data-accept-req="${reqId}">Aceitar</button>`;
             } else {
-                actionHtml = `<button type="button" class="btn-primary-sm" data-add-friend="${u.id}">+ Adicionar</button>`;
+                actionHtml = `<button type="button" class="btn-primary-sm" data-add-friend="${uid}">+ Adicionar</button>`;
             }
 
             return `
@@ -353,6 +387,10 @@
         listEl.querySelectorAll("[data-add-friend]").forEach(btn => {
             btn.addEventListener("click", async () => {
                 showModalFeedback("");
+                if (!me || !window.LocalSpotDB.isValidUUID(me.id)) {
+                    showModalFeedback("Faz Sair (logout) e volta a entrar para sincronizar o teu perfil com a BD.");
+                    return;
+                }
                 const targetId = btn.getAttribute("data-add-friend");
                 btn.disabled = true;
                 btn.textContent = "A enviar...";
@@ -444,7 +482,7 @@
                             </div>
                             <div style="display:flex; gap:5px;">
                                 ${hasLoc ? `<button type="button" class="btn-soft" style="padding:5px 8px; font-size:11.5px;" data-locate-friend="${f.id}" title="Ver no Mapa">📍</button>` : ""}
-                                <button type="button" class="btn-soft" style="padding:5px 8px; font-size:11.5px;" data-bump-friend="${f.id}" data-bump-name="${window.escapeHTML(f.full_name.split(" ")[0])}">👊</button>
+                                <button type="button" class="btn-soft" style="padding:5px 8px; font-size:11.5px;" data-bump-friend="${f.id}">👊</button>
                                 <button type="button" class="btn-primary-sm" data-chat-friend="${f.id}">💬</button>
                             </div>
                         </div>
@@ -462,8 +500,7 @@
                 myFriendsList.querySelectorAll("[data-bump-friend]").forEach(btn => {
                     btn.addEventListener("click", async () => {
                         const fid = btn.getAttribute("data-bump-friend");
-                        const fname = btn.getAttribute("data-bump-name");
-                        await window.sendBump(fid, "👊", `Bump de ${fname}!`);
+                        await window.sendBump(fid, "👊", "Bump!");
                     });
                 });
 
@@ -490,7 +527,7 @@
         }
 
         box.innerHTML = msgs.map(m => {
-            const isMine = m.sender_id === me.id;
+            const isMine = String(m.sender_id) === String(me.id);
             return `
                 <div style="align-self:${isMine ? "flex-end" : "flex-start"}; max-width:78%; background:${isMine ? "var(--primary)" : "var(--surface)"}; color:${isMine ? "#04130d" : "var(--text)"}; padding:7px 11px; border-radius:12px; font-size:12.5px; font-weight:${isMine ? "600" : "400"}; border:1px solid var(--border);">
                     ${window.escapeHTML(m.content)}
@@ -521,7 +558,6 @@
             }
         }, true);
 
-        // Enviar a tua posição GPS para a BD para os teus amigos te verem no mapa
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
                 window.syncMyLiveLocation(pos.coords.latitude, pos.coords.longitude, 0);
@@ -539,12 +575,12 @@
                 })
                 .on("postgres_changes", { event: "INSERT", schema: "public", table: "bumps" }, async payload => {
                     const me = await ensureSyncedMe();
-                    if (me && payload.new?.receiver_id === me.id) {
+                    if (me && String(payload.new?.receiver_id) === String(me.id)) {
                         window.triggerBumpImpactAnimation?.(`${payload.new.emoji || "👊"} ${payload.new.message || "Recebeste um Bump!"}`, payload.new.emoji || "👊");
                     }
                 })
                 .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, payload => {
-                    if (activeChatFriend && (payload.new?.sender_id === activeChatFriend.id || payload.new?.receiver_id === activeChatFriend.id)) {
+                    if (activeChatFriend && (String(payload.new?.sender_id) === String(activeChatFriend.id) || String(payload.new?.receiver_id) === String(activeChatFriend.id))) {
                         renderChatHistory();
                     }
                 })
