@@ -1,6 +1,15 @@
 // ==========================================
-// LOCALSPOT — BASE DE DADOS SUPABASE (PERFIS, AMIGOS & EVENTOS)
+// LOCALSPOT — BASE DE DADOS SUPABASE (COMPLETO)
 // ==========================================
+
+window.escapeHTML = window.escapeHTML || function (str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+};
 
 const SUPABASE_URL = "https://ufzjexbihnwflqktpomm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmempleGJpaG53Zmxxa3Rwb21tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMjU5NDUsImV4cCI6MjEwOTkwMTk0NX0.hy3x0RuyuKYwTOGvdAA2hYKH_02SEy49YRaZHoD2ufA";
@@ -31,9 +40,10 @@ window.LocalSpotDB = {
     async upsertProfile(profileData) {
         if (!this.isReady() || !profileData?.email) return profileData;
 
+        const cleanEmail = profileData.email.toLowerCase().trim();
         const payload = {
             full_name: profileData.full_name || "Explorador",
-            email: profileData.email.toLowerCase().trim(),
+            email: cleanEmail,
             role: profileData.role || "user",
             business_type: profileData.business_type || "",
             bio: profileData.bio || "",
@@ -50,17 +60,39 @@ window.LocalSpotDB = {
             payload.last_lng = profileData.last_lng;
         }
 
-        const { data, error } = await window.supabaseClient
+        // Verifica se já existe perfil com este e-mail para atualizar ou inserir com UUID real
+        const { data: existing } = await window.supabaseClient
             .from("profiles")
-            .upsert(payload, { onConflict: "email" })
+            .select("*")
+            .eq("email", cleanEmail)
+            .maybeSingle();
+
+        if (existing && existing.id) {
+            const { data: updated, error: updErr } = await window.supabaseClient
+                .from("profiles")
+                .update(payload)
+                .eq("id", existing.id)
+                .select()
+                .single();
+
+            if (updErr) {
+                console.error("Erro ao atualizar perfil na BD:", updErr.message);
+                return existing;
+            }
+            return updated;
+        }
+
+        const { data: inserted, error: insErr } = await window.supabaseClient
+            .from("profiles")
+            .insert(payload)
             .select()
             .single();
 
-        if (error) {
-            console.error("Erro ao guardar perfil na BD:", error.message);
+        if (insErr) {
+            console.error("Erro ao criar perfil na BD:", insErr.message);
             return profileData;
         }
-        return data;
+        return inserted;
     },
 
     async getProfileByEmail(email) {
@@ -75,29 +107,24 @@ window.LocalSpotDB = {
         return data || null;
     },
 
-    async searchProfiles(queryText, excludeUserId) {
-        if (!this.isReady()) return [];
+    async fetchAllProfiles(excludeUserId) {
+        if (!this.isReady()) return { profiles: [], error: "Supabase não ligado." };
+
         let req = window.supabaseClient
             .from("profiles")
             .select("*")
             .order("updated_at", { ascending: false })
-            .limit(30);
+            .limit(50);
 
         if (isValidUUID(excludeUserId)) {
             req = req.neq("id", excludeUserId);
         }
 
-        const q = (queryText || "").trim();
-        if (q.length > 0) {
-            req = req.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
-        }
-
         const { data, error } = await req;
         if (error) {
-            console.error("Erro ao pesquisar utilizadores:", error.message);
-            return [];
+            return { profiles: [], error: error.message };
         }
-        return data || [];
+        return { profiles: data || [], error: null };
     },
 
     async syncLiveLocation(userId, lat, lng, extra = {}) {
@@ -148,15 +175,15 @@ window.LocalSpotDB = {
             .select("*")
             .in("id", otherIds);
 
-        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        const profileMap = new Map((profiles || []).map(p => [String(p.id), p]));
 
         const friends = [];
         const incoming = [];
         const outgoing = [];
 
         rows.forEach(r => {
-            const isRequester = r.requester_id === userId;
-            const otherId = isRequester ? r.addressee_id : r.requester_id;
+            const isRequester = String(r.requester_id) === String(userId);
+            const otherId = String(isRequester ? r.addressee_id : r.requester_id);
             const otherProfile = profileMap.get(otherId);
             if (!otherProfile) return;
 
@@ -176,7 +203,7 @@ window.LocalSpotDB = {
 
     async sendFriendRequest(fromUserId, toUserId) {
         if (!this.isReady() || !isValidUUID(fromUserId) || !isValidUUID(toUserId) || fromUserId === toUserId) {
-            return { ok: false, error: "Perfil ainda não sincronizado com a base de dados." };
+            return { ok: false, error: "O teu perfil ainda não está sincronizado com a base de dados." };
         }
 
         const { data: existing } = await window.supabaseClient
@@ -189,7 +216,7 @@ window.LocalSpotDB = {
             if (existing.status === "accepted") {
                 return { ok: false, error: "Já são amigos!" };
             }
-            if (existing.addressee_id === fromUserId) {
+            if (String(existing.addressee_id) === String(fromUserId)) {
                 await this.respondFriendRequest(existing.id, true);
                 return { ok: true, autoAccepted: true };
             }
@@ -462,5 +489,36 @@ window.LocalSpotDB = {
             },
             { onConflict: "event_id,user_id" }
         );
+    },
+
+    startRealtimeSync(onDataChanged) {
+        if (!this.isReady()) return;
+
+        window.supabaseClient
+            .channel("localspot-global-sync")
+            .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
+                this.fetchAllEventsWithAttendees().then(() => onDataChanged?.("events"));
+            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "event_registrations" }, () => {
+                this.fetchAllEventsWithAttendees().then(() => onDataChanged?.("registrations"));
+            })
+            .subscribe();
     }
 };
+
+document.addEventListener("DOMContentLoaded", async () => {
+    if (!window.LocalSpotDB.isReady()) return;
+
+    const events = await window.LocalSpotDB.fetchAllEventsWithAttendees();
+    if (typeof window.showEventsOnMap === "function") {
+        window.showEventsOnMap(events);
+    }
+    if (typeof window.filterEvents === "function") {
+        window.filterEvents();
+    }
+
+    window.LocalSpotDB.startRealtimeSync(() => {
+        if (typeof window.showEventsOnMap === "function") window.showEventsOnMap(window.events);
+        if (typeof window.filterEvents === "function") window.filterEvents();
+    });
+});
