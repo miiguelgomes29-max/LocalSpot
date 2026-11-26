@@ -54,6 +54,13 @@ body {
   cursor: pointer;
 }
 
+.brand-logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 .navbar-actions {
   display: flex;
   align-items: center;
@@ -303,7 +310,7 @@ input[type="range"] {
   font-weight: 600;
 }
 
-/* CARTÕES DE EVENTO */
+/* CARTÕES DE EVENTOS */
 .events-list {
   display: flex;
   flex-direction: column;
@@ -412,6 +419,16 @@ input[type="range"] {
   margin-top: 2px;
 }
 
+.event-friends-badge {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 2px;
+}
+
 .event-actions {
   display: flex;
   gap: 8px;
@@ -462,6 +479,7 @@ input[type="range"] {
   flex: 1;
   position: relative;
   background: #090d16;
+  overflow: hidden;
 }
 
 #map {
@@ -471,7 +489,7 @@ input[type="range"] {
 }
 
 #map.vista-3d {
-  transform: perspective(1100px) rotateX(24deg) scale(1.08);
+  transform: perspective(1000px) rotateX(26deg) scale(1.1);
 }
 
 .map-floating-controls {
@@ -501,7 +519,7 @@ input[type="range"] {
 }
 
 .custom-map-pin {
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(15, 23, 42, 0.94);
   border: 1.5px solid var(--accent-green);
   color: #f8fafc;
   padding: 4px 9px;
@@ -509,7 +527,7 @@ input[type="range"] {
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 /* MODAIS */
@@ -636,7 +654,7 @@ input[type="range"] {
   background: rgba(16, 185, 129, 0.2);
 }
 
-/* LISTAS INTERNAS (AMIGOS, SESSÕES, NOTIFICAÇÕES) */
+/* LISTAS INTERNAS */
 .friends-search-bar input {
   width: 100%;
   background: var(--bg-input);
