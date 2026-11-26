@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LocalSpot — Eventos & Radar Social ao Vivo</title>
+    <title>LocalSpot — Eventos Globais & Radar Social 3D</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/style.css">
     <style>
         /* =========================================================
-           1. CORREÇÃO DEFINITIVA DE DIMENSÕES DO MAPA (PRIORIDADE MAX)
+           1. DIMENSÕES DO MAPA 3D
            ========================================================= */
         html, body {
             height: 100%;
@@ -32,23 +32,15 @@
             height: 100% !important;
             min-height: 450px !important;
             display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
             overflow: hidden !important;
             background: #090e1a;
         }
         #main .map-container #map {
             position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
+            inset: 0 !important;
             width: 100% !important;
             height: 100% !important;
             min-height: 450px !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
             z-index: 1 !important;
         }
         .map-floating-controls {
@@ -61,7 +53,108 @@
         }
 
         /* =========================================================
-           2. ANIMAÇÕES ESTILO BUMP (RADAR, SHOCKWAVE, SPRING)
+           2. PINS DE MARCAÇÃO CLÁSSICOS (TEARDROP MAP PINS)
+           ========================================================= */
+        .ls-pin-wrap {
+            position: relative;
+            width: 40px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            user-select: none;
+        }
+        .ls-pin-drop {
+            width: 36px;
+            height: 36px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: 2.5px solid #ffffff;
+            box-shadow: -3px 6px 14px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .ls-pin-wrap.paid .ls-pin-drop {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+        }
+        .ls-pin-wrap.pick-pin .ls-pin-drop {
+            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+        }
+        .ls-pin-wrap:hover .ls-pin-drop,
+        .ls-pin-wrap.active .ls-pin-drop {
+            transform: rotate(-45deg) scale(1.18) translate(3px, -3px);
+            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+            box-shadow: -4px 10px 20px rgba(244, 63, 94, 0.55);
+        }
+        .ls-pin-emoji {
+            transform: rotate(45deg);
+            font-size: 16px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ls-pin-shadow {
+            position: absolute;
+            bottom: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14px;
+            height: 5px;
+            background: rgba(0, 0, 0, 0.45);
+            border-radius: 50%;
+            filter: blur(1.5px);
+            pointer-events: none;
+        }
+        .ls-pin-tooltip {
+            position: absolute;
+            bottom: 54px;
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            background: rgba(15, 22, 36, 0.95);
+            color: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11.5px;
+            font-weight: 700;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+            transition: opacity 0.16s ease, transform 0.16s ease;
+            z-index: 30;
+        }
+        .ls-pin-wrap:hover .ls-pin-tooltip,
+        .ls-pin-wrap.active .ls-pin-tooltip {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* =========================================================
+           3. SELETOR DE PAÍS NO CABEÇALHO
+           ========================================================= */
+        .header-country-select {
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            max-width: 165px;
+        }
+        .header-country-select:hover {
+            border-color: var(--primary);
+        }
+
+        /* =========================================================
+           4. ANIMAÇÕES & ONBOARDING ESTILO BUMP
            ========================================================= */
         @keyframes bumpPopIn {
             0% { opacity: 0; transform: scale(0.86) translateY(18px); }
@@ -78,10 +171,6 @@
             70% { transform: scale(0.94) rotate(-4deg); }
             100% { transform: scale(1) rotate(0deg); opacity: 1; }
         }
-        @keyframes floatParticle {
-            0% { transform: translateY(0) scale(0.8); opacity: 1; }
-            100% { transform: translateY(-130px) scale(1.35); opacity: 0; }
-        }
         @keyframes pulseGlow {
             0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55); }
             50% { transform: scale(1.03); box-shadow: 0 0 0 12px rgba(244, 63, 94, 0); }
@@ -92,7 +181,6 @@
             100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
 
-        /* Overlay de Impacto Bump (quando envias ou recebes Bump) */
         .bump-impact-overlay {
             position: fixed;
             inset: 0;
@@ -116,10 +204,7 @@
             border: 3px solid #f43f5e;
             animation: bumpRadarRing 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        .bump-impact-ring.r2 {
-            border-color: #10b981;
-            animation-delay: 0.16s;
-        }
+        .bump-impact-ring.r2 { border-color: #10b981; animation-delay: 0.16s; }
         .bump-impact-emoji {
             font-size: 74px;
             animation: fistBumpSmash 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -134,12 +219,8 @@
             border-radius: 999px;
             font-weight: 800;
             font-size: 14px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
         }
 
-        /* =========================================================
-           3. ECRÃ DE ENTRADA & ONBOARDING ESTILO BUMP
-           ========================================================= */
         .auth-overlay {
             position: fixed !important;
             inset: 0 !important;
@@ -153,9 +234,7 @@
             padding: 18px;
             overflow-y: auto;
         }
-        .auth-overlay.hidden {
-            display: none !important;
-        }
+        .auth-overlay.hidden { display: none !important; }
         .bump-onboarding-shell {
             width: min(96vw, 440px);
             background: rgba(15, 22, 36, 0.92);
@@ -166,7 +245,6 @@
             box-shadow: 0 28px 70px rgba(0, 0, 0, 0.72);
             animation: bumpPopIn 0.42s cubic-bezier(0.22, 1, 0.36, 1);
             position: relative;
-            overflow: hidden;
         }
         .bump-hero-radar {
             position: relative;
@@ -225,9 +303,7 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.15s, border-color 0.15s;
         }
-        .avatar-emoji-opt:hover { transform: scale(1.08); }
         .avatar-emoji-opt.selected {
             border-color: #10b981;
             background: rgba(16, 185, 129, 0.18);
@@ -249,14 +325,11 @@
             font-weight: 600;
             text-align: left;
             cursor: pointer;
-            transition: all 0.15s;
         }
         .vibe-opt-btn.selected {
             border-color: #f43f5e;
             background: rgba(244, 63, 94, 0.16);
         }
-
-        /* Cartões de Sessões Guardadas (Troca rápida de conta estilo Bump) */
         .saved-sessions-box {
             margin-top: 16px;
             padding-top: 14px;
@@ -273,12 +346,8 @@
             padding: 9px 12px;
             margin-bottom: 8px;
             cursor: pointer;
-            transition: border-color 0.15s, transform 0.15s;
         }
-        .saved-session-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-1px);
-        }
+        .saved-session-card:hover { border-color: var(--primary); }
         .saved-session-avatar {
             width: 38px;
             height: 38px;
@@ -294,7 +363,7 @@
         }
 
         /* =========================================================
-           4. COMPONENTES DA APP, PINS & MODAIS
+           5. SIDEBAR, NOTIFICAÇÕES, AMIGOS & MODAIS
            ========================================================= */
         .notif-wrap { position: relative; }
         .notif-dropdown {
@@ -322,7 +391,6 @@
             padding: 10px 14px;
             border-bottom: 1px solid var(--border);
             cursor: pointer;
-            transition: background 0.15s;
         }
         .notif-item:hover { background: var(--surface-2); }
         .notif-item.unread {
@@ -443,52 +511,12 @@
             animation: pulseGlow 2s infinite;
         }
 
-        .quick-mood-popover {
-            position: absolute;
-            top: 56px;
-            left: 14px;
-            z-index: 35;
-            width: 300px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 14px;
-            box-shadow: var(--shadow);
-            animation: bumpPopIn 0.22s ease;
-        }
-        .quick-mood-popover h4 {
-            margin: 0 0 10px;
-            font-size: 13px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .quick-mood-grid, .status-pills-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            margin-bottom: 10px;
-        }
-        .quick-mood-item, .status-pill-btn {
-            background: var(--surface-2);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 9px;
-            padding: 6px 8px;
-            font-size: 11.5px;
-            text-align: left;
-        }
-        .quick-mood-item:hover, .status-pill-btn.active {
-            border-color: var(--primary);
-            background: rgba(16, 185, 129, 0.16);
-        }
         .privacy-selector-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 6px;
             margin-bottom: 10px;
         }
-        .privacy-selector-grid.two-cols { grid-template-columns: 1fr 1fr; }
         .privacy-opt-btn {
             background: var(--surface-2);
             color: var(--muted);
@@ -504,87 +532,6 @@
             background: rgba(16, 185, 129, 0.15);
         }
 
-        .bump-leaderboard-card {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(139, 92, 246, 0.12));
-            border: 1px solid var(--border-strong);
-            border-radius: 12px;
-            padding: 10px;
-            margin-bottom: 12px;
-        }
-        .bump-podium-row {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .bump-podium-item {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 6px;
-            text-align: center;
-            font-size: 11.5px;
-        }
-        .friendship-tier-pill { display: inline-block; font-size: 10.5px; font-weight: 700; color: #a78bfa; }
-        .bump-progress-mini {
-            width: 100%;
-            height: 4px;
-            background: var(--bg);
-            border-radius: 999px;
-            overflow: hidden;
-            margin-top: 3px;
-        }
-        .bump-progress-mini span {
-            display: block;
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--bump));
-        }
-        .typing-indicator-pill {
-            min-height: 18px;
-            font-size: 11.5px;
-            color: var(--primary);
-            font-style: italic;
-            margin-bottom: 6px;
-        }
-        .live-ping-toast {
-            position: fixed;
-            top: 72px;
-            right: 18px;
-            z-index: 2200;
-            width: min(92vw, 330px);
-            background: var(--surface);
-            border: 1px solid var(--bump);
-            border-radius: 14px;
-            padding: 12px 14px;
-            box-shadow: var(--shadow);
-            animation: bumpPopIn 0.3s ease;
-        }
-        .live-ping-replies {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            margin-top: 10px;
-        }
-        .live-ping-reply-btn {
-            background: var(--surface-2);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 6px 8px;
-            font-size: 11.5px;
-        }
-        .live-ping-reply-btn:hover { border-color: var(--primary); }
-
-        .friend-req-burst-card {
-            background: var(--surface);
-            border: 1px solid var(--bump);
-            border-radius: 22px;
-            padding: 24px 20px;
-            width: min(90vw, 350px);
-            text-align: center;
-            box-shadow: 0 24px 60px rgba(244, 63, 94, 0.35);
-            animation: bumpPopIn 0.35s ease;
-        }
         .pill-tag {
             display: inline-block;
             background: rgba(244, 63, 94, 0.18);
@@ -594,72 +541,6 @@
             padding: 4px 10px;
             border-radius: 999px;
             margin-bottom: 14px;
-        }
-        .friend-req-photo-ring {
-            position: relative;
-            width: 84px;
-            height: 84px;
-            margin: 0 auto 12px;
-            border-radius: 50%;
-            padding: 3px;
-            background: linear-gradient(135deg, var(--bump), var(--accent), var(--primary));
-        }
-        .friend-req-photo-inner {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: var(--surface-2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 26px;
-            font-weight: 800;
-            overflow: hidden;
-        }
-        .friend-req-photo-inner img { width: 100%; height: 100%; object-fit: cover; }
-        .friend-req-badge-fist {
-            position: absolute;
-            bottom: -2px;
-            right: -2px;
-            background: var(--bump);
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 15px;
-        }
-        .friend-req-actions-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 16px;
-        }
-        .friend-sent-stage { text-align: center; }
-        .friend-sent-avatar-wrap {
-            width: 74px;
-            height: 74px;
-            border-radius: 50%;
-            margin: 0 auto 10px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: 800;
-            overflow: hidden;
-        }
-        .friend-sent-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; }
-        .friend-sent-plane { font-size: 32px; animation: fistBumpSmash 0.45s ease; }
-        .friend-sent-pill {
-            margin-top: 8px;
-            background: var(--surface);
-            border: 1px solid var(--primary);
-            padding: 8px 16px;
-            border-radius: 999px;
-            font-weight: 700;
-            font-size: 13.5px;
         }
 
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -692,6 +573,7 @@
             margin: 10px 0;
         }
         .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+        .owner-card-bar { display: flex; gap: 8px; }
         .attendee-pill {
             display: inline-block;
             background: var(--surface-2);
@@ -736,29 +618,7 @@
         .admin-user-row span { display: block; font-size: 11.5px; color: var(--muted); }
         .muted { color: var(--muted); }
 
-        /* Pins MapLibre GL JS (Eventos & Amigos Bump) */
-        .ls-event-marker {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(15, 22, 36, 0.94);
-            color: #f8fafc;
-            border: 2px solid var(--primary);
-            border-radius: 999px;
-            padding: 5px 10px;
-            font-size: 13px;
-            font-weight: 800;
-            cursor: pointer;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
-            transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-            animation: bumpPopIn 0.3s ease;
-        }
-        .ls-event-marker:hover, .ls-event-marker.active {
-            transform: scale(1.15);
-            background: var(--primary);
-            color: #04130d;
-            z-index: 10;
-        }
+        /* Pins Sociais (Amigos Bump) */
         .ls-friend-marker {
             position: relative;
             width: 50px;
@@ -773,8 +633,7 @@
             justify-content: center;
             font-weight: 800;
             color: #fff;
-            font-size: 17px;
-            animation: bumpPopIn 0.35s ease;
+            font-size: 20px;
         }
         .ls-friend-marker.online {
             border-color: var(--primary);
@@ -840,8 +699,12 @@
     <header class="header">
         <h1 class="brand">📍 LocalSpot</h1>
         <nav>
+            <select id="headerCountrySelect" class="header-country-select" title="Escolher País">
+                <option value="all">🌍 Todos os países</option>
+            </select>
             <button type="button" id="mobileViewToggle" class="btn-soft">🗺️ Ver Mapa</button>
             <button type="button" id="aboutButton" class="btn-soft">ℹ️ Sobre</button>
+            <button type="button" id="lsHeaderFriendsBtn" class="btn-soft">👊 Amigos</button>
             <button type="button" id="addEventButton" class="btn-primary hidden">+ Novo Evento</button>
 
             <div class="notif-wrap">
@@ -869,7 +732,7 @@
          ========================================== -->
     <main id="main" data-view="list">
         <aside class="sidebar">
-            <input type="search" id="searchInput" placeholder="Pesquisar eventos, locais, organizadores...">
+            <input type="search" id="searchInput" placeholder="Pesquisar eventos, cidades, países...">
 
             <div class="sidebar-actions-row">
                 <button type="button" id="locationButton" class="btn-soft"><span aria-hidden="true">📍</span> Perto de mim</button>
@@ -889,9 +752,9 @@
 
             <div class="filters-grid">
                 <div>
-                    <label for="districtFilter">Distrito</label>
+                    <label for="districtFilter">País</label>
                     <select id="districtFilter">
-                        <option value="all">Todos os distritos</option>
+                        <option value="all">🌍 Todos os países</option>
                     </select>
                 </div>
                 <div>
@@ -910,7 +773,7 @@
                 <div class="radius-box">
                     <div class="radius-header">
                         <span>Raio</span>
-                        <strong id="radiusValue">Todo o país</strong>
+                        <strong id="radiusValue">Global</strong>
                     </div>
                     <input type="range" id="radiusSlider" min="5" max="300" step="5" value="300">
                 </div>
@@ -947,13 +810,13 @@
 
             <div class="map-floating-controls">
                 <button type="button" id="mapStyleToggle" class="map-ctrl-btn">🛰️ Satélite 3D</button>
-                <button type="button" id="mapPitchToggle" class="map-ctrl-btn">🧊 Vista 3D</button>
+                <button type="button" id="mapPitchToggle" class="map-ctrl-btn">📐 Vista 2D</button>
             </div>
 
             <div id="pickBanner" class="pick-banner hidden">
-                <strong style="font-size:13px; color:var(--primary);">📍 Clica no mapa para marcar a localização do evento</strong>
+                <strong style="font-size:13px; color:var(--primary);">📍 Clica no mapa para colocar o pin do evento</strong>
                 <div class="pick-banner-row">
-                    <input type="text" id="pickSearchInput" placeholder="Ou pesquisa uma morada em Portugal...">
+                    <input type="text" id="pickSearchInput" placeholder="Pesquisar cidade ou morada em qualquer país...">
                     <button type="button" id="pickSearchBtn" class="btn-primary-sm">Procurar</button>
                     <button type="button" id="cancelPickButton" class="btn-logout">Cancelar</button>
                 </div>
@@ -967,20 +830,20 @@
     <div id="authOverlay" class="auth-overlay hidden">
         <div class="bump-onboarding-shell">
 
-            <!-- ECRÃ 0: BOAS-VINDAS (PRIMEIRA ABERTURA / INSTALAÇÃO) -->
+            <!-- ECRÃ 0: BOAS-VINDAS -->
             <div id="onboardingWelcomeScreen">
                 <div class="bump-hero-radar">👊</div>
                 <div style="text-align:center; margin-bottom:20px;">
-                    <span class="pill-tag" style="margin-bottom:8px;">RADAR SOCIAL & EVENTOS AO VIVO</span>
+                    <span class="pill-tag" style="margin-bottom:8px;">MAPA GLOBAL 3D & RADAR SOCIAL</span>
                     <h2 style="margin:0 0 8px; font-size:26px; font-weight:900; letter-spacing:-0.03em;">Bem-vindo ao LocalSpot</h2>
                     <p style="margin:0; font-size:13.5px; line-height:1.5; color:var(--muted);">
-                        Vê onde os teus amigos estão em tempo real, manda um <strong>Bump</strong> quando estiverem perto e descobre os melhores eventos à tua volta.
+                        Explora eventos em qualquer país do mundo, faz <strong>Bump</strong> com os teus amigos em tempo real e descobre o que acontece à tua volta.
                     </p>
                 </div>
 
                 <div style="display:grid; gap:10px;">
                     <button type="button" id="startOnboardingBtn" class="btn-primary" style="width:100%; padding:13px; font-size:14.5px; border-radius:14px;">
-                        🚀 Criar o meu Perfil (Estilo Bump)
+                        🚀 Criar o meu Perfil
                     </button>
                     <button type="button" id="goToLoginScreenBtn" class="btn-soft" style="width:100%; padding:11px; font-size:13.5px; border-radius:14px;">
                         Já tenho conta · Iniciar Sessão
@@ -1009,7 +872,7 @@
                     <!-- PASSO 1: IDENTIDADE -->
                     <div id="wizardStep1">
                         <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Como te chamas?</h3>
-                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">Cria o teu cartão no radar social.</p>
+                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">Cria o teu cartão no radar global.</p>
 
                         <div class="form-group">
                             <label for="regAccountType">Tipo de Perfil</label>
@@ -1038,7 +901,7 @@
 
                         <div class="form-group">
                             <label for="regEmail">E-mail *</label>
-                            <input type="email" id="regEmail" placeholder="miguel@email.pt" required>
+                            <input type="email" id="regEmail" placeholder="miguel@email.com" required>
                         </div>
 
                         <div class="form-group">
@@ -1105,7 +968,7 @@
                 </form>
             </div>
 
-            <!-- ECRÃ 2: INICIAR SESSÃO (CONTA EXISTENTE) -->
+            <!-- ECRÃ 2: INICIAR SESSÃO -->
             <div id="onboardingLoginScreen" class="hidden">
                 <div style="text-align:center; margin-bottom:16px;">
                     <div style="font-size:36px; margin-bottom:4px;">📍</div>
@@ -1117,7 +980,7 @@
                     <div id="loginError" class="form-error hidden"></div>
                     <div class="form-group">
                         <label for="loginEmail">E-mail</label>
-                        <input type="email" id="loginEmail" placeholder="o.teu@email.pt" required>
+                        <input type="email" id="loginEmail" placeholder="o.teu@email.com" required>
                     </div>
                     <div class="form-group">
                         <label for="loginPassword">Palavra-passe</label>
@@ -1164,7 +1027,7 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="eventDistrito">Distrito *</label>
+                        <label for="eventDistrito">País *</label>
                         <select id="eventDistrito" required></select>
                     </div>
                 </div>
@@ -1181,13 +1044,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="eventLocation">Local / Morada *</label>
-                    <input type="text" id="eventLocation" placeholder="Ex: Parque Verde da Cidade" required>
+                    <label for="eventLocation">Cidade & Local / Morada *</label>
+                    <input type="text" id="eventLocation" placeholder="Ex: Parque Eduardo VII, Lisboa" required>
                 </div>
 
                 <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--surface-2); padding:9px 12px; border-radius:10px; border:1px solid var(--border);">
-                    <span id="selectedCoordinates" style="font-size:12px; color:var(--muted);">Localização ainda não selecionada</span>
-                    <button type="button" id="changeLocationButton" class="btn-soft">📍 Escolher no Mapa</button>
+                    <span id="selectedCoordinates" style="font-size:12px; color:var(--muted);">Pin ainda não colocado no mapa</span>
+                    <button type="button" id="changeLocationButton" class="btn-soft">📍 Marcar Pin no Mapa</button>
                 </div>
 
                 <div class="form-row">
@@ -1389,16 +1252,21 @@
             <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">&times;</button>
             <h2 style="margin:0 0 8px;">📍 Sobre o LocalSpot</h2>
             <p style="font-size:13.5px; line-height:1.55; color:var(--muted);">
-                O <strong>LocalSpot</strong> liga a tua comunidade local em tempo real: descobre eventos perto de ti, cria iniciativas próprias, partilha a tua localização com amigos ao estilo <strong>Bump</strong>, deteta <em>Hangouts</em> espontâneos e conversa em direto.
+                O <strong>LocalSpot</strong> é uma plataforma global em 3D que liga comunidades locais em qualquer país: descobre eventos marcados no mapa, cria iniciativas próprias e partilha a tua localização ao vivo com amigos ao estilo <strong>Bump</strong>.
             </p>
         </div>
     </div>
 
+    <!-- ==========================================
+         SCRIPTS NA ORDEM EXATA DE EXECUÇÃO
+         ========================================== -->
     <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/db.js"></script>
     <script src="js/events.js"></script>
     <script src="js/map.js"></script>
     <script src="js/main.js"></script>
     <script src="js/auth-onboarding.js"></script>
+    <script src="js/friends.js"></script>
 </body>
 </html>
