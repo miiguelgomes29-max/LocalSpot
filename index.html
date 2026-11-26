@@ -1,1273 +1,420 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LocalSpot — Eventos Globais & Radar Social 3D</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        /* =========================================================
-           1. DIMENSÕES DO MAPA 3D
-           ========================================================= */
-        html, body {
-            height: 100%;
-            margin: 0;
-            overflow: hidden;
-        }
-        #main {
-            display: flex !important;
-            height: calc(100vh - 64px) !important;
-            min-height: calc(100vh - 64px) !important;
-            width: 100% !important;
-            position: relative !important;
-        }
-        #main .map-container {
-            position: relative !important;
-            flex: 1 1 auto !important;
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 450px !important;
-            display: block !important;
-            overflow: hidden !important;
-            background: #090e1a;
-        }
-        #main .map-container #map {
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 450px !important;
-            z-index: 1 !important;
-        }
-        .map-floating-controls {
-            z-index: 20 !important;
-        }
-        @media (max-width: 860px) {
-            #main[data-view="map"] .sidebar { display: none !important; }
-            #main[data-view="map"] .map-container { display: block !important; width: 100% !important; height: 100% !important; }
-            #main[data-view="list"] .map-container { display: none !important; }
-        }
-
-        /* =========================================================
-           2. PINS DE MARCAÇÃO CLÁSSICOS (TEARDROP MAP PINS)
-           ========================================================= */
-        .ls-pin-wrap {
-            position: relative;
-            width: 40px;
-            height: 50px;
-            cursor: pointer;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            user-select: none;
-        }
-        .ls-pin-drop {
-            width: 36px;
-            height: 36px;
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            border: 2.5px solid #ffffff;
-            box-shadow: -3px 6px 14px rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease, box-shadow 0.2s ease;
-        }
-        .ls-pin-wrap.paid .ls-pin-drop {
-            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-        }
-        .ls-pin-wrap.pick-pin .ls-pin-drop {
-            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
-        }
-        .ls-pin-wrap:hover .ls-pin-drop,
-        .ls-pin-wrap.active .ls-pin-drop {
-            transform: rotate(-45deg) scale(1.18) translate(3px, -3px);
-            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
-            box-shadow: -4px 10px 20px rgba(244, 63, 94, 0.55);
-        }
-        .ls-pin-emoji {
-            transform: rotate(45deg);
-            font-size: 16px;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .ls-pin-shadow {
-            position: absolute;
-            bottom: 1px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 14px;
-            height: 5px;
-            background: rgba(0, 0, 0, 0.45);
-            border-radius: 50%;
-            filter: blur(1.5px);
-            pointer-events: none;
-        }
-        .ls-pin-tooltip {
-            position: absolute;
-            bottom: 54px;
-            left: 50%;
-            transform: translateX(-50%) translateY(4px);
-            background: rgba(15, 22, 36, 0.95);
-            color: #f8fafc;
-            border: 1px solid rgba(148, 163, 184, 0.28);
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 11.5px;
-            font-weight: 700;
-            white-space: nowrap;
-            pointer-events: none;
-            opacity: 0;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
-            transition: opacity 0.16s ease, transform 0.16s ease;
-            z-index: 30;
-        }
-        .ls-pin-wrap:hover .ls-pin-tooltip,
-        .ls-pin-wrap.active .ls-pin-tooltip {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        /* =========================================================
-           3. SELETOR DE PAÍS NO CABEÇALHO
-           ========================================================= */
-        .header-country-select {
-            background: var(--surface-2);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 6px 12px;
-            font-size: 12.5px;
-            font-weight: 600;
-            cursor: pointer;
-            max-width: 175px;
-        }
-        .header-country-select:hover {
-            border-color: var(--primary);
-        }
-
-        /* =========================================================
-           4. ANIMAÇÕES & ONBOARDING ESTILO BUMP
-           ========================================================= */
-        @keyframes bumpPopIn {
-            0% { opacity: 0; transform: scale(0.86) translateY(18px); }
-            65% { opacity: 1; transform: scale(1.03) translateY(-2px); }
-            100% { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        @keyframes bumpRadarRing {
-            0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0.9; }
-            100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
-        }
-        @keyframes fistBumpSmash {
-            0% { transform: scale(0.3) rotate(-18deg); opacity: 0; }
-            45% { transform: scale(1.28) rotate(8deg); opacity: 1; }
-            70% { transform: scale(0.94) rotate(-4deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        @keyframes pulseGlow {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55); }
-            50% { transform: scale(1.03); box-shadow: 0 0 0 12px rgba(244, 63, 94, 0); }
-        }
-        @keyframes onlineSonar {
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.65); }
-            70% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
-
-        .bump-impact-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle, rgba(244, 63, 94, 0.22) 0%, rgba(8, 12, 20, 0.72) 100%);
-            backdrop-filter: blur(4px);
-            animation: bumpPopIn 0.25s ease forwards;
-        }
-        .bump-impact-ring {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            border: 3px solid #f43f5e;
-            animation: bumpRadarRing 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .bump-impact-ring.r2 { border-color: #10b981; animation-delay: 0.16s; }
-        .bump-impact-emoji {
-            font-size: 74px;
-            animation: fistBumpSmash 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-            filter: drop-shadow(0 12px 28px rgba(244, 63, 94, 0.6));
-        }
-        .bump-impact-label {
-            margin-top: 12px;
-            background: rgba(15, 22, 36, 0.95);
-            border: 1px solid rgba(244, 63, 94, 0.55);
-            color: #fff;
-            padding: 8px 18px;
-            border-radius: 999px;
-            font-weight: 800;
-            font-size: 14px;
-        }
-
-        .auth-overlay {
-            position: fixed !important;
-            inset: 0 !important;
-            z-index: 5000 !important;
-            background: radial-gradient(circle at 20% 15%, rgba(16, 185, 129, 0.18), transparent 45%),
-                        radial-gradient(circle at 85% 80%, rgba(244, 63, 94, 0.22), transparent 50%),
-                        #070b14 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 18px;
-            overflow-y: auto;
-        }
-        .auth-overlay.hidden { display: none !important; }
-        .bump-onboarding-shell {
-            width: min(96vw, 440px);
-            background: rgba(15, 22, 36, 0.92);
-            backdrop-filter: blur(18px);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 26px;
-            padding: 26px 24px;
-            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.72);
-            animation: bumpPopIn 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-            position: relative;
-        }
-        .bump-hero-radar {
-            position: relative;
-            width: 88px;
-            height: 88px;
-            margin: 0 auto 16px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #f43f5e, #8b5cf6, #10b981);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            box-shadow: 0 12px 32px rgba(244, 63, 94, 0.4);
-        }
-        .bump-hero-radar::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 88px;
-            height: 88px;
-            border-radius: 50%;
-            border: 2px solid rgba(16, 185, 129, 0.6);
-            animation: bumpRadarRing 2.2s infinite;
-        }
-        .onboarding-progress-dots {
-            display: flex;
-            justify-content: center;
-            gap: 6px;
-            margin-bottom: 18px;
-        }
-        .onboarding-dot {
-            width: 26px;
-            height: 5px;
-            border-radius: 999px;
-            background: rgba(148, 163, 184, 0.22);
-            transition: all 0.25s ease;
-        }
-        .onboarding-dot.active {
-            width: 42px;
-            background: linear-gradient(90deg, #10b981, #f43f5e);
-        }
-        .avatar-picker-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-            margin: 8px 0 14px;
-        }
-        .avatar-emoji-opt {
-            aspect-ratio: 1;
-            border-radius: 14px;
-            background: var(--surface-2);
-            border: 2px solid transparent;
-            font-size: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .avatar-emoji-opt.selected {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.18);
-            transform: scale(1.08);
-        }
-        .vibe-picker-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .vibe-opt-btn {
-            background: var(--surface-2);
-            border: 1.5px solid var(--border);
-            color: var(--text);
-            border-radius: 12px;
-            padding: 9px 10px;
-            font-size: 12.5px;
-            font-weight: 600;
-            text-align: left;
-            cursor: pointer;
-        }
-        .vibe-opt-btn.selected {
-            border-color: #f43f5e;
-            background: rgba(244, 63, 94, 0.16);
-        }
-        .saved-sessions-box {
-            margin-top: 16px;
-            padding-top: 14px;
-            border-top: 1px solid var(--border);
-        }
-        .saved-session-card {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 9px 12px;
-            margin-bottom: 8px;
-            cursor: pointer;
-        }
-        .saved-session-card:hover { border-color: var(--primary); }
-        .saved-session-avatar {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #10b981, #8b5cf6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 17px;
-            font-weight: 800;
-            color: #fff;
-            flex-shrink: 0;
-        }
-
-        /* =========================================================
-           5. SIDEBAR, NOTIFICAÇÕES, AMIGOS & MODAIS
-           ========================================================= */
-        .notif-wrap { position: relative; }
-        .notif-dropdown {
-            position: absolute;
-            top: calc(100% + 8px);
-            right: 0;
-            width: 320px;
-            max-height: 380px;
-            overflow-y: auto;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            box-shadow: var(--shadow);
-            z-index: 1100;
-        }
-        .notif-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 14px;
-            border-bottom: 1px solid var(--border);
-            font-size: 13px;
-        }
-        .notif-item {
-            padding: 10px 14px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-        }
-        .notif-item:hover { background: var(--surface-2); }
-        .notif-item.unread {
-            background: rgba(16, 185, 129, 0.1);
-            border-left: 3px solid var(--primary);
-        }
-        .notif-item strong { display: block; font-size: 12.5px; margin-bottom: 2px; }
-        .notif-item p { margin: 0; font-size: 12px; color: var(--muted); }
-
-        .sidebar-actions-row {
-            display: grid;
-            grid-template-columns: 1fr auto auto;
-            gap: 6px;
-        }
-        .filters-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .radius-box {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 12px;
-        }
-        .radius-header {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: var(--muted);
-            margin-bottom: 4px;
-        }
-        .radius-header strong { color: var(--primary); }
-        input[type="range"] { padding: 0; accent-color: var(--primary); }
-
-        .results-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 12.5px;
-            color: var(--muted);
-            padding-top: 4px;
-            border-top: 1px solid var(--border);
-        }
-        .empty-state {
-            text-align: center;
-            padding: 28px 14px;
-            background: var(--surface-2);
-            border: 1px dashed var(--border);
-            border-radius: 14px;
-            color: var(--muted);
-        }
-        .organizer-tag { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
-        .friends-going-badge {
-            display: inline-block;
-            background: rgba(244, 63, 94, 0.16);
-            color: #fda4af;
-            border: 1px solid rgba(244, 63, 94, 0.35);
-            font-size: 11px;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 999px;
-            margin-bottom: 6px;
-        }
-        .registration-info { font-size: 12px; color: var(--primary); font-weight: 600; margin-top: 6px; }
-        .badge-past {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            background: rgba(239, 68, 68, 0.9);
-            color: #fff;
-            font-size: 10.5px;
-            font-weight: 800;
-            padding: 3px 8px;
-            border-radius: 999px;
-        }
-        .verified-check {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 15px;
-            height: 15px;
-            border-radius: 50%;
-            background: #38bdf8;
-            color: #04131d;
-            font-size: 10px;
-            font-weight: 900;
-            margin-left: 4px;
-        }
-
-        .pick-banner {
-            position: absolute;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            width: min(92%, 520px);
-            background: rgba(15, 22, 36, 0.95);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--primary);
-            border-radius: 16px;
-            padding: 12px 14px;
-            box-shadow: var(--shadow);
-        }
-        .pick-banner-row { display: flex; gap: 8px; margin-top: 8px; }
-        .hangout-banner {
-            position: absolute;
-            bottom: 22px;
-            left: 16px;
-            z-index: 25;
-            background: linear-gradient(135deg, #f43f5e, #8b5cf6);
-            color: #fff;
-            font-weight: 800;
-            font-size: 13px;
-            padding: 10px 16px;
-            border-radius: 999px;
-            cursor: pointer;
-            animation: pulseGlow 2s infinite;
-        }
-
-        .privacy-selector-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px;
-            margin-bottom: 10px;
-        }
-        .privacy-opt-btn {
-            background: var(--surface-2);
-            color: var(--muted);
-            border: 1px solid var(--border);
-            border-radius: 9px;
-            padding: 7px 6px;
-            font-size: 11.5px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .privacy-opt-btn.active {
-            border-color: var(--primary);
-            color: #34d399;
-            background: rgba(16, 185, 129, 0.15);
-        }
-
-        .pill-tag {
-            display: inline-block;
-            background: rgba(244, 63, 94, 0.18);
-            color: #fda4af;
-            font-size: 11px;
-            font-weight: 800;
-            padding: 4px 10px;
-            border-radius: 999px;
-            margin-bottom: 14px;
-        }
-
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .form-group { margin-bottom: 11px; }
-        .form-error {
-            background: rgba(244, 63, 94, 0.16);
-            border: 1px solid var(--bump);
-            color: #fda4af;
-            padding: 8px 12px;
-            border-radius: 10px;
-            font-size: 12.5px;
-            margin-bottom: 10px;
-        }
-        .detail-hero {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            border-radius: 12px;
-            margin-bottom: 12px;
-        }
-        .detail-meta-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            font-size: 12.5px;
-            margin: 10px 0;
-        }
-        .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-        .owner-card-bar { display: flex; gap: 8px; }
-        .attendee-pill {
-            display: inline-block;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
-            margin: 3px 4px 3px 0;
-        }
-        .comment-item {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 11px;
-            margin-bottom: 7px;
-            font-size: 12.5px;
-        }
-        .comment-item p { margin: 4px 0 0; color: var(--muted); }
-        .admin-stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .admin-stat-card {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 10px 6px;
-            text-align: center;
-        }
-        .admin-stat-card strong { display: block; font-size: 18px; color: var(--primary); }
-        .admin-stat-card span { font-size: 11px; color: var(--muted); }
-        .admin-user-row {
-            padding: 9px 12px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            margin-bottom: 7px;
-            font-size: 12.5px;
-        }
-        .admin-user-row span { display: block; font-size: 11.5px; color: var(--muted); }
-        .muted { color: var(--muted); }
-
-        /* Pins Sociais (Amigos Bump) */
-        .ls-friend-marker {
-            position: relative;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 3px solid var(--bump);
-            background: var(--surface);
-            box-shadow: 0 8px 22px rgba(244, 63, 94, 0.45);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            color: #fff;
-            font-size: 20px;
-        }
-        .ls-friend-marker.online {
-            border-color: var(--primary);
-            animation: onlineSonar 2.2s infinite;
-        }
-        .ls-friend-marker.business { border-color: #38bdf8; }
-        .ls-friend-marker img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-        .ls-friend-mood-badge {
-            position: absolute;
-            bottom: -5px;
-            right: -5px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 50%;
-            width: 22px;
-            height: 22px;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .ls-friend-name-tag {
-            position: absolute;
-            top: -22px;
-            left: 50%;
-            transform: translateX(-50%);
-            white-space: nowrap;
-            background: rgba(8, 12, 20, 0.92);
-            color: #fff;
-            font-size: 10.5px;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 999px;
-            border: 1px solid var(--border);
-        }
-        .ls-user-pulse {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: #38bdf8;
-            border: 3px solid #fff;
-            box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.35);
-            animation: onlineSonar 2s infinite;
-        }
-        .maplibregl-popup-content {
-            background: #0f1624 !important;
-            color: #f8fafc !important;
-            border: 1px solid rgba(148, 163, 184, 0.25) !important;
-            border-radius: 14px !important;
-            padding: 12px !important;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65) !important;
-            font-family: "Inter", sans-serif !important;
-        }
-        .maplibregl-popup-tip { border-top-color: #0f1624 !important; }
-        .maplibregl-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LocalSpot — Descobre Eventos Perto de Ti</title>
+  <link rel="icon" type="image/png" href="assets/images/logo.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
-    <!-- ==========================================
-         CABEÇALHO PRINCIPAL
-         ========================================== -->
-    <header class="header">
-        <h1 class="brand">📍 LocalSpot</h1>
-        <nav>
-            <select id="headerCountrySelect" class="header-country-select" title="Escolher País ou Distrito">
-                <option value="all">🌍 Todos os locais</option>
-            </select>
-            <button type="button" id="mobileViewToggle" class="btn-soft">🗺️ Ver Mapa</button>
-            <button type="button" id="aboutButton" class="btn-soft">ℹ️ Sobre</button>
-            <button type="button" id="lsHeaderFriendsBtn" class="btn-soft">👊 Amigos</button>
-            <button type="button" id="addEventButton" class="btn-primary">+ Novo Evento</button>
-
-            <div class="notif-wrap">
-                <button type="button" id="notifBtn" class="btn-soft hidden" aria-label="Notificações">
-                    🔔 <span id="notifBadge" class="friends-req-badge hidden">0</span>
-                </button>
-                <div id="notifDropdown" class="notif-dropdown hidden">
-                    <div class="notif-head">
-                        <strong>Notificações</strong>
-                        <button type="button" id="markAllReadBtn" class="btn-soft" style="padding:3px 8px; font-size:11px;">Marcar lidas</button>
-                    </div>
-                    <div id="notifList"></div>
-                </div>
-            </div>
-
-            <button type="button" id="adminPanelBtn" class="btn-soft hidden">🛡️ Admin</button>
-            <button type="button" id="switchSessionBtn" class="btn-soft" title="Trocar de Sessão / Conta">🔄 Sessões</button>
-            <div id="userBadge" class="user-badge hidden" title="Abrir Perfil"></div>
-            <button type="button" id="logoutButton" class="btn-logout hidden">Sair</button>
-        </nav>
-    </header>
-
-    <!-- ==========================================
-         ÁREA PRINCIPAL: LISTA DE EVENTOS + MAPA 3D
-         ========================================== -->
-    <main id="main" data-view="list">
-        <aside class="sidebar">
-            <input type="search" id="searchInput" placeholder="Pesquisar eventos, cidades, países...">
-
-            <div class="sidebar-actions-row">
-                <button type="button" id="locationButton" class="btn-soft"><span aria-hidden="true">📍</span> Perto de mim</button>
-                <button type="button" id="exportCsvBtn" class="btn-soft" title="Exportar lista para CSV">📥 CSV</button>
-                <button type="button" id="resetFilters" class="btn-soft" title="Repor filtros">↺ Limpar</button>
-            </div>
-
-            <div id="categoryChips" class="category-chips">
-                <button type="button" class="chip active" data-category="all">Todos</button>
-                <button type="button" class="chip" data-category="Música">🎵 Música</button>
-                <button type="button" class="chip" data-category="Desporto">⚽ Desporto</button>
-                <button type="button" class="chip" data-category="Cultura">🎭 Cultura</button>
-                <button type="button" class="chip" data-category="Gastronomia">🍽️ Gastronomia</button>
-                <button type="button" class="chip" data-category="Festa">🎉 Festa</button>
-                <button type="button" class="chip" data-category="Tecnologia">💻 Tecnologia</button>
-            </div>
-
-            <div class="filters-grid">
-                <div>
-                    <label for="districtFilter">País / Distrito</label>
-                    <select id="districtFilter">
-                        <option value="all">🌍 Todos os locais</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="periodFilter">Quando</label>
-                    <select id="periodFilter">
-                        <option value="all">Todas as datas</option>
-                        <option value="upcoming">Próximos</option>
-                        <option value="today">Hoje</option>
-                        <option value="week">Esta semana</option>
-                        <option value="past">Terminados</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="filters-grid">
-                <div class="radius-box">
-                    <div class="radius-header">
-                        <span>Raio</span>
-                        <strong id="radiusValue">Global</strong>
-                    </div>
-                    <input type="range" id="radiusSlider" min="5" max="300" step="5" value="300">
-                </div>
-                <div>
-                    <label for="sortFilter">Ordenar por</label>
-                    <select id="sortFilter">
-                        <option value="date">📅 Data mais próxima</option>
-                        <option value="distance">📍 Mais perto de mim</option>
-                        <option value="popular">🔥 Mais populares</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="toggle-pills">
-                <button type="button" id="favoritesToggle" class="toggle-pill">★ Favoritos</button>
-                <button type="button" id="freeOnlyToggle" class="toggle-pill">🎟️ Gratuitos</button>
-                <button type="button" id="followingOnlyToggle" class="toggle-pill">🏛️ A Seguir</button>
-            </div>
-
-            <div class="results-bar">
-                <span id="eventCount">0 eventos encontrados</span>
-            </div>
-
-            <div id="emptyState" class="empty-state hidden">
-                <p style="font-size:26px; margin:0 0 6px;">🔍</p>
-                <p style="margin:0; font-size:13px;">Nenhum evento encontrado com estes filtros.</p>
-            </div>
-
-            <div id="eventsList" class="events-list"></div>
-        </aside>
-
-        <section class="map-container" style="position:relative;flex:1;min-height:calc(100vh - 64px);">
-            <div id="map" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;min-height:450px;"></div>
-
-            <div class="map-floating-controls">
-                <button type="button" id="mapStyleToggle" class="map-ctrl-btn">🛰️ Satélite 3D</button>
-                <button type="button" id="mapPitchToggle" class="map-ctrl-btn">📐 Vista 2D</button>
-            </div>
-
-            <div id="pickBanner" class="pick-banner hidden">
-                <strong style="font-size:13px; color:var(--primary);">📍 Clica no mapa para colocar o pin do evento</strong>
-                <div class="pick-banner-row">
-                    <input type="text" id="pickSearchInput" placeholder="Pesquisar cidade ou morada em qualquer país...">
-                    <button type="button" id="pickSearchBtn" class="btn-primary-sm">Procurar</button>
-                    <button type="button" id="cancelPickButton" class="btn-logout">Cancelar</button>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- ==========================================
-         ENTRADA ESTILO BUMP: ONBOARDING & SESSÕES
-         ========================================== -->
-    <div id="authOverlay" class="auth-overlay hidden">
-        <div class="bump-onboarding-shell">
-
-            <!-- ECRÃ 0: BOAS-VINDAS -->
-            <div id="onboardingWelcomeScreen">
-                <div class="bump-hero-radar">👊</div>
-                <div style="text-align:center; margin-bottom:20px;">
-                    <span class="pill-tag" style="margin-bottom:8px;">MAPA GLOBAL 3D & RADAR SOCIAL</span>
-                    <h2 style="margin:0 0 8px; font-size:26px; font-weight:900; letter-spacing:-0.03em;">Bem-vindo ao LocalSpot</h2>
-                    <p style="margin:0; font-size:13.5px; line-height:1.5; color:var(--muted);">
-                        Explora eventos em qualquer país do mundo, faz <strong>Bump</strong> com os teus amigos em tempo real e descobre o que acontece à tua volta.
-                    </p>
-                </div>
-
-                <div style="display:grid; gap:10px;">
-                    <button type="button" id="startOnboardingBtn" class="btn-primary" style="width:100%; padding:13px; font-size:14.5px; border-radius:14px;">
-                        🚀 Criar o meu Perfil
-                    </button>
-                    <button type="button" id="goToLoginScreenBtn" class="btn-soft" style="width:100%; padding:11px; font-size:13.5px; border-radius:14px;">
-                        Já tenho conta · Iniciar Sessão
-                    </button>
-                </div>
-
-                <div id="savedSessionsContainer" class="saved-sessions-box hidden">
-                    <div style="font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">
-                        ⚡ Sessões Guardadas neste Dispositivo
-                    </div>
-                    <div id="savedSessionsList"></div>
-                </div>
-            </div>
-
-            <!-- ECRÃ 1: ASSISTENTE DE CRIAÇÃO DE CONTA EM 3 PASSOS -->
-            <div id="onboardingWizardScreen" class="hidden">
-                <div class="onboarding-progress-dots">
-                    <span class="onboarding-dot active" data-step-dot="1"></span>
-                    <span class="onboarding-dot" data-step-dot="2"></span>
-                    <span class="onboarding-dot" data-step-dot="3"></span>
-                </div>
-
-                <form id="registerForm">
-                    <div id="registerError" class="form-error hidden"></div>
-
-                    <!-- PASSO 1: IDENTIDADE -->
-                    <div id="wizardStep1">
-                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Como te chamas?</h3>
-                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">Cria o teu cartão no radar global.</p>
-
-                        <div class="form-group">
-                            <label for="regAccountType">Tipo de Perfil</label>
-                            <select id="regAccountType">
-                                <option value="user">👤 Conta Pessoal (Amigos & Eventos)</option>
-                                <option value="business">🏛️ Empresa / Entidade / Município</option>
-                            </select>
-                        </div>
-
-                        <div id="businessTypeGroup" class="form-group hidden">
-                            <label for="regBusinessType">Setor da Entidade</label>
-                            <select id="regBusinessType">
-                                <option value="Câmara Municipal / Junta">🏛️ Câmara Municipal / Junta</option>
-                                <option value="Associação / Coletividade">🤝 Associação / Coletividade</option>
-                                <option value="Restauração / Café">🍽️ Restauração / Café</option>
-                                <option value="Cultura / Espetáculos">🎭 Cultura / Espetáculos</option>
-                                <option value="Desporto / Ginásio">🏟️ Desporto / Ginásio</option>
-                                <option value="Empresa / Comércio">🏢 Empresa / Comércio</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label id="regNameLabel" for="regName">Nome de exibição *</label>
-                            <input type="text" id="regName" placeholder="Ex: Miguel Silva" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="regEmail">E-mail *</label>
-                            <input type="email" id="regEmail" placeholder="miguel@email.com" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="regPassword">Palavra-passe *</label>
-                            <input type="password" id="regPassword" minlength="6" placeholder="Mínimo 6 caracteres" required>
-                        </div>
-
-                        <div style="display:flex; gap:8px; margin-top:14px;">
-                            <button type="button" id="backToWelcomeBtn" class="btn-soft" style="flex:1;">← Voltar</button>
-                            <button type="button" id="nextToStep2Btn" class="btn-primary" style="flex:2; padding:11px;">Continuar →</button>
-                        </div>
-                    </div>
-
-                    <!-- PASSO 2: AVATAR & VIBE INICIAL -->
-                    <div id="wizardStep2" class="hidden">
-                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Escolhe o teu Avatar & Vibe</h3>
-                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 12px;">É assim que os teus amigos te vão ver no mapa.</p>
-
-                        <label>Ícone do teu Pin</label>
-                        <div class="avatar-picker-grid" id="avatarPickerGrid">
-                            <button type="button" class="avatar-emoji-opt selected" data-emoji="😎">😎</button>
-                            <button type="button" class="avatar-emoji-opt" data-emoji="🦊">🦊</button>
-                            <button type="button" class="avatar-emoji-opt" data-emoji="🔥">🔥</button>
-                            <button type="button" class="avatar-emoji-opt" data-emoji="🎧">🎧</button>
-                            <button type="button" class="avatar-emoji-opt" data-emoji="⚡">⚡</button>
-                            <button type="button" class="avatar-emoji-opt" data-emoji="🚀">🚀</button>
-                        </div>
-
-                        <label>O teu estado atual</label>
-                        <div class="vibe-picker-grid" id="vibePickerGrid">
-                            <button type="button" class="vibe-opt-btn selected" data-vibe-emoji="🎉" data-vibe-text="Pronto pra sair">🎉 Pronto pra sair</button>
-                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="☕" data-vibe-text="A tomar café">☕ A tomar café</button>
-                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="🎧" data-vibe-text="A curtir música">🎧 A curtir música</button>
-                            <button type="button" class="vibe-opt-btn" data-vibe-emoji="📚" data-vibe-text="A estudar / trabalhar">📚 A estudar</button>
-                        </div>
-
-                        <div style="display:flex; gap:8px; margin-top:14px;">
-                            <button type="button" id="backToStep1Btn" class="btn-soft" style="flex:1;">← Anterior</button>
-                            <button type="button" id="nextToStep3Btn" class="btn-primary" style="flex:2; padding:11px;">Continuar →</button>
-                        </div>
-                    </div>
-
-                    <!-- PASSO 3: PRIVACIDADE & ATIVAÇÃO DO RADAR -->
-                    <div id="wizardStep3" class="hidden">
-                        <div style="text-align:center; font-size:42px; margin-bottom:6px;">🛰️</div>
-                        <h3 style="margin:0 0 4px; font-size:20px; text-align:center;">Ativar o Radar LocalSpot</h3>
-                        <p class="muted" style="font-size:12.5px; text-align:center; margin:0 0 14px;">
-                            Tu controlas sempre quem vê a tua localização. Podes mudar a qualquer momento.
-                        </p>
-
-                        <div class="privacy-selector-grid" id="onboardingPrivacyGrid">
-                            <button type="button" class="privacy-opt-btn active" data-privacy="precise">📍 Exata<br><small style="font-weight:400;">Amigos próximos</small></button>
-                            <button type="button" class="privacy-opt-btn" data-privacy="blurred">🌫️ Borrão<br><small style="font-weight:400;">Área ~400m</small></button>
-                            <button type="button" class="privacy-opt-btn" data-privacy="ghost">👻 Fantasma<br><small style="font-weight:400;">Invisível</small></button>
-                        </div>
-
-                        <div style="display:flex; gap:8px; margin-top:16px;">
-                            <button type="button" id="backToStep2Btn" class="btn-soft" style="flex:1;">← Anterior</button>
-                            <button type="submit" id="registerSubmitBtn" class="btn-primary" style="flex:2; padding:12px; font-weight:800;">
-                                👊 Criar Perfil
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            <!-- ECRÃ 2: INICIAR SESSÃO -->
-            <div id="onboardingLoginScreen" class="hidden">
-                <div style="text-align:center; margin-bottom:16px;">
-                    <div style="font-size:36px; margin-bottom:4px;">📍</div>
-                    <h3 style="margin:0 0 4px; font-size:21px;">Iniciar Sessão</h3>
-                    <p class="muted" style="font-size:12.5px; margin:0;">Entra na tua conta LocalSpot para veres o mapa e os teus amigos.</p>
-                </div>
-
-                <form id="loginForm">
-                    <div id="loginError" class="form-error hidden"></div>
-                    <div class="form-group">
-                        <label for="loginEmail">E-mail</label>
-                        <input type="email" id="loginEmail" placeholder="o.teu@email.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="loginPassword">Palavra-passe</label>
-                        <input type="password" id="loginPassword" placeholder="••••••••" required>
-                    </div>
-                    <button type="submit" id="loginSubmitBtn" class="btn-primary" style="width:100%; padding:12px; margin-bottom:8px;">
-                        Entrar no Radar
-                    </button>
-                    <button type="button" id="loginBackToWelcomeBtn" class="btn-soft" style="width:100%;">
-                        ← Voltar ou Criar Conta
-                    </button>
-                </form>
-            </div>
-
-        </div>
+  <!-- BARRA DE NAVEGAÇÃO SUPERIOR -->
+  <header class="navbar">
+    <div class="navbar-brand" id="brand-logo" title="Voltar ao início">
+      <img
+        src="assets/images/logo.png"
+        alt="LocalSpot"
+        class="brand-logo-img"
+        onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+      />
+      <span class="brand-pin-fallback" style="display:none;">📍</span>
+      <span class="brand-name">LocalSpot</span>
     </div>
 
-    <!-- ==========================================
-         MODAL CRIAR / EDITAR EVENTO
-         ========================================== -->
-    <div id="eventModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content">
-            <button type="button" id="closeModal" class="close-button" aria-label="Fechar">&times;</button>
-            <h2 id="eventModalTitle" style="margin:0 0 14px;">Novo Evento</h2>
+    <nav class="navbar-actions">
+      <button type="button" class="nav-btn" id="btn-ver-mapa">🗺️ Ver Mapa</button>
+      <button type="button" class="nav-btn" id="btn-sobre">ℹ️ Sobre</button>
+      <button type="button" class="nav-btn btn-primary" id="btn-novo-evento">+ Novo Evento</button>
 
-            <form id="eventForm">
-                <div id="formError" class="form-error hidden"></div>
+      <button type="button" class="nav-btn icon-btn" id="btn-notificacoes" title="Notificações">
+        🔔 <span class="badge hidden" id="badge-notificacoes">0</span>
+      </button>
 
-                <div class="form-group">
-                    <label for="eventName">Nome do Evento *</label>
-                    <input type="text" id="eventName" placeholder="Ex: Concerto ao Pôr do Sol" required>
-                </div>
+      <button type="button" class="nav-btn" id="btn-sessoes">⚙️ Sessões</button>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="eventCategory">Categoria *</label>
-                        <select id="eventCategory" required>
-                            <option value="Música">🎵 Música</option>
-                            <option value="Desporto">⚽ Desporto</option>
-                            <option value="Cultura">🎭 Cultura</option>
-                            <option value="Gastronomia">🍽️ Gastronomia</option>
-                            <option value="Festa">🎉 Festa</option>
-                            <option value="Tecnologia">💻 Tecnologia</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="eventDistrito">País / Distrito *</label>
-                        <select id="eventDistrito" required></select>
-                    </div>
-                </div>
+      <button type="button" class="nav-btn" id="btn-amigos">
+        👥 Amigos <span class="badge" id="badge-amigos">1</span>
+      </button>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="eventDate">Data *</label>
-                        <input type="date" id="eventDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="eventTime">Hora *</label>
-                        <input type="time" id="eventTime" required>
-                    </div>
-                </div>
+      <button type="button" class="profile-pill" id="btn-perfil" title="Editar o meu perfil">
+        <span class="profile-avatar" id="nav-avatar">😎</span>
+        <span class="profile-name" id="nav-username">dddddd</span>
+      </button>
 
-                <div class="form-group">
-                    <label for="eventLocation">Cidade & Local / Morada *</label>
-                    <input type="text" id="eventLocation" placeholder="Ex: Parque Eduardo VII, Lisboa" required>
-                </div>
+      <button type="button" class="nav-btn btn-danger-soft" id="btn-sair">Sair</button>
+    </nav>
+  </header>
 
-                <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--surface-2); padding:9px 12px; border-radius:10px; border:1px solid var(--border);">
-                    <span id="selectedCoordinates" style="font-size:12px; color:var(--muted);">Pin ainda não colocado no mapa</span>
-                    <button type="button" id="changeLocationButton" class="btn-soft">📍 Marcar Pin no Mapa</button>
-                </div>
+  <!-- ÁREA PRINCIPAL -->
+  <main class="app-layout">
+    <!-- PAINEL ESQUERDO: PESQUISA, FILTROS E LISTA DE EVENTOS -->
+    <aside class="sidebar" id="sidebar-panel">
+      <div class="search-box">
+        <input
+          type="text"
+          id="search-input"
+          placeholder="Pesquisar eventos, locais, organizadores..."
+          autocomplete="off"
+        />
+      </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="eventMaxParticipants">Lotação Máxima (opcional)</label>
-                        <input type="number" id="eventMaxParticipants" min="1" placeholder="Ex: 150">
-                    </div>
-                    <div class="form-group">
-                        <label for="eventPrice">Preço</label>
-                        <input type="text" id="eventPrice" value="Gratuito" placeholder="Ex: Gratuito ou 10€">
-                    </div>
-                </div>
+      <div class="quick-actions-row">
+        <button type="button" class="action-btn flex-grow" id="btn-perto-mim">📍 Perto de mim</button>
+        <button type="button" class="action-btn" id="btn-export-csv">📥 CSV</button>
+        <button type="button" class="action-btn" id="btn-limpar">↻ Limpar</button>
+      </div>
 
-                <div class="form-group">
-                    <label for="eventExternalUrl">Link de Bilhetes / Website (opcional)</label>
-                    <input type="url" id="eventExternalUrl" placeholder="https://...">
-                </div>
+      <div class="categories-wrap" id="categories-container">
+        <button type="button" class="cat-pill active" data-cat="Todos">Todos</button>
+        <button type="button" class="cat-pill" data-cat="Música">🎵 Música</button>
+        <button type="button" class="cat-pill" data-cat="Desporto">⚽ Desporto</button>
+        <button type="button" class="cat-pill" data-cat="Cultura">🎭 Cultura</button>
+        <button type="button" class="cat-pill" data-cat="Gastronomia">🍽️ Gastronomia</button>
+        <button type="button" class="cat-pill" data-cat="Festa">🎉 Festa</button>
+        <button type="button" class="cat-pill" data-cat="Tecnologia">💻 Tecnologia</button>
+      </div>
 
-                <div class="form-group">
-                    <label for="eventDescription">Descrição</label>
-                    <textarea id="eventDescription" rows="3" placeholder="Detalhes sobre o programa, acesso, etc."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="eventImage">Imagem de Capa (opcional)</label>
-                    <input type="file" id="eventImage" accept="image/*">
-                    <img id="imagePreview" class="hidden" alt="Pré-visualização" style="width:100%; height:130px; object-fit:cover; border-radius:10px; margin-top:8px;">
-                </div>
-
-                <button type="submit" id="submitEventBtn" class="btn-primary" style="width:100%; padding:11px;">Publicar Evento</button>
-            </form>
+      <div class="filters-grid">
+        <div class="filter-group">
+          <label for="filter-distrito">Distrito</label>
+          <select id="filter-distrito">
+            <option value="Todos">Todos os distritos</option>
+            <option value="Aveiro">Aveiro</option>
+            <option value="Beja">Beja</option>
+            <option value="Braga">Braga</option>
+            <option value="Bragança">Bragança</option>
+            <option value="Castelo Branco">Castelo Branco</option>
+            <option value="Coimbra">Coimbra</option>
+            <option value="Évora">Évora</option>
+            <option value="Faro">Faro</option>
+            <option value="Guarda">Guarda</option>
+            <option value="Leiria">Leiria</option>
+            <option value="Lisboa">Lisboa</option>
+            <option value="Portalegre">Portalegre</option>
+            <option value="Porto">Porto</option>
+            <option value="Santarém">Santarém</option>
+            <option value="Setúbal">Setúbal</option>
+            <option value="Viana do Castelo">Viana do Castelo</option>
+            <option value="Vila Real">Vila Real</option>
+            <option value="Viseu">Viseu</option>
+          </select>
         </div>
-    </div>
 
-    <!-- ==========================================
-         MODAL DETALHES DO EVENTO
-         ========================================== -->
-    <div id="detailModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content" style="max-width:560px;">
-            <button type="button" id="closeDetail" class="close-button" aria-label="Fechar">&times;</button>
-            <img id="detailHeroImg" class="detail-hero" src="" alt="">
-
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
-                <span id="detailCategory" class="chip active"></span>
-                <span id="detailPrice" class="chip"></span>
-                <span id="detailRatingBadge" class="chip hidden"></span>
-            </div>
-
-            <h2 id="detailTitle" style="margin:4px 0 6px;"></h2>
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
-                <span id="detailOrganizer" class="muted" style="font-size:13px;"></span>
-                <button type="button" id="detailFollowBtn" class="btn-soft hidden">+ Seguir</button>
-            </div>
-
-            <p id="detailDescription" style="font-size:13.5px; line-height:1.5; color:var(--text);"></p>
-
-            <div class="detail-meta-grid">
-                <div><strong>📅 Data & Hora</strong><div id="detailDateTime" class="muted"></div></div>
-                <div><strong>📍 Local</strong><div id="detailLocation" class="muted"></div></div>
-                <div><strong>👥 Participantes</strong><div id="detailCapacity" class="muted"></div></div>
-                <div><strong>🔗 Website</strong><div><a id="detailExternalLink" href="#" target="_blank" class="hidden" style="color:var(--primary);">Abrir link externo ↗</a></div></div>
-            </div>
-
-            <div class="detail-actions">
-                <button type="button" id="detailRegisterBtn" class="register-btn">Inscrever-me</button>
-                <button type="button" id="detailTicketBtn" class="btn-soft hidden">🎟️ Bilhete QR</button>
-                <button type="button" id="detailFavBtn" class="btn-soft">☆ Guardar</button>
-                <a id="detailDirectionsBtn" href="#" target="_blank" class="btn-soft" style="text-decoration:none;">🧭 Como chegar</a>
-                <button type="button" id="detailCalendarBtn" class="btn-soft">📅 .ICS</button>
-                <button type="button" id="detailShareBtn" class="btn-soft">🔗 Partilhar</button>
-                <button type="button" id="detailReportBtn" class="btn-logout">🚩</button>
-            </div>
-
-            <div id="detailOwnerBar" class="owner-card-bar hidden" style="margin-bottom:12px;">
-                <button type="button" id="detailEditBtn" class="edit-btn">✏️ Editar Evento</button>
-                <button type="button" id="detailDeleteBtn" class="delete-btn">🗑️ Eliminar Evento</button>
-            </div>
-
-            <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
-            <h4 style="margin:0 0 8px; font-size:13.5px;">👥 Inscritos</h4>
-            <div id="detailAttendeesList" style="margin-bottom:14px;"></div>
-
-            <h4 style="margin:0 0 8px; font-size:13.5px;">💬 Comentários</h4>
-            <div id="detailCommentsList" style="margin-bottom:8px;"></div>
-            <form id="commentForm" style="display:flex; gap:8px; margin-bottom:14px;">
-                <input type="text" id="commentInput" placeholder="Escreve uma dúvida ou comentário..." required>
-                <button type="submit" class="btn-primary-sm">Enviar</button>
-            </form>
-
-            <h4 style="margin:0 0 8px; font-size:13.5px;">⭐ Avaliações</h4>
-            <div id="detailReviewsList" style="margin-bottom:8px;"></div>
-            <form id="reviewForm" class="hidden" style="display:flex; gap:8px;">
-                <select id="reviewRating" style="width:95px;">
-                    <option value="5">⭐⭐⭐⭐⭐</option>
-                    <option value="4">⭐⭐⭐⭐</option>
-                    <option value="3">⭐⭐⭐</option>
-                    <option value="2">⭐⭐</option>
-                    <option value="1">⭐</option>
-                </select>
-                <input type="text" id="reviewComment" placeholder="Deixa a tua avaliação...">
-                <button type="submit" class="btn-primary-sm">Avaliar</button>
-            </form>
+        <div class="filter-group">
+          <label for="filter-quando">Quando</label>
+          <select id="filter-quando">
+            <option value="todos">Todas as datas</option>
+            <option value="hoje">Hoje</option>
+            <option value="semana">Próximos 7 dias</option>
+            <option value="mes">Este mês</option>
+          </select>
         </div>
-    </div>
 
-    <!-- ==========================================
-         MODAL BILHETE QR
-         ========================================== -->
-    <div id="ticketModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content" style="max-width:360px; text-align:center;">
-            <button type="button" id="closeTicket" class="close-button" aria-label="Fechar">&times;</button>
-            <h3 id="ticketEventTitle" style="margin:0 0 6px;"></h3>
-            <p id="ticketEventMeta" class="muted" style="font-size:12.5px; margin:0 0 14px;"></p>
-            <img id="ticketQrImage" src="" alt="Bilhete QR" style="width:200px; height:200px; border-radius:12px; background:#fff; padding:8px;">
-            <p id="ticketCodeText" style="font-family:monospace; font-weight:800; color:var(--primary); margin:10px 0 4px;"></p>
-            <p id="ticketHolderName" class="muted" style="font-size:12.5px; margin:0;"></p>
+        <div class="filter-group">
+          <div class="slider-header">
+            <label for="filter-raio">Raio</label>
+            <span class="raio-value" id="raio-label">Todo o país</span>
+          </div>
+          <input type="range" id="filter-raio" min="5" max="300" step="5" value="300" />
         </div>
-    </div>
 
-    <!-- ==========================================
-         MODAL DENÚNCIA
-         ========================================== -->
-    <div id="reportModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content" style="max-width:400px;">
-            <button type="button" id="closeReport" class="close-button" aria-label="Fechar">&times;</button>
-            <h3 style="margin:0 0 6px;">🚩 Denunciar Evento</h3>
-            <p id="reportEventName" class="muted" style="font-size:13px; margin:0 0 12px;"></p>
-            <form id="reportForm">
-                <div class="form-group">
-                    <label for="reportReason">Motivo</label>
-                    <select id="reportReason">
-                        <option value="Informação falsa">Informação falsa ou enganosa</option>
-                        <option value="Spam">Spam ou publicidade indevida</option>
-                        <option value="Conteúdo impróprio">Conteúdo impróprio</option>
-                        <option value="Evento cancelado">Evento já cancelado</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="reportDetails">Detalhes adicionais</label>
-                    <textarea id="reportDetails" rows="3" placeholder="Explica brevemente o problema..."></textarea>
-                </div>
-                <button type="submit" class="btn-bump" style="width:100%; padding:10px;">Enviar Denúncia</button>
-            </form>
+        <div class="filter-group">
+          <label for="sort-by">Ordenar por</label>
+          <select id="sort-by">
+            <option value="data">📅 Data mais próxima</option>
+            <option value="inscritos">🔥 Mais populares</option>
+            <option value="preco">💶 Preço mais baixo</option>
+          </select>
         </div>
-    </div>
+      </div>
 
-    <!-- ==========================================
-         MODAL PERFIL DO UTILIZADOR
-         ========================================== -->
-    <div id="profileModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content">
-            <button type="button" id="closeProfile" class="close-button" aria-label="Fechar">&times;</button>
-            <h2 style="margin:0 0 2px;">O Meu Perfil</h2>
-            <p id="profileEmailDisplay" class="muted" style="font-size:12.5px; margin:0 0 14px;"></p>
+      <div class="toggle-chips-row">
+        <button type="button" class="toggle-chip" id="chip-favoritos">★ Favoritos</button>
+        <button type="button" class="toggle-chip" id="chip-gratuitos">🎟️ Gratuitos</button>
+        <button type="button" class="toggle-chip" id="chip-aseguir">🏛️ A Seguir</button>
+      </div>
 
-            <div class="profile-edit-box" style="margin-bottom:16px;">
-                <form id="profileUpdateForm">
-                    <div class="form-group">
-                        <label for="profileNameInput">Nome</label>
-                        <input type="text" id="profileNameInput" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="profileBioInput">Bio / Descrição</label>
-                        <input type="text" id="profileBioInput" maxlength="120" placeholder="Uma frase sobre ti...">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width:100%;">Guardar Perfil</button>
-                </form>
-            </div>
+      <div class="results-counter" id="events-count">0 eventos encontrados</div>
 
-            <div class="auth-tabs three-cols">
-                <button type="button" id="tabMyEnrollments" class="auth-tab active">Inscrições</button>
-                <button type="button" id="tabMyCreated" class="auth-tab">Criados</button>
-                <button type="button" id="tabMyFollowing" class="auth-tab">A Seguir</button>
-            </div>
+      <div class="events-list" id="events-list"></div>
+    </aside>
 
-            <div id="profileEnrolledList" class="profile-events-list"></div>
-            <div id="profileCreatedList" class="profile-events-list hidden"></div>
-            <div id="profileFollowingList" class="profile-events-list hidden"></div>
+    <!-- PAINEL DIREITO: MAPA INTERATIVO -->
+    <section class="map-section" id="map-section">
+      <div class="map-floating-controls">
+        <button type="button" class="map-ctrl-btn" id="btn-mapa-noturno">🗺️ Mapa Noturno</button>
+        <button type="button" class="map-ctrl-btn" id="btn-vista-3d">🏙️ Vista 3D</button>
+      </div>
+      <div id="map"></div>
+    </section>
+  </main>
+
+  <!-- ==================== MODAIS INDEPENDENTES ==================== -->
+
+  <!-- 1. MODAL CRIAR NOVO EVENTO -->
+  <div class="modal-overlay hidden" id="modal-novo-evento">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h2>➕ Criar Novo Evento</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-novo-evento">✕</button>
+      </div>
+      <form id="form-novo-evento" class="modal-body form-grid">
+        <div class="form-field full">
+          <label for="ev-titulo">Título do Evento *</label>
+          <input type="text" id="ev-titulo" required placeholder="Ex: Torneio de Basquetebol 3x3" />
         </div>
-    </div>
 
-    <!-- ==========================================
-         MODAL ADMIN
-         ========================================== -->
-    <div id="adminModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content">
-            <button type="button" id="closeAdmin" class="close-button" aria-label="Fechar">&times;</button>
-            <h2 style="margin:0 0 12px;">🛡️ Painel de Administração</h2>
-            <div id="adminStatsGrid" class="admin-stats-grid"></div>
-            <div id="adminUsersList"></div>
+        <div class="form-field">
+          <label for="ev-categoria">Categoria *</label>
+          <select id="ev-categoria" required>
+            <option value="Desporto">⚽ Desporto</option>
+            <option value="Música">🎵 Música</option>
+            <option value="Cultura">🎭 Cultura</option>
+            <option value="Gastronomia">🍽️ Gastronomia</option>
+            <option value="Festa">🎉 Festa</option>
+            <option value="Tecnologia">💻 Tecnologia</option>
+          </select>
         </div>
-    </div>
 
-    <!-- ==========================================
-         MODAL SOBRE
-         ========================================== -->
-    <div id="aboutModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-content" style="max-width:440px;">
-            <button type="button" id="closeAbout" class="close-button" aria-label="Fechar">&times;</button>
-            <h2 style="margin:0 0 8px;">📍 Sobre o LocalSpot</h2>
-            <p style="font-size:13.5px; line-height:1.55; color:var(--muted);">
-                O <strong>LocalSpot</strong> é uma plataforma global em 3D que liga comunidades locais em qualquer país: descobre eventos marcados no mapa, cria iniciativas próprias e partilha a tua localização ao vivo com amigos ao estilo <strong>Bump</strong>.
-            </p>
+        <div class="form-field">
+          <label for="ev-organizador">Organizador *</label>
+          <input type="text" id="ev-organizador" required placeholder="Nome do organizador ou associação" />
         </div>
-    </div>
 
-    <!-- ==========================================
-         SCRIPTS MODULARES (SEM CONFLITOS DE SESSÃO)
-         ========================================== -->
-    <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/db.js"></script>
-    <script src="js/events.js"></script>
-    <script src="js/map.js"></script>
-    <script src="js/auth-profile.js"></script>
-    <script src="js/events-manager.js"></script>
-    <script src="js/main.js"></script>
+        <div class="form-field">
+          <label for="ev-data">Data e Hora *</label>
+          <input type="datetime-local" id="ev-data" required />
+        </div>
+
+        <div class="form-field">
+          <label for="ev-distrito">Distrito *</label>
+          <select id="ev-distrito" required>
+            <option value="Coimbra" selected>Coimbra</option>
+            <option value="Aveiro">Aveiro</option>
+            <option value="Lisboa">Lisboa</option>
+            <option value="Porto">Porto</option>
+            <option value="Braga">Braga</option>
+            <option value="Leiria">Leiria</option>
+            <option value="Faro">Faro</option>
+            <option value="Setúbal">Setúbal</option>
+            <option value="Viseu">Viseu</option>
+            <option value="Santarém">Santarém</option>
+            <option value="Évora">Évora</option>
+            <option value="Viana do Castelo">Viana do Castelo</option>
+            <option value="Vila Real">Vila Real</option>
+            <option value="Castelo Branco">Castelo Branco</option>
+            <option value="Guarda">Guarda</option>
+            <option value="Beja">Beja</option>
+            <option value="Bragança">Bragança</option>
+            <option value="Portalegre">Portalegre</option>
+          </select>
+        </div>
+
+        <div class="form-field full">
+          <label for="ev-local">Local / Morada *</label>
+          <input type="text" id="ev-local" required placeholder="Ex: Praça Marquês de Marialva, Cantanhede" />
+        </div>
+
+        <div class="form-field">
+          <label for="ev-preco">Preço (€) — 0 para Gratuito</label>
+          <input type="number" id="ev-preco" min="0" step="0.5" value="0" />
+        </div>
+
+        <div class="form-field">
+          <label for="ev-capacidade">Lotação Máxima *</label>
+          <input type="number" id="ev-capacidade" min="2" max="50000" value="100" required />
+        </div>
+
+        <div class="form-field full">
+          <label for="ev-imagem">Capa do Evento</label>
+          <select id="ev-imagem">
+            <option value="">Automática pela categoria</option>
+            <option value="assets/eventos/basketball.jpg">🏀 Basquetebol / Desporto (Local)</option>
+            <option value="assets/eventos/concerto.jpg">🎸 Concerto / Música (Local)</option>
+            <option value="assets/eventos/fotografia.jpg">📷 Fotografia / Cultura (Local)</option>
+            <option value="assets/eventos/gaming.jpg">🎮 Gaming / Tecnologia (Local)</option>
+            <option value="assets/images/default-event.jpg">📌 Capa Padrão LocalSpot (Local)</option>
+          </select>
+        </div>
+
+        <div class="form-field full">
+          <label for="ev-descricao">Descrição do Evento</label>
+          <textarea id="ev-descricao" rows="3" placeholder="Programa, horários, regras ou ponto de encontro..."></textarea>
+        </div>
+
+        <div class="modal-footer full">
+          <button type="button" class="nav-btn" data-close-modal="modal-novo-evento">Cancelar</button>
+          <button type="submit" class="nav-btn btn-primary">Publicar Evento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. MODAL EDITAR PERFIL -->
+  <div class="modal-overlay hidden" id="modal-perfil">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>👤 Editar o Meu Perfil</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-perfil">✕</button>
+      </div>
+      <form id="form-perfil" class="modal-body form-grid">
+        <div class="form-field full">
+          <label>Escolhe o teu Avatar</label>
+          <div class="avatar-picker" id="avatar-picker">
+            <button type="button" class="avatar-opt" data-emoji="😎">😎</button>
+            <button type="button" class="avatar-opt" data-emoji="🧑🏻‍💻">🧑🏻‍💻</button>
+            <button type="button" class="avatar-opt" data-emoji="🏃🏻‍♂️">🏃🏻‍♂️</button>
+            <button type="button" class="avatar-opt" data-emoji="🎸">🎸</button>
+            <button type="button" class="avatar-opt" data-emoji="🎨">🎨</button>
+            <button type="button" class="avatar-opt" data-emoji="🚀">🚀</button>
+            <button type="button" class="avatar-opt" data-emoji="🔥">🔥</button>
+            <button type="button" class="avatar-opt" data-emoji="🌍">🌍</button>
+          </div>
+          <input type="hidden" id="perfil-avatar" value="😎" />
+        </div>
+
+        <div class="form-field full">
+          <label for="perfil-nome">Nome de Utilizador *</label>
+          <input type="text" id="perfil-nome" required minlength="2" maxlength="30" />
+        </div>
+
+        <div class="form-field">
+          <label for="perfil-email">Email</label>
+          <input type="email" id="perfil-email" placeholder="utilizador@localspot.pt" />
+        </div>
+
+        <div class="form-field">
+          <label for="perfil-cidade">Cidade / Distrito</label>
+          <input type="text" id="perfil-cidade" placeholder="Cantanhede, Coimbra" />
+        </div>
+
+        <div class="form-field full">
+          <label for="perfil-bio">Bio / Interesses</label>
+          <textarea id="perfil-bio" rows="2" placeholder="Ex: Gosto de corridas noturnas, música ao vivo e tecnologia."></textarea>
+        </div>
+
+        <div class="modal-footer full">
+          <button type="button" class="nav-btn" data-close-modal="modal-perfil">Cancelar</button>
+          <button type="submit" class="nav-btn btn-primary">Guardar Perfil</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. MODAL AMIGOS -->
+  <div class="modal-overlay hidden" id="modal-amigos">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h2>👥 Amigos & Comunidade</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-amigos">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="friends-search-bar">
+          <input type="text" id="friends-search" placeholder="Procurar amigos pelo nome ou cidade..." />
+        </div>
+
+        <h3 class="section-subtitle">Pedidos Pendentes</h3>
+        <div id="friends-requests-list" class="stack-list"></div>
+
+        <h3 class="section-subtitle">Os Meus Amigos</h3>
+        <div id="friends-list" class="stack-list"></div>
+
+        <h3 class="section-subtitle">Sugestões na Tua Zona</h3>
+        <div id="friends-discover-list" class="stack-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. MODAL DETALHES DO EVENTO -->
+  <div class="modal-overlay hidden" id="modal-detalhes">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h2 id="detalhes-title">Detalhes do Evento</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-detalhes">✕</button>
+      </div>
+      <div class="modal-body" id="detalhes-content"></div>
+    </div>
+  </div>
+
+  <!-- 5. MODAL SESSÕES -->
+  <div class="modal-overlay hidden" id="modal-sessoes">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>⚙️ Sessões Ativas</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-sessoes">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted-text">Dispositivos com sessão iniciada na tua conta LocalSpot:</p>
+        <div id="sessoes-list" class="stack-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MODAL NOTIFICAÇÕES -->
+  <div class="modal-overlay hidden" id="modal-notificacoes">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>🔔 Notificações</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-notificacoes">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="notificacoes-list" class="stack-list"></div>
+        <div class="modal-footer">
+          <button type="button" class="nav-btn" id="btn-limpar-notifs">Limpar tudo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. MODAL SOBRE -->
+  <div class="modal-overlay hidden" id="modal-sobre">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>ℹ️ Sobre o LocalSpot</h2>
+        <button type="button" class="modal-close" data-close-modal="modal-sobre">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>O <strong>LocalSpot</strong> liga-te aos melhores eventos culturais, desportivos e sociais da tua região.</p>
+        <ul class="about-list">
+          <li>📍 Mapa interativo com modos Satélite, OpenStreetMap 3D e Noturno.</li>
+          <li>🎟️ Inscrição direta nos eventos com controlo de lotação em tempo real.</li>
+          <li>👥 Rede de amigos para saberes em que eventos eles estão inscritos.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. MODAL LOGIN / TROCAR CONTA -->
+  <div class="modal-overlay hidden" id="modal-auth">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>🔐 Iniciar Sessão no LocalSpot</h2>
+      </div>
+      <form id="form-auth" class="modal-body form-grid">
+        <div class="form-field full">
+          <label for="auth-username">Nome de Utilizador *</label>
+          <input type="text" id="auth-username" required value="dddddd" />
+        </div>
+        <div class="form-field full">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" value="utilizador@localspot.pt" />
+        </div>
+        <div class="modal-footer full">
+          <button type="submit" class="nav-btn btn-primary full-width">Entrar na Conta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/auth-profile.js"></script>
+  <script src="js/friends.js"></script>
+  <script src="js/events_manager.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
