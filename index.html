@@ -147,7 +147,7 @@
             font-size: 12.5px;
             font-weight: 600;
             cursor: pointer;
-            max-width: 165px;
+            max-width: 175px;
         }
         .header-country-select:hover {
             border-color: var(--primary);
@@ -525,6 +525,7 @@
             padding: 7px 6px;
             font-size: 11.5px;
             font-weight: 600;
+            cursor: pointer;
         }
         .privacy-opt-btn.active {
             border-color: var(--primary);
@@ -699,13 +700,13 @@
     <header class="header">
         <h1 class="brand">📍 LocalSpot</h1>
         <nav>
-            <select id="headerCountrySelect" class="header-country-select" title="Escolher País">
-                <option value="all">🌍 Todos os países</option>
+            <select id="headerCountrySelect" class="header-country-select" title="Escolher País ou Distrito">
+                <option value="all">🌍 Todos os locais</option>
             </select>
             <button type="button" id="mobileViewToggle" class="btn-soft">🗺️ Ver Mapa</button>
             <button type="button" id="aboutButton" class="btn-soft">ℹ️ Sobre</button>
             <button type="button" id="lsHeaderFriendsBtn" class="btn-soft">👊 Amigos</button>
-            <button type="button" id="addEventButton" class="btn-primary hidden">+ Novo Evento</button>
+            <button type="button" id="addEventButton" class="btn-primary">+ Novo Evento</button>
 
             <div class="notif-wrap">
                 <button type="button" id="notifBtn" class="btn-soft hidden" aria-label="Notificações">
@@ -752,9 +753,9 @@
 
             <div class="filters-grid">
                 <div>
-                    <label for="districtFilter">País</label>
+                    <label for="districtFilter">País / Distrito</label>
                     <select id="districtFilter">
-                        <option value="all">🌍 Todos os países</option>
+                        <option value="all">🌍 Todos os locais</option>
                     </select>
                 </div>
                 <div>
@@ -961,7 +962,7 @@
                         <div style="display:flex; gap:8px; margin-top:16px;">
                             <button type="button" id="backToStep2Btn" class="btn-soft" style="flex:1;">← Anterior</button>
                             <button type="submit" id="registerSubmitBtn" class="btn-primary" style="flex:2; padding:12px; font-weight:800;">
-                                👊 Entrar no Mapa!
+                                👊 Criar Perfil
                             </button>
                         </div>
                     </div>
@@ -1027,7 +1028,7 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="eventDistrito">País *</label>
+                        <label for="eventDistrito">País / Distrito *</label>
                         <select id="eventDistrito" required></select>
                     </div>
                 </div>
@@ -1258,13 +1259,15 @@
     </div>
 
     <!-- ==========================================
-         SCRIPTS NA ORDEM EXATA DE EXECUÇÃO
+         SCRIPTS MODULARES (SEM CONFLITOS DE SESSÃO)
          ========================================== -->
     <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/db.js?v=6"></script>
-    <script src="js/events.js?v=6"></script>
-    <script src="js/map.js?v=6"></script>
-    <script src="js/main.js?v=6"></script>
+    <script src="js/db.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/auth-profile.js"></script>
+    <script src="js/events-manager.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
