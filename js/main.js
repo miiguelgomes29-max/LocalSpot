@@ -1,17 +1,5 @@
 // ==========================================
-// REMOÇÃO IMEDIATA DA TELA DE BOAS-VINDAS
-// ==========================================
-(function removeWelcomeSplashImmediately() {
-    const splash = document.getElementById("welcomeSplash");
-    if (splash) splash.remove();
-    document.addEventListener("DOMContentLoaded", () => {
-        const s = document.getElementById("welcomeSplash");
-        if (s) s.remove();
-    });
-})();
-
-// ==========================================
-// FALLBACKS DE SEGURANÇA (CASO DATA.JS OU MAP.JS FALHEM)
+// FALLBACKS DE SEGURANÇA
 // ==========================================
 if (typeof window.events === "undefined") window.events = [];
 if (typeof window.DEFAULT_IMAGE === "undefined") {
@@ -33,9 +21,7 @@ if (typeof window.escapeHTML === "undefined") {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 }
-if (typeof window.formatEventDate === "undefined") {
-    window.formatEventDate = ev => ev?.date || "";
-}
+if (typeof window.formatEventDate === "undefined") window.formatEventDate = ev => ev?.date || "";
 if (typeof window.getCategoryEmoji === "undefined") {
     window.getCategoryEmoji = cat => ({
         "Música": "🎵", "Desporto": "⚽", "Cultura": "🎭",
@@ -52,9 +38,7 @@ if (typeof window.isEventPast === "undefined") {
         return !isNaN(dt) && dt < new Date();
     };
 }
-if (typeof window.isEventToday === "undefined") {
-    window.isEventToday = ev => ev?.date === new Date().toISOString().slice(0, 10);
-}
+if (typeof window.isEventToday === "undefined") window.isEventToday = ev => ev?.date === new Date().toISOString().slice(0, 10);
 if (typeof window.isEventThisWeek === "undefined") {
     window.isEventThisWeek = ev => {
         if (!ev?.date) return false;
@@ -76,19 +60,15 @@ if (typeof window.distanceKm === "undefined") {
 }
 
 // ==========================================
-// CONFIGURAÇÃO SUPABASE E LÓGICA DA APLICAÇÃO
+// CONFIGURAÇÃO SUPABASE
 // ==========================================
 const SUPABASE_URL = "https://ufzjexbihnwflqktpomm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmempleGJpaG53Zmxxa3Rwb21tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMjU5NDUsImV4cCI6MjEwOTkwMTk0NX0.hy3x0RuyuKYwTOGvdAA2hYKH_02SEy49YRaZHoD2ufA";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const $ = id => document.getElementById(id);
 
-// Elementos de Autenticação
 const authOverlay = $("authOverlay");
-const tabLogin = $("tabLogin");
-const tabRegister = $("tabRegister");
 const loginForm = $("loginForm");
 const registerForm = $("registerForm");
 const regAccountType = $("regAccountType");
@@ -96,7 +76,6 @@ const businessTypeGroup = $("businessTypeGroup");
 const regNameLabel = $("regNameLabel");
 const regNameInput = $("regName");
 
-// Elementos do Cabeçalho e Notificações
 const notifBtn = $("notifBtn");
 const notifBadge = $("notifBadge");
 const notifDropdown = $("notifDropdown");
@@ -108,7 +87,6 @@ const addEventButton = $("addEventButton");
 const adminModal = $("adminModal");
 const profileModal = $("profileModal");
 
-// Elementos de Filtros e Lista
 const mainEl = $("main");
 const mobileViewToggle = $("mobileViewToggle");
 const searchInput = $("searchInput");
@@ -127,7 +105,6 @@ const eventCount = $("eventCount");
 const emptyState = $("emptyState");
 const locationButton = $("locationButton");
 
-// Elementos dos Modais
 const modal = $("eventModal");
 const closeModal = $("closeModal");
 const eventForm = $("eventForm");
@@ -163,7 +140,6 @@ function saveJSON(key, value) {
     }
 }
 
-// ---------- Estado Global ----------
 const state = {
     search: "",
     category: "all",
@@ -211,7 +187,6 @@ let bumpBroadcastChannel = null;
 const bumpCooldownMap = new Map();
 const recentIncomingBumpTs = new Map();
 
-// Estado de Exploração & Percurso
 let explorationData = loadJSON(STORAGE_EXPLORATION, {
     date: new Date().toISOString().slice(0, 10),
     zones: [],
@@ -244,27 +219,12 @@ const BUSINESS_SECTORS = [
     { emoji: "💼", label: "Serviços / Instituição" }
 ];
 
-function isBusinessAccount() {
-    return currentProfile?.role === "business";
-}
-
-function isNormalUserAccount() {
-    return !currentProfile || currentProfile.role === "user" || !currentProfile.role;
-}
-
-function isAdminAccount() {
-    return currentProfile?.role === "admin";
-}
-
-function isEntityVerified(profile) {
-    return profile?.role === "business" && (profile?.is_verified === true || profile?.status_emoji === "✅");
-}
-
+function isBusinessAccount() { return currentProfile?.role === "business"; }
+function isNormalUserAccount() { return !currentProfile || currentProfile.role === "user" || !currentProfile.role; }
+function isAdminAccount() { return currentProfile?.role === "admin"; }
+function isEntityVerified(profile) { return profile?.role === "business" && (profile?.is_verified === true || profile?.status_emoji === "✅"); }
 function verifiedBadgeHTML(profile) {
-    if (isEntityVerified(profile)) {
-        return `<span class="verified-check" title="Entidade Oficial Verificada">✓</span>`;
-    }
-    return "";
+    return isEntityVerified(profile) ? `<span class="verified-check" title="Entidade Oficial Verificada">✓</span>` : "";
 }
 
 window.isFriendLiveOnline = friendId => onlineUserIds.has(String(friendId));
@@ -287,7 +247,7 @@ window.getMapSocialEntities = () => {
     return [...window.friendsList, ...followedVisibleEntities];
 };
 
-// ---------- Som & Notificação ----------
+// ---------- Sons & Animações ----------
 function playBumpSound(isSuper = false) {
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -332,7 +292,6 @@ function playFriendWooshSound(isIncoming = false) {
     } catch (e) {}
 }
 
-// ---------- Animações de Pedido de Amizade ----------
 function triggerFriendSentAnimation(targetUser) {
     if (navigator.vibrate) {
         try { navigator.vibrate([60, 40, 90]); } catch (e) {}
@@ -351,10 +310,10 @@ function triggerFriendSentAnimation(targetUser) {
     overlay.innerHTML = `
         <div class="friend-sent-stage">
             <div class="friend-sent-avatar-wrap">
-                ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(initials)}
+                ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(targetUser?.avatar_emoji || initials)}
             </div>
-            <div class="friend-sent-plane">✈️</div>
-            <div class="friend-sent-pill">👊 Pedido enviado para ${escapeHTML(name)}!</div>
+            <div class="friend-sent-plane">👊</div>
+            <div class="friend-sent-pill">Pedido enviado para ${escapeHTML(name)}!</div>
         </div>
     `;
     document.body.appendChild(overlay);
@@ -385,7 +344,7 @@ function triggerFriendRequestAnimation(senderUser, friendshipId) {
             <span class="pill-tag">✨ NOVO PEDIDO DE AMIZADE</span>
             <div class="friend-req-photo-ring">
                 <div class="friend-req-photo-inner">
-                    ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(initials)}
+                    ${avatarUrl ? `<img src="${escapeHTML(avatarUrl)}" alt="" onerror="this.remove()">` : escapeHTML(senderUser.avatar_emoji || initials)}
                 </div>
                 <div class="friend-req-badge-fist">👊</div>
             </div>
@@ -421,7 +380,6 @@ function triggerFriendRequestAnimation(senderUser, friendshipId) {
     };
 }
 
-// ---------- Toast Notifications ----------
 let toastTimer;
 function showToast(message, type = "info") {
     let toast = $("toast");
@@ -442,7 +400,7 @@ function translateAuthError(error) {
     const msg = (error.message || "").toLowerCase();
     if (msg.includes("invalid login credentials")) return "E-mail ou palavra-passe incorretos.";
     if (msg.includes("email not confirmed")) return "Desativa «Confirm email» no Supabase para entrar de imediato.";
-    if (msg.includes("user already registered") || msg.includes("already been registered")) return "Este e-mail já está registado. Muda para «Entrar».";
+    if (msg.includes("user already registered") || msg.includes("already been registered")) return "Este e-mail já está registado. Inicia sessão.";
     if (msg.includes("password should be at least")) return "A palavra-passe tem de ter pelo menos 6 caracteres.";
     if (msg.includes("rate limit") || msg.includes("too many requests")) return "Muitas tentativas seguidas. Aguarda alguns minutos.";
     return error.message;
@@ -534,7 +492,6 @@ function ensureSocialUI() {
         else nav.appendChild(entBtn);
     }
 
-    // Botão Flutuante de Chat e Amigos (garantido em qualquer resolução/layout)
     if (!$("floatingSocialDock")) {
         const dock = document.createElement("div");
         dock.id = "floatingSocialDock";
@@ -711,10 +668,10 @@ function ensureSocialUI() {
             <div class="modal-content">
                 <button type="button" id="closeFriendsModal" class="close-button" aria-label="Fechar">&times;</button>
                 <div style="display:flex; justify-content:space-between; align-items:center; padding-right:34px; margin-bottom:4px;">
-                    <h2 style="margin:0;">💬 Chat & Amigos</h2>
+                    <h2 style="margin:0;">👊 Amigos & Radar Bump</h2>
                     <button type="button" id="enableBgNotifBumpBtn" class="btn-soft" style="font-size:11.5px; padding:5px 9px;">🔔 Alertas</button>
                 </div>
-                <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Conversa em tempo real, adiciona amigos e faz Bumps! ⚡</p>
+                <p id="myBumpCodeBanner" style="color:var(--primary); font-size:12px; font-weight:700; margin:0 0 12px;"></p>
                 
                 <div class="auth-tabs three-cols" style="margin-bottom:14px;">
                     <button type="button" id="tabFriendsChats" class="auth-tab active">💬 Conversas <span id="chatsTabUnreadBadge" class="friends-req-badge hidden">0</span></button>
@@ -733,9 +690,22 @@ function ensureSocialUI() {
 
                 <div id="panelFriendsAdd" class="hidden">
                     <div id="incomingRequestsSection" style="margin-bottom:16px;"></div>
-                    <label for="friendSearchInput">Procurar utilizadores ou entidades</label>
+
+                    <!-- RADAR DE PROXIMIDADE ESTILO BUMP -->
+                    <div style="background:linear-gradient(135deg, rgba(244,63,94,0.14), rgba(139,92,246,0.14)); border:1px solid rgba(244,63,94,0.35); border-radius:14px; padding:12px; margin-bottom:14px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                            <div>
+                                <strong style="display:block; font-size:13px;">📡 Bump por Proximidade</strong>
+                                <span style="font-size:11.5px; color:var(--muted);">Encontra pessoas com o LocalSpot aberto perto de ti</span>
+                            </div>
+                            <button type="button" id="scanNearbyBumpBtn" class="btn-bump" style="white-space:nowrap;">👊 Radar</button>
+                        </div>
+                        <div id="nearbyBumpResults" style="margin-top:8px;"></div>
+                    </div>
+
+                    <label for="friendSearchInput">Procurar por nome, @username, e-mail ou código LS-</label>
                     <div style="display:flex; gap:8px; margin-bottom:12px;">
-                        <input type="text" id="friendSearchInput" placeholder="Ex: Maria, João, joao@email.com...">
+                        <input type="text" id="friendSearchInput" placeholder="Ex: Miguel, LS-A92F, miguel@email.pt...">
                         <button type="button" id="friendSearchBtn" class="btn-primary-sm">Procurar</button>
                     </div>
                     <div id="friendSearchResults"></div>
@@ -868,29 +838,36 @@ function bindSocialEvents() {
     };
 
     const openFriendsDrawer = async (tabId) => {
+        if ($("myBumpCodeBanner") && currentProfile) {
+            $("myBumpCodeBanner").textContent = `O teu código Bump: ${currentProfile.bump_code || "LS-ATIVO"} · Partilha para te adicionarem!`;
+        }
         openModal(friendsModal);
         switchFriendsTab(tabId);
         await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
+        if (tabId === "tabFriendsAdd") searchUsersAndEntities();
     };
 
     if (friendsNavBtn && !friendsNavBtn.dataset.bound) {
         friendsNavBtn.dataset.bound = "1";
         friendsNavBtn.addEventListener("click", () => openFriendsDrawer("tabFriendsList"));
     }
-
     if (floatingFriendsBtn && !floatingFriendsBtn.dataset.bound) {
         floatingFriendsBtn.dataset.bound = "1";
         floatingFriendsBtn.addEventListener("click", () => openFriendsDrawer("tabFriendsList"));
     }
-
     if (directChatsNavBtn && !directChatsNavBtn.dataset.bound) {
         directChatsNavBtn.dataset.bound = "1";
         directChatsNavBtn.addEventListener("click", () => openFriendsDrawer("tabFriendsChats"));
     }
-
     if (floatingChatBtn && !floatingChatBtn.dataset.bound) {
         floatingChatBtn.dataset.bound = "1";
         floatingChatBtn.addEventListener("click", () => openFriendsDrawer("tabFriendsChats"));
+    }
+
+    const scanNearbyBtn = $("scanNearbyBumpBtn");
+    if (scanNearbyBtn && !scanNearbyBtn.dataset.bound) {
+        scanNearbyBtn.dataset.bound = "1";
+        scanNearbyBtn.addEventListener("click", scanNearbyBumpUsers);
     }
 
     const bgNotifBtn = $("enableBgNotifBumpBtn");
@@ -1011,7 +988,10 @@ function bindSocialEvents() {
             switchFriendsTab("tabFriendsChats");
             await loadRecentChatSummaries();
         });
-        tabAdd.addEventListener("click", () => switchFriendsTab("tabFriendsAdd"));
+        tabAdd.addEventListener("click", () => {
+            switchFriendsTab("tabFriendsAdd");
+            searchUsersAndEntities();
+        });
     }
 
     const searchBtn = $("friendSearchBtn");
@@ -1019,9 +999,7 @@ function bindSocialEvents() {
     if (searchBtn && !searchBtn.dataset.bound) {
         searchBtn.dataset.bound = "1";
         searchBtn.addEventListener("click", searchUsersAndEntities);
-        searchInp.addEventListener("keydown", e => {
-            if (e.key === "Enter") { e.preventDefault(); searchUsersAndEntities(); }
-        });
+        searchInp.addEventListener("input", searchUsersAndEntities);
     }
 
     const bumpShakeBtn = $("bumpShakeMapBtn");
@@ -1129,6 +1107,82 @@ function bindSocialEvents() {
     setupMotionSensorWithIOSPermission();
 }
 
+// ==========================================
+// BUMP POR PROXIMIDADE (ENCONTRAR PESSOAS PERTO)
+// ==========================================
+async function scanNearbyBumpUsers() {
+    const box = $("nearbyBumpResults");
+    const btn = $("scanNearbyBumpBtn");
+    if (!box || !currentUser) return;
+
+    btn.disabled = true;
+    btn.textContent = "⏳ A procurar...";
+    box.innerHTML = `<p class="muted" style="font-size:12px; margin:6px 0 0;">A ativar radar GPS...</p>`;
+
+    try {
+        let pos = window.userPosition;
+        if (!pos && typeof window.locateUser === "function") {
+            pos = await window.locateUser();
+        }
+        if (!pos) throw new Error("Ativa a localização GPS para usar o Bump por proximidade.");
+
+        const { data: users } = await supabaseClient
+            .from("profiles")
+            .select("*")
+            .neq("id", currentUser.id)
+            .eq("role", "user")
+            .neq("privacy_mode", "ghost")
+            .not("last_lat", "is", null)
+            .not("last_lng", "is", null)
+            .limit(50);
+
+        const nearby = (users || [])
+            .map(u => ({
+                ...u,
+                distMeters: Math.round(distanceKm(pos.lat, pos.lng, u.last_lat, u.last_lng) * 1000)
+            }))
+            .filter(u => u.distMeters <= 500)
+            .sort((a, b) => a.distMeters - b.distMeters);
+
+        if (nearby.length === 0) {
+            box.innerHTML = `<p class="muted" style="font-size:12px; margin:6px 0 0;">Ninguém detetado num raio de 500m agora. Usa a pesquisa abaixo ou partilha o teu código <strong>${escapeHTML(currentProfile?.bump_code || "")}</strong>!</p>`;
+            return;
+        }
+
+        const friendIds = new Set(window.friendsList.map(f => String(f.id)));
+        box.innerHTML = nearby.map(u => {
+            const isFriend = friendIds.has(String(u.id));
+            const isSent = sentFriendRequestIds.has(u.id);
+            let action = "";
+            if (isFriend) {
+                action = `<button type="button" class="btn-bump" onclick="window.sendBump('${u.id}', '👊', 'Bump de proximidade!')">👊 Bump</button>`;
+            } else if (isSent) {
+                action = `<span class="muted" style="font-size:11.5px;">✈️ Enviado</span>`;
+            } else {
+                action = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">+ Conectar</button>`;
+            }
+
+            return `
+                <div class="friend-row" style="margin-top:6px; margin-bottom:0;">
+                    <div class="friend-row-left">
+                        ${renderAvatarChip(u, "")}
+                        <div class="friend-row-info">
+                            <strong>${escapeHTML(u.full_name)}</strong>
+                            <span>📍 A ${u.distMeters}m de ti · ${escapeHTML(u.status_emoji || "📍")} ${escapeHTML(u.status_text || "")}</span>
+                        </div>
+                    </div>
+                    <div>${action}</div>
+                </div>
+            `;
+        }).join("");
+    } catch (err) {
+        box.innerHTML = `<p style="font-size:12px; color:#fda4af; margin:6px 0 0;">${escapeHTML(err.message)}</p>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "👊 Radar";
+    }
+}
+
 async function updateQuickUserMood(emoji, text) {
     if (!currentUser || !currentProfile) return;
     await supabaseClient
@@ -1140,23 +1194,15 @@ async function updateQuickUserMood(emoji, text) {
     currentProfile.status_text = text;
     applyRoleUI();
     showToast(`Estado atualizado: ${emoji} ${text}`, "success");
-
-    if (bumpBroadcastChannel) {
-        bumpBroadcastChannel.send({
-            type: "broadcast",
-            event: "live_status",
-            payload: { userId: currentUser.id, emoji, text }
-        });
-    }
 }
 
 async function performSmartBumpAction(fromShake = false) {
     if (!currentUser) return;
 
     if (!window.friendsList.length) {
-        showToast("Adiciona primeiro um amigo para fazer Bump! 👊");
         openModal($("friendsModal"));
         $("tabFriendsAdd").click();
+        scanNearbyBumpUsers();
         return;
     }
 
@@ -1222,24 +1268,6 @@ if (mobileViewToggle) {
 // ==========================================
 // SISTEMA DE AUTENTICAÇÃO E PERFIS
 // ==========================================
-if (tabLogin && tabRegister) {
-    tabLogin.addEventListener("click", () => {
-        tabLogin.classList.add("active");
-        tabRegister.classList.remove("active");
-        loginForm.classList.remove("hidden");
-        registerForm.classList.add("hidden");
-        if ($("loginError")) $("loginError").classList.add("hidden");
-    });
-
-    tabRegister.addEventListener("click", () => {
-        tabRegister.classList.add("active");
-        tabLogin.classList.remove("active");
-        registerForm.classList.remove("hidden");
-        loginForm.classList.add("hidden");
-        if ($("registerError")) $("registerError").classList.add("hidden");
-    });
-}
-
 if (regAccountType) {
     regAccountType.addEventListener("change", () => {
         const isBusiness = regAccountType.value === "business";
@@ -1268,12 +1296,14 @@ if (loginForm) {
             }
             if (data?.user) {
                 await handleAuthenticatedSession(data.user);
-                showToast("Sessão iniciada com sucesso!", "success");
+                if (typeof window.triggerBumpImpactAnimation === "function") {
+                    window.triggerBumpImpactAnimation("👊 Bem-vindo de volta!", "👊");
+                }
             }
         } catch (err) {
             if (errEl) { errEl.textContent = "Falha de ligação ao servidor."; errEl.classList.remove("hidden"); }
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = "Entrar no LocalSpot"; }
+            if (btn) { btn.disabled = false; btn.textContent = "Entrar no Radar"; }
         }
     });
 }
@@ -1291,12 +1321,22 @@ if (registerForm) {
         const fullName = regNameInput.value.trim();
         const email = $("regEmail").value.trim();
         const password = $("regPassword").value;
+        const onboardingPrefs = typeof window.getOnboardingSelections === "function"
+            ? window.getOnboardingSelections()
+            : { avatar_emoji: "😎", status_emoji: "🎉", status_text: "Pronto pra sair", privacy_mode: "precise" };
 
         try {
             const { data, error } = await supabaseClient.auth.signUp({
                 email,
                 password,
-                options: { data: { full_name: fullName, role, business_type: businessType } }
+                options: {
+                    data: {
+                        full_name: fullName,
+                        role,
+                        business_type: businessType,
+                        ...onboardingPrefs
+                    }
+                }
             });
 
             if (error) {
@@ -1315,22 +1355,27 @@ if (registerForm) {
 
                 await supabaseClient.from("profiles").upsert({
                     id: data.user.id,
-                    email,
+                    email: email.toLowerCase(),
                     full_name: fullName,
                     role,
                     business_type: businessType,
-                    status_emoji: role === "business" ? "🏢" : "📍",
-                    status_text: role === "business" ? (businessType || "Entidade Oficial") : "No LocalSpot",
+                    avatar_emoji: onboardingPrefs.avatar_emoji,
+                    status_emoji: role === "business" ? "🏢" : onboardingPrefs.status_emoji,
+                    status_text: role === "business" ? (businessType || "Entidade Oficial") : onboardingPrefs.status_text,
+                    privacy_mode: onboardingPrefs.privacy_mode,
+                    ghost_mode: onboardingPrefs.privacy_mode === "ghost",
                     onboarding_completed: true
                 });
 
                 await handleAuthenticatedSession(data.user);
-                showToast("Conta criada com sucesso!", "success");
+                if (typeof window.triggerBumpImpactAnimation === "function") {
+                    window.triggerBumpImpactAnimation(`👊 Bem-vindo, ${fullName.split(" ")[0]}!`, onboardingPrefs.avatar_emoji);
+                }
             }
         } catch (err) {
             if (errEl) { errEl.textContent = "Falha de ligação ao criar conta."; errEl.classList.remove("hidden"); }
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = "Criar Perfil"; }
+            if (btn) { btn.disabled = false; btn.textContent = "👊 Entrar no Mapa!"; }
         }
     });
 }
@@ -1352,17 +1397,12 @@ if (logoutButton) {
         onlineUserIds.clear();
         animatedIncomingFriendshipIds.clear();
         lastChatMessageByFriend.clear();
-        try {
-            if (typeof showFriendsOnMap === "function") showFriendsOnMap([]);
-        } catch (e) {}
+        try { if (typeof showFriendsOnMap === "function") showFriendsOnMap([]); } catch (e) {}
         ["friendsNavBtn", "directChatsNavBtn", "floatingSocialDock", "entityNetworkNavBtn", "bumpShakeMapBtn", "iosShakePermMapBtn", "quickMoodMapBtn", "privacyMapBtn", "quickCheckinMapBtn", "explorationMapBtn", "hangoutBanner"].forEach(id => {
             if ($(id)) $(id).classList.add("hidden");
         });
         if (notifBtn) notifBtn.classList.add("hidden");
-        if (userBadge) {
-            userBadge.classList.add("hidden");
-            userBadge.classList.remove("business-badge", "admin-badge");
-        }
+        if (userBadge) userBadge.classList.add("hidden");
         if (adminPanelBtn) adminPanelBtn.classList.add("hidden");
         logoutButton.classList.add("hidden");
         if (authOverlay) authOverlay.classList.remove("hidden");
@@ -1382,26 +1422,26 @@ async function handleAuthenticatedSession(user) {
             const roleVal = meta.role || "user";
             const newProfile = {
                 id: user.id,
-                email: user.email,
+                email: user.email.toLowerCase(),
                 full_name: meta.full_name || user.email.split("@")[0],
                 role: roleVal,
                 business_type: meta.business_type || null,
-                status_emoji: roleVal === "business" ? "🏢" : "📍",
-                status_text: roleVal === "business" ? (meta.business_type || "Entidade Oficial") : "No LocalSpot",
+                avatar_emoji: meta.avatar_emoji || "😎",
+                status_emoji: roleVal === "business" ? "🏢" : (meta.status_emoji || "📍"),
+                status_text: roleVal === "business" ? (meta.business_type || "Entidade Oficial") : (meta.status_text || "No LocalSpot"),
+                privacy_mode: meta.privacy_mode || "precise",
                 onboarding_completed: true
             };
             const { data: inserted } = await supabaseClient.from("profiles").upsert(newProfile).select().maybeSingle();
             profile = inserted || newProfile;
         }
     } catch (e) {
-        const roleVal = meta.role || "user";
         profile = {
             id: user.id,
             email: user.email,
             full_name: meta.full_name || user.email.split("@")[0],
-            role: roleVal,
-            business_type: meta.business_type || null,
-            onboarding_completed: true
+            role: meta.role || "user",
+            avatar_emoji: meta.avatar_emoji || "😎"
         };
     }
 
@@ -1413,9 +1453,7 @@ async function handleAuthenticatedSession(user) {
     applyRoleUI();
     setupMotionSensorWithIOSPermission();
     if (authOverlay) authOverlay.classList.add("hidden");
-    try {
-        if (typeof map !== "undefined" && map?.resize) map.resize();
-    } catch (e) {}
+    try { if (typeof map !== "undefined" && map?.resize) map.resize(); } catch (e) {}
 
     await Promise.all([
         loadMyEnrollments(),
@@ -1439,8 +1477,8 @@ function renderAvatarChip(profile, sizeClass = "sm") {
     if (profile?.avatar_url) {
         return `<span class="avatar-circle ${sizeClass}${extraClass}"><img src="${escapeHTML(profile.avatar_url)}" alt="" onerror="this.remove()"></span>`;
     }
-    const initials = (profile?.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
-    return `<span class="avatar-circle ${sizeClass}${extraClass}">${escapeHTML(initials)}</span>`;
+    const fallback = profile?.avatar_emoji || (profile?.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+    return `<span class="avatar-circle ${sizeClass}${extraClass}">${escapeHTML(fallback)}</span>`;
 }
 
 function applyRoleUI() {
@@ -1476,40 +1514,24 @@ function applyRoleUI() {
         pBtn.classList.toggle("hidden", isAdm);
         pBtn.classList.remove("privacy-blurred", "privacy-ghost");
         if (isBiz) {
-            if (privacy_mode === "ghost") {
-                pBtn.classList.add("privacy-ghost");
-                pBtn.textContent = "📅 Apenas Eventos";
-            } else {
-                pBtn.textContent = "🏢 Sede Visível";
-            }
+            pBtn.textContent = privacy_mode === "ghost" ? "📅 Apenas Eventos" : "🏢 Sede Visível";
         } else if (isUser) {
-            if (privacy_mode === "ghost") {
-                pBtn.classList.add("privacy-ghost");
-                pBtn.textContent = "👻 Fantasma";
-            } else if (privacy_mode === "blurred") {
-                pBtn.classList.add("privacy-blurred");
-                pBtn.textContent = "🌫️ Borrão";
-            } else {
-                pBtn.textContent = "📍 Precisa";
-            }
+            if (privacy_mode === "ghost") pBtn.textContent = "👻 Fantasma";
+            else if (privacy_mode === "blurred") pBtn.textContent = "🌫️ Borrão";
+            else pBtn.textContent = "📍 Precisa";
         }
     }
 
     if (notifBtn) notifBtn.classList.remove("hidden");
     if (logoutButton) logoutButton.classList.remove("hidden");
     if (userBadge) {
-        userBadge.classList.remove("hidden", "business-badge", "admin-badge");
+        userBadge.classList.remove("hidden");
         const avatarHtml = renderAvatarChip(currentProfile, "sm");
-
         if (isAdm) {
-            userBadge.classList.add("admin-badge");
             userBadge.innerHTML = `${avatarHtml} <span>🛡️ Admin · ${escapeHTML(full_name)}</span>`;
             if (adminPanelBtn) adminPanelBtn.classList.remove("hidden");
         } else if (isBiz) {
-            userBadge.classList.add("business-badge");
-            const tipo = business_type || "Entidade";
-            const vBadge = verifiedBadgeHTML(currentProfile);
-            userBadge.innerHTML = `${avatarHtml} <span>👔 ${escapeHTML(tipo)} · ${escapeHTML(full_name)}</span>${vBadge}`;
+            userBadge.innerHTML = `${avatarHtml} <span>👔 ${escapeHTML(business_type || "Entidade")} · ${escapeHTML(full_name)}</span>${verifiedBadgeHTML(currentProfile)}`;
             if (adminPanelBtn) adminPanelBtn.classList.add("hidden");
         } else {
             userBadge.innerHTML = `${avatarHtml} <span>${escapeHTML(full_name)}</span>`;
@@ -1520,9 +1542,6 @@ function applyRoleUI() {
 
 async function initAuth() {
     ensureSocialUI();
-    const existingSplash = $("welcomeSplash");
-    if (existingSplash) existingSplash.remove();
-
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
@@ -1613,9 +1632,7 @@ function renderChatsTabContent() {
     const sortedFriends = [...window.friendsList].sort((a, b) => {
         const msgA = lastChatMessageByFriend.get(String(a.id));
         const msgB = lastChatMessageByFriend.get(String(b.id));
-        const timeA = msgA ? new Date(msgA.created_at).getTime() : 0;
-        const timeB = msgB ? new Date(msgB.created_at).getTime() : 0;
-        return timeB - timeA;
+        return (msgB ? new Date(msgB.created_at).getTime() : 0) - (msgA ? new Date(msgA.created_at).getTime() : 0);
     });
 
     container.innerHTML = sortedFriends.map(f => {
@@ -1629,9 +1646,7 @@ function renderChatsTabContent() {
 
         if (lastMsg) {
             const prefix = String(lastMsg.sender_id) === String(currentUser.id) ? "Tu: " : "";
-            preview = lastMsg.msg_type === "emoji_bomb"
-                ? `${prefix}Chuva de ${lastMsg.content}`
-                : `${prefix}${lastMsg.content}`;
+            preview = lastMsg.msg_type === "emoji_bomb" ? `${prefix}Chuva de ${lastMsg.content}` : `${prefix}${lastMsg.content}`;
             timeLabel = new Date(lastMsg.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
         }
 
@@ -1687,14 +1702,8 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
         let profilesById = new Map();
 
         if (allNeededIds.length > 0) {
-            const { data: profs } = await supabaseClient
-                .from("profiles")
-                .select("*")
-                .in("id", allNeededIds);
-
-            if (profs) {
-                profilesById = new Map(profs.map(p => [p.id, p]));
-            }
+            const { data: profs } = await supabaseClient.from("profiles").select("*").in("id", allNeededIds);
+            if (profs) profilesById = new Map(profs.map(p => [p.id, p]));
         }
 
         window.friendsList = [...acceptedIds]
@@ -1702,11 +1711,7 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
                 const prof = profilesById.get(id);
                 if (!prof) return null;
                 const fRow = friendshipRecords.get(String(id));
-                return {
-                    ...prof,
-                    bump_count: fRow?.bump_count || 0,
-                    super_bump_count: fRow?.super_bump_count || 0
-                };
+                return { ...prof, bump_count: fRow?.bump_count || 0, super_bump_count: fRow?.super_bump_count || 0 };
             })
             .filter(Boolean)
             .sort((a, b) => (b.bump_count || 0) - (a.bump_count || 0));
@@ -1714,8 +1719,7 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
         incomingFriendRequests = incomingRows
             .map(r => {
                 const prof = profilesById.get(r.requester_id);
-                if (!prof) return null;
-                return { friendshipId: r.id, user: prof };
+                return prof ? { friendshipId: r.id, user: prof } : null;
             })
             .filter(Boolean);
 
@@ -1729,18 +1733,14 @@ async function loadSocialData({ animateInitialRequests = false, triggerAnimForSe
             const firstReq = incomingFriendRequests[0];
             if (!animatedIncomingFriendshipIds.has(String(firstReq.friendshipId))) {
                 animatedIncomingFriendshipIds.add(String(firstReq.friendshipId));
-                setTimeout(() => {
-                    triggerFriendRequestAnimation(firstReq.user, firstReq.friendshipId);
-                }, 600);
+                setTimeout(() => triggerFriendRequestAnimation(firstReq.user, firstReq.friendshipId), 600);
             }
         }
 
         updateSocialBadges();
         renderFriendsModalContent();
         renderChatsTabContent();
-        try {
-            if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-        } catch (e) {}
+        try { if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities()); } catch (e) {}
     } catch (e) {}
 }
 
@@ -1783,7 +1783,7 @@ function renderFriendsModalContent() {
                         ${renderAvatarChip(req.user, "")}
                         <div class="friend-row-info">
                             <strong>${escapeHTML(req.user.full_name)}</strong>
-                            <span>${escapeHTML(req.user.email || "")}</span>
+                            <span>${escapeHTML(req.user.bump_code || req.user.email || "")}</span>
                         </div>
                     </div>
                     <div class="friend-row-actions">
@@ -1867,25 +1867,30 @@ function renderFriendsModalContent() {
 }
 
 async function searchUsersAndEntities() {
-    const query = $("friendSearchInput").value.trim();
+    const query = ($("friendSearchInput")?.value || "").trim();
     const resultsEl = $("friendSearchResults");
-    if (!query || !currentUser) return;
+    if (!resultsEl || !currentUser) return;
 
-    resultsEl.innerHTML = `<p class="muted" style="font-size:12.5px;">A procurar...</p>`;
-
-    const { data, error } = await supabaseClient
+    let req = supabaseClient
         .from("profiles")
         .select("*")
         .neq("id", currentUser.id)
-        .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(18);
+        .order("updated_at", { ascending: false })
+        .limit(20);
+
+    if (query) {
+        req = req.or(`full_name.ilike.%${query}%,email.ilike.%${query}%,username.ilike.%${query}%,bump_code.ilike.%${query}%`);
+    }
+
+    const { data, error } = await req;
 
     if (error || !data || data.length === 0) {
-        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhum resultado encontrado com "${escapeHTML(query)}".</p>`;
+        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhum utilizador encontrado.</p>`;
         return;
     }
 
     const friendIds = new Set(window.friendsList.map(f => String(f.id)));
+    const incomingMap = new Map(incomingFriendRequests.map(r => [String(r.user.id), r.friendshipId]));
 
     resultsEl.innerHTML = data.map(u => {
         const isBiz = u.role === "business";
@@ -1899,16 +1904,19 @@ async function searchUsersAndEntities() {
         } else {
             if (friendIds.has(String(u.id))) {
                 actionBtn = `<button type="button" class="btn-soft" onclick="window.openFriendChat('${u.id}')">💬 Conversar</button>`;
+            } else if (incomingMap.has(String(u.id))) {
+                const fId = incomingMap.get(String(u.id));
+                actionBtn = `<button type="button" class="btn-bump" onclick="window.acceptFriendRequest(${fId}, '${u.id}')">✅ Aceitar</button>`;
             } else if (sentFriendRequestIds.has(u.id)) {
                 actionBtn = `<span class="muted" style="font-size:12px;">✈️ Pedido enviado</span>`;
             } else {
-                actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">👊 Adicionar Amigo</button>`;
+                actionBtn = `<button type="button" class="btn-primary-sm" onclick="window.sendFriendRequest('${u.id}', '${escapeHTML(u.full_name)}')">👊 Adicionar</button>`;
             }
         }
 
         const subText = isBiz
-            ? `🏛️ ${escapeHTML(u.business_type || "Empresa / Domínio Público")}`
-            : `👤 Utilizador · ${escapeHTML(u.email)}`;
+            ? `🏛️ ${escapeHTML(u.business_type || "Entidade Oficial")}`
+            : `${escapeHTML(u.status_emoji || "📍")} ${escapeHTML(u.status_text || "No LocalSpot")} · ${escapeHTML(u.bump_code || "")}`;
 
         return `
             <div class="friend-row">
@@ -1933,24 +1941,15 @@ window.toggleFollowFromSearch = async (targetId, targetName) => {
 window.sendFriendRequest = async (targetId, targetName) => {
     if (!currentUser || !currentProfile) return;
 
-    const { data: targetProf } = await supabaseClient
-        .from("profiles")
-        .select("*")
-        .eq("id", targetId)
-        .maybeSingle();
-
+    const { data: targetProf } = await supabaseClient.from("profiles").select("*").eq("id", targetId).maybeSingle();
     if (targetProf && targetProf.role === "business") {
-        showToast("Empresas e entidades públicas não aceitam pedidos de amizade — clique em Seguir.", "error");
+        showToast("Empresas não aceitam pedidos de amizade — clica em Seguir.", "error");
         return;
     }
 
     const { data: insertedRow, error } = await supabaseClient
         .from("friendships")
-        .insert([{
-            requester_id: currentUser.id,
-            addressee_id: targetId,
-            status: "pending"
-        }])
+        .insert([{ requester_id: currentUser.id, addressee_id: targetId, status: "pending" }])
         .select()
         .maybeSingle();
 
@@ -1972,6 +1971,7 @@ window.sendFriendRequest = async (targetId, targetName) => {
                     id: currentUser.id,
                     full_name: currentProfile.full_name,
                     avatar_url: currentProfile.avatar_url || null,
+                    avatar_emoji: currentProfile.avatar_emoji || "😎",
                     bio: currentProfile.bio || "",
                     status_emoji: currentProfile.status_emoji || "📍",
                     status_text: currentProfile.status_text || "No LocalSpot"
@@ -1988,19 +1988,13 @@ window.sendFriendRequest = async (targetId, targetName) => {
         `${currentProfile.full_name} quer adicionar-te aos amigos no LocalSpot!`
     );
 
-    if ($("friendSearchInput") && $("friendSearchInput").value.trim()) {
-        searchUsersAndEntities();
-    }
-    if (detailModal && !detailModal.classList.contains("hidden") && detailEventId) {
-        const ev = events.find(x => String(x.id) === String(detailEventId));
-        if (ev) updateDetailSocialButton(ev);
-    }
+    searchUsersAndEntities();
 };
 
 window.acceptFriendRequest = async (friendshipId, requesterId) => {
     const { error } = await supabaseClient
         .from("friendships")
-        .update({ status: "accepted" })
+        .update({ status: "accepted", updated_at: new Date().toISOString() })
         .eq("id", friendshipId);
 
     if (error) {
@@ -2016,6 +2010,7 @@ window.acceptFriendRequest = async (friendshipId, requesterId) => {
     );
     triggerBumpVisual("🎉", "Novo amigo adicionado! Já podem conversar 💬");
     await Promise.all([loadSocialData(), loadRecentChatSummaries()]);
+    searchUsersAndEntities();
     filterEvents();
 };
 
@@ -2052,20 +2047,14 @@ window.locateFriendOnMap = friendId => {
 async function loadMyFollowers() {
     if (!currentUser || !isBusinessAccount()) { myFollowersList = []; return; }
     try {
-        const { data: rows, error } = await supabaseClient
-            .from("follows")
-            .select("follower_id")
-            .eq("following_id", currentUser.id);
-
-        if (error || !rows || rows.length === 0) {
+        const { data: rows } = await supabaseClient.from("follows").select("follower_id").eq("following_id", currentUser.id);
+        const followerIds = (rows || []).map(r => r.follower_id).filter(Boolean);
+        if (followerIds.length > 0) {
+            const { data: profs } = await supabaseClient.from("profiles").select("*").in("id", followerIds);
+            myFollowersList = profs || [];
+        } else {
             myFollowersList = [];
-            if ($("headerFollowersCount")) $("headerFollowersCount").textContent = "0";
-            return;
         }
-
-        const followerIds = rows.map(r => r.follower_id).filter(Boolean);
-        const { data: profs } = await supabaseClient.from("profiles").select("*").in("id", followerIds);
-        myFollowersList = profs || [];
         if ($("headerFollowersCount")) $("headerFollowersCount").textContent = myFollowersList.length;
     } catch (e) {}
 }
@@ -2106,7 +2095,7 @@ function renderEntityNetworkModal() {
                     <button type="button" class="btn-logout" onclick="window.toggleFollowEntityModal('${ent.id}', '${escapeHTML(ent.full_name)}')">Deixar de seguir</button>
                 </div>
             `).join("")
-            : `<p class="muted" style="font-size:13px; text-align:center; padding:18px;">Ainda não está a seguir nenhuma empresa ou entidade.</p>`;
+            : `<p class="muted" style="font-size:13px; text-align:center; padding:18px;">Ainda não está a seguir nenhuma entidade.</p>`;
     }
 }
 
@@ -2120,7 +2109,7 @@ async function searchEntitiesToFollow() {
 
     const { data } = await req;
     if (!data || data.length === 0) {
-        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhuma empresa ou entidade encontrada.</p>`;
+        resultsEl.innerHTML = `<p class="muted" style="font-size:13px;">Nenhuma entidade encontrada.</p>`;
         return;
     }
 
@@ -2201,8 +2190,8 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
     if (!isMutualSuper) {
         const lastBumpTs = bumpCooldownMap.get(friendKey) || 0;
         const elapsedSec = Math.floor((now - lastBumpTs) / 1000);
-        if (elapsedSec < 60) {
-            showToast(`⏳ Aguarda ${60 - elapsedSec}s para novo Bump com ${friend.full_name.split(" ")[0]}.`);
+        if (elapsedSec < 30) {
+            showToast(`⏳ Aguarda ${30 - elapsedSec}s para novo Bump com ${friend.full_name.split(" ")[0]}.`);
             return;
         }
     }
@@ -2236,9 +2225,7 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
 
     triggerBumpVisual(isMutualSuper ? "⚡" : emoji, bannerMsg, isMutualSuper);
     renderFriendsModalContent();
-    try {
-        if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-    } catch (e) {}
+    try { if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities()); } catch (e) {}
 
     if (bumpBroadcastChannel) {
         bumpBroadcastChannel.send({
@@ -2248,8 +2235,6 @@ window.sendBump = async (friendId, emoji = "👊", label = "Bump!") => {
                 senderId: currentUser.id,
                 senderName: currentProfile.full_name,
                 receiverId: friendId,
-                lat: typeof userPosition !== "undefined" ? userPosition?.lat : null,
-                lng: typeof userPosition !== "undefined" ? userPosition?.lng : null,
                 emoji: isMutualSuper ? "⚡" : emoji,
                 isSuper: isMutualSuper,
                 totalScore: finalScore
@@ -2352,7 +2337,7 @@ async function loadChatHistory(friendId) {
         .limit(60);
 
     if (error) {
-        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Erro ao carregar mensagens. Verifica a tabela friend_messages no Supabase.</p>`;
+        box.innerHTML = `<p class="muted" style="font-size:12px; text-align:center;">Sem mensagens ainda.</p>`;
         return;
     }
 
@@ -2396,12 +2381,7 @@ async function sendDirectMessage(receiverId, content, msgType = "text") {
     if (!currentUser) return;
     const { data, error } = await supabaseClient
         .from("friend_messages")
-        .insert([{
-            sender_id: currentUser.id,
-            receiver_id: receiverId,
-            content,
-            msg_type: msgType
-        }])
+        .insert([{ sender_id: currentUser.id, receiver_id: receiverId, content, msg_type: msgType }])
         .select()
         .maybeSingle();
 
@@ -2448,7 +2428,7 @@ window.syncMyLiveLocation = async (lat, lng, speedKmh = 0) => {
     const coords = applyPrivacyCoordinates(lat, lng, mode);
     const bat = isNormalUserAccount() ? await getDeviceBatteryInfo() : { level: null, charging: false };
 
-    const updatePayload = { last_lat: coords.lat, last_lng: coords.lng, last_seen: new Date().toISOString() };
+    const updatePayload = { last_lat: coords.lat, last_lng: coords.lng, last_seen: new Date().toISOString(), updated_at: new Date().toISOString() };
     if (isNormalUserAccount()) {
         updatePayload.speed_kmh = speedKmh;
         if (bat.level !== null) {
@@ -2547,9 +2527,7 @@ function startLiveSocialSync() {
             onlineUserIds = new Set(Object.keys(stateObj));
             renderFriendsModalContent();
             renderChatsTabContent();
-            try {
-                if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities());
-            } catch (e) {}
+            try { if (typeof showFriendsOnMap === "function") showFriendsOnMap(window.getMapSocialEntities()); } catch (e) {}
         })
         .on("broadcast", { event: "friend_request_received" }, ({ payload }) => {
             if (!payload || String(payload.receiverId) !== String(currentUser.id)) return;
@@ -2601,6 +2579,7 @@ function startLiveSocialSync() {
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "friendships" }, () => loadSocialData())
         .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships" }, () => loadSocialData())
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, () => loadSocialData())
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "friend_messages" }, payload => {
             const msg = payload.new;
             if (!msg || String(msg.receiver_id) !== String(currentUser.id)) return;
@@ -2776,7 +2755,7 @@ function mapDbEvent(row) {
         creatorId: row.creator_id || null,
         creatorName: row.creator_name || "Organizador LocalSpot",
         creatorType: row.creator_type || null,
-        creatorRole: row.creator_role || (row.creator_type === "Utilizador" ? "user" : (row.creator_type === "Admin" ? "admin" : "business")),
+        creatorRole: row.creator_role || "user",
         creatorVerified: row.creator_verified === true,
         name: row.name,
         category: row.category,
@@ -2798,12 +2777,12 @@ function mapDbEvent(row) {
 async function loadEventsFromSupabase() {
     try {
         const { data, error } = await supabaseClient.from("events").select("*").order("date", { ascending: true });
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
             events = data.map(mapDbEvent);
-            filterEvents();
         }
+        filterEvents();
     } catch (e) {
-        showToast("Erro ao carregar eventos.", "error");
+        filterEvents();
     }
 }
 
@@ -2872,6 +2851,7 @@ if (userBadge) {
         const isAdm = isAdminAccount();
 
         if ($("profileEmailDisplay")) $("profileEmailDisplay").textContent = currentUser.email;
+        if ($("profileBumpCodeBadge")) $("profileBumpCodeBadge").textContent = `Código Bump: ${currentProfile.bump_code || "LS-ATIVO"}`;
         if ($("profileNameInput")) $("profileNameInput").value = currentProfile.full_name || "";
         if ($("profileBioInput")) $("profileBioInput").value = currentProfile.bio || "";
         if ($("profileAvatarInput")) $("profileAvatarInput").value = "";
@@ -2885,7 +2865,7 @@ if (userBadge) {
             $("profileAvatarPreview").className = `avatar-circle lg${isBiz ? " business-avatar" : (isAdm ? " admin-avatar" : "")}`;
             $("profileAvatarPreview").innerHTML = currentProfile.avatar_url
                 ? `<img src="${escapeHTML(currentProfile.avatar_url)}" alt="">`
-                : escapeHTML((currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
+                : escapeHTML(currentProfile.avatar_emoji || (currentProfile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(p => p[0].toUpperCase()).join(""));
         }
 
         if (isUser) {
@@ -3154,17 +3134,13 @@ function renderList(list) {
 function filterEvents() {
     const filtered = getFilteredEvents();
     renderList(filtered);
-    try {
-        if (typeof showEventsOnMap === "function") showEventsOnMap(filtered);
-    } catch (e) {}
+    try { if (typeof showEventsOnMap === "function") showEventsOnMap(filtered); } catch (e) {}
 }
 
 function selectEvent(id, { scroll = false } = {}) {
     activeId = id;
     document.querySelectorAll(".event-card").forEach(c => c.classList.toggle("active", String(c.dataset.id) === String(id)));
-    try {
-        if (typeof focusEventOnMap === "function") focusEventOnMap(id);
-    } catch (e) {}
+    try { if (typeof focusEventOnMap === "function") focusEventOnMap(id); } catch (e) {}
     if (scroll) {
         const card = document.querySelector(`.event-card[data-id="${id}"]`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -3185,7 +3161,7 @@ function updateDetailSocialButton(ev) {
         return;
     }
 
-    const isOrgBiz = ev.creatorRole === "business" || (ev.creatorType && ev.creatorType !== "Utilizador" && ev.creatorType !== "Admin");
+    const isOrgBiz = ev.creatorRole === "business";
     if (isOrgBiz) {
         followBtn.classList.remove("hidden");
         followBtn.textContent = myFollowing.has(String(ev.creatorId)) ? "✓ A seguir" : "+ Seguir";
@@ -3408,7 +3384,7 @@ function getDefaultEventCoords() {
             if (c && typeof c.lat === "number") return { lat: c.lat, lng: c.lng };
         }
     } catch (e) {}
-    return { lat: 40.3465, lng: -8.5944 }; // Centro padrão (Cantanhede / Centro PT)
+    return { lat: 40.3465, lng: -8.5944 };
 }
 
 function updateCoordsDisplay() {
@@ -3517,7 +3493,6 @@ if (changeLocationButton) {
                 openModal(modal);
             });
         } else {
-            showToast("Mapa indisponível para seleção manual — a usar coordenadas atuais.");
             if (pickBanner) pickBanner.classList.add("hidden");
             openModal(modal);
         }
@@ -3580,9 +3555,7 @@ if (eventForm) {
         e.preventDefault();
         if (formError) formError.classList.add("hidden");
 
-        if (!pendingLocation) {
-            pendingLocation = getDefaultEventCoords();
-        }
+        if (!pendingLocation) pendingLocation = getDefaultEventCoords();
 
         const submitBtn = $("submitEventBtn");
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "A guardar..."; }
@@ -3631,20 +3604,7 @@ if (eventForm) {
                     enrolled: 0
                 };
 
-                let { data, error } = await supabaseClient.from("events").insert([fullPayload]).select().single();
-
-                if (error) {
-                    const minimalPayload = {
-                        ...basePayload,
-                        creator_id: currentUser.id,
-                        creator_name: currentProfile?.full_name || currentUser.email.split("@")[0],
-                        enrolled: 0
-                    };
-                    const retry = await supabaseClient.from("events").insert([minimalPayload]).select().single();
-                    data = retry.data;
-                    error = retry.error;
-                }
-
+                const { data, error } = await supabaseClient.from("events").insert([fullPayload]).select().single();
                 if (error) throw error;
                 const created = mapDbEvent(data);
                 events.push(created);
@@ -3660,7 +3620,6 @@ if (eventForm) {
                 formError.textContent = err.message || "Erro ao guardar evento.";
                 formError.classList.remove("hidden");
             }
-            showToast("Erro ao publicar: " + (err.message || "verifica os campos"), "error");
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
@@ -3810,11 +3769,6 @@ document.addEventListener("keydown", e => {
     }
 });
 
-// Inicialização segura e independente
 populateDistricts();
-try {
-    if (typeof initMap === "function") initMap();
-} catch (err) {
-    console.warn("Aviso na inicialização do mapa:", err);
-}
+try { if (typeof initMap === "function") initMap(); } catch (err) {}
 initAuth();
